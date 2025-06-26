@@ -1,0 +1,193 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import { useProfile } from '@/contexts/ProfileContext';
+import { Button } from '@/components/ui/button';
+import { SidebarTrigger } from '@/components/ui/sidebar';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Bell, Plus, User, LogOut, Settings, HelpCircle, Wallet } from 'lucide-react';
+
+const DashboardTopbar = () => {
+  const [isWalletConnected, setIsWalletConnected] = useState(false);
+  const navigate = useNavigate();
+  const { signOut } = useAuth();
+  const { profile } = useProfile();
+
+  const handleLogout = async () => {
+    await signOut();
+    navigate('/');
+  };
+
+  const handleSupport = () => {
+    console.log('Opening support...');
+    // Handle support logic here
+  };
+
+  const totalBalance = profile?.total_earnings || 0;
+
+  return (
+    <header className="border-b border-primary/20 bg-card/50 backdrop-blur-lg p-2 sm:p-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-2 sm:space-x-4">
+          <SidebarTrigger />
+          <div className="text-base sm:text-lg font-cyber text-primary">Dashboard</div>
+        </div>
+        
+        <div className="flex items-center space-x-1 sm:space-x-2 lg:space-x-4">
+          {/* User Balance - Hidden on mobile */}
+          <div className="hidden md:block bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/30 rounded-lg px-2 lg:px-4 py-1 lg:py-1.5">
+            {/* <div className="text-xs lg:text-sm text-green-400 font-cyber">Earnings</div> */}
+            <div className="text-sm lg:text-lg font-bold text-green-300 font-cyber">
+              Earnings: ${totalBalance.toFixed(2)}
+            </div>
+          </div>
+          
+          {/* Create Room Button - Responsive */}
+          <Button className="bg-gradient-to-r from-primary to-accent hover:scale-105 transition-all duration-300 neon-border font-cyber text-xs sm:text-sm px-2 sm:px-4 py-1 sm:py-2">
+            <Plus className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Create Room</span>
+          </Button>
+          
+          {/* Connect Wallet - Responsive */}
+          <Button 
+            variant={isWalletConnected ? "outline" : "default"}
+            onClick={() => setIsWalletConnected(!isWalletConnected)}
+            className={`font-cyber text-xs sm:text-sm px-2 sm:px-4 py-1 sm:py-2 ${isWalletConnected ? "border-primary/50 text-primary" : "bg-primary/80 hover:bg-primary"}`}
+          >
+            <Wallet className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-1" />
+            <span className="hidden sm:inline">{isWalletConnected ? "Connected" : "Connect"}</span>
+            <span className="sm:hidden">{isWalletConnected ? "✓" : ""}</span>
+          </Button>
+          
+          {/* Notifications */}
+          <Button variant="ghost" size="icon" className="relative hover:bg-primary/20 w-8 h-8 sm:w-10 sm:h-10">
+            <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
+            <span className="absolute -top-1 -right-1 bg-accent text-xs rounded-full w-4 h-4 sm:w-5 sm:h-5 flex items-center justify-center font-cyber text-[10px] sm:text-xs">
+              3
+            </span>
+          </Button>
+          
+          {/* User Dropdown with Avatar */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="relative hover:bg-primary/20 w-8 h-8 sm:w-10 sm:h-10">
+                {profile?.avatar_url ? (
+                  (() => {
+                    const match = profile.avatar_url.match(/avatar_(\d+)_(.+)/);
+                    if (match) {
+                      const avatarId = parseInt(match[1]);
+                      const emoji = match[2];
+                      const avatarColors = [
+                        { id: 1, color: 'from-purple-500 to-pink-500' },
+                        { id: 2, color: 'from-blue-500 to-cyan-500' },
+                        { id: 3, color: 'from-red-500 to-orange-500' },
+                        { id: 4, color: 'from-green-500 to-emerald-500' },
+                        { id: 5, color: 'from-yellow-500 to-amber-500' },
+                        { id: 6, color: 'from-indigo-500 to-purple-500' },
+                        { id: 7, color: 'from-gray-600 to-gray-800' },
+                        { id: 8, color: 'from-orange-500 to-red-500' },
+                        { id: 9, color: 'from-cyan-500 to-blue-500' },
+                        { id: 10, color: 'from-yellow-400 to-orange-500' },
+                      ].find(a => a.id === avatarId);
+                      
+                      return (
+                        <div className={`w-6 h-6 sm:w-8 sm:h-8 bg-gradient-to-r ${avatarColors?.color || 'from-primary to-accent'} rounded-full flex items-center justify-center text-lg sm:text-xl`}>
+                          {decodeURIComponent(emoji)}
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="w-6 h-6 sm:w-8 sm:h-8 bg-gradient-to-r from-primary to-accent rounded-full flex items-center justify-center">
+                        <User className="w-3 h-3 sm:w-4 sm:h-4" />
+                      </div>
+                    );
+                  })()
+                ) : (
+                  <div className="w-6 h-6 sm:w-8 sm:h-8 bg-gradient-to-r from-primary to-accent rounded-full flex items-center justify-center">
+                    <User className="w-3 h-3 sm:w-4 sm:h-4" />
+                  </div>
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-56 bg-card border-primary/20" align="end">
+              <DropdownMenuLabel className="font-cyber">
+                <div className="flex items-center gap-3">
+                  {/* Avatar in dropdown */}
+                  {profile?.avatar_url && (() => {
+                    const match = profile.avatar_url.match(/avatar_(\d+)_(.+)/);
+                    if (match) {
+                      const avatarId = parseInt(match[1]);
+                      const emoji = match[2];
+                      const avatarColors = [
+                        { id: 1, color: 'from-purple-500 to-pink-500' },
+                        { id: 2, color: 'from-blue-500 to-cyan-500' },
+                        { id: 3, color: 'from-red-500 to-orange-500' },
+                        { id: 4, color: 'from-green-500 to-emerald-500' },
+                        { id: 5, color: 'from-yellow-500 to-amber-500' },
+                        { id: 6, color: 'from-indigo-500 to-purple-500' },
+                        { id: 7, color: 'from-gray-600 to-gray-800' },
+                        { id: 8, color: 'from-orange-500 to-red-500' },
+                        { id: 9, color: 'from-cyan-500 to-blue-500' },
+                        { id: 10, color: 'from-yellow-400 to-orange-500' },
+                      ].find(a => a.id === avatarId);
+                      
+                      return (
+                        <div className={`w-10 h-10 bg-gradient-to-r ${avatarColors?.color || 'from-primary to-accent'} rounded-lg flex items-center justify-center text-2xl flex-shrink-0`}>
+                          {decodeURIComponent(emoji)}
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium text-primary">{profile?.username || 'Gamer'}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Level {profile?.level || 1} • {profile?.current_rank || 'Junior'}
+                    </p>
+                    {/* Mobile Balance Display */}
+                    <div className="md:hidden text-xs text-green-400">
+                      Balance: ${totalBalance.toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator className="bg-primary/20" />
+              <DropdownMenuItem className="hover:bg-primary/20 font-cyber cursor-pointer">
+                <User className="mr-2 h-4 w-4" />
+                <span>Profile</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem className="hover:bg-primary/20 font-cyber cursor-pointer">
+                <Settings className="mr-2 h-4 w-4" />
+                <span>Settings</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={handleSupport}
+                className="hover:bg-primary/20 font-cyber cursor-pointer"
+              >
+                <HelpCircle className="mr-2 h-4 w-4" />
+                <span>Support</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="bg-primary/20" />
+              <DropdownMenuItem 
+                onClick={handleLogout}
+                className="hover:bg-red-500/20 text-red-400 font-cyber cursor-pointer"
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                <span>Log out</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+    </header>
+  );
+};
+
+export default DashboardTopbar;

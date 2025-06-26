@@ -1,0 +1,440 @@
+
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --background: 210 40% 3%;
+  --foreground: 210 40% 98%;
+  --card: 210 40% 4%;
+  --card-foreground: 210 40% 98%;
+  --popover: 210 40% 4%;
+  --popover-foreground: 210 40% 98%;
+  --primary: 200 100% 50%;
+  --primary-foreground: 210 40% 2%;
+  --secondary: 210 40% 8%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 210 40% 10%;
+  --muted-foreground: 210 40% 65%;
+  --accent: 280 100% 70%;
+  --accent-foreground: 210 40% 2%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 210 40% 12%;
+  --input: 210 40% 12%;
+  --ring: 200 100% 50%;
+  --radius: 0.5rem;
+  --chart-1: 200 100% 50%;
+  --chart-2: 280 100% 70%;
+  --chart-3: 0 62.8% 30.6%;
+  --chart-4: 120 100% 25%;
+  --chart-5: 60 100% 50%;
+}
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --radius: var(--radius);
+  --font-gaming: 'Orbitron', monospace;
+  --font-cyber: 'Rajdhani', sans-serif;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  scroll-behavior: smooth;
+  font-family: var(--font-cyber), system-ui, sans-serif;
+}
+
+/* Gaming Scrollbar Styles */
+.gaming-scrollbar [data-radix-scroll-area-viewport] {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--primary)) hsl(var(--secondary));
+}
+
+.gaming-scrollbar [data-radix-scroll-area-viewport]::-webkit-scrollbar {
+  width: 12px;
+}
+
+.gaming-scrollbar [data-radix-scroll-area-viewport]::-webkit-scrollbar-track {
+  background: linear-gradient(180deg, hsl(var(--secondary)) 0%, hsl(var(--card)) 100%);
+  border-radius: 6px;
+  border: 1px solid hsl(var(--border));
+}
+
+.gaming-scrollbar [data-radix-scroll-area-viewport]::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, hsl(var(--primary)) 0%, hsl(var(--accent)) 100%);
+  border-radius: 6px;
+  border: 1px solid hsl(var(--primary));
+  box-shadow: 0 0 8px hsl(var(--primary) / 0.3);
+}
+
+.gaming-scrollbar [data-radix-scroll-area-viewport]::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, hsl(var(--accent)) 0%, hsl(var(--primary)) 100%);
+  box-shadow: 0 0 12px hsl(var(--accent) / 0.5);
+}
+
+/* Hologram Effect */
+.hologram-effect {
+  background: linear-gradient(45deg, rgba(59, 130, 246, 0.1), rgba(139, 92, 246, 0.1));
+  backdrop-filter: blur(10px);
+  position: relative;
+}
+
+.hologram-effect::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.1), transparent);
+  animation: hologram 3s infinite;
+}
+
+/* Cyber Grid Background */
+.cyber-grid {
+  background-image: 
+    linear-gradient(rgba(59, 130, 246, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(59, 130, 246, 0.1) 1px, transparent 1px);
+  background-size: 50px 50px;
+}
+
+/* Floating Particles */
+.floating-particles::before,
+.floating-particles::after {
+  content: '';
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  background: rgba(59, 130, 246, 0.5);
+  border-radius: 50%;
+  animation: float 6s ease-in-out infinite;
+}
+
+.floating-particles::before {
+  top: 20%;
+  left: 20%;
+  animation-delay: 0s;
+}
+
+.floating-particles::after {
+  top: 60%;
+  right: 30%;
+  animation-delay: 3s;
+}
+
+/* Gaming Fonts */
+.font-gaming {
+  font-family: var(--font-gaming);
+}
+
+.font-cyber {
+  font-family: var(--font-cyber);
+}
+
+/* Glow Effects */
+.glow-text {
+  text-shadow: 0 0 10px currentColor, 0 0 20px currentColor, 0 0 40px currentColor;
+}
+
+.neon-border {
+  box-shadow: 0 0 5px currentColor, 0 0 10px currentColor, 0 0 15px currentColor;
+}
+
+/* Custom Animations */
+.animate-bounce-slow {
+  animation: bounce-slow 3s ease-in-out infinite;
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.5s ease-out forwards;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.6s ease-out forwards;
+}
+
+.animate-scale-in {
+  animation: scale-in 0.3s ease-out forwards;
+}
+
+.animate-glow {
+  animation: glow 2s ease-in-out infinite alternate;
+}
+
+/* Hover Effects */
+.hover-scale {
+  transition: transform 0.2s ease-in-out;
+}
+
+.hover-scale:hover {
+  transform: scale(1.05);
+}
+
+.hover-glow:hover {
+  box-shadow: 0 0 20px currentColor;
+}
+
+/* Gaming UI Elements */
+.gaming-border {
+  border: 2px solid transparent;
+  background: linear-gradient(hsl(var(--background)), hsl(var(--background))) padding-box,
+              linear-gradient(45deg, hsl(var(--primary)), hsl(var(--accent))) border-box;
+}
+
+.cyber-button {
+  background: linear-gradient(45deg, hsl(var(--primary)), hsl(var(--accent)));
+  position: relative;
+  overflow: hidden;
+}
+
+.cyber-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.cyber-button:hover::before {
+  left: 100%;
+}
+
+/* Accordion Animations */
+.animate-accordion-down {
+  animation: accordion-down 0.2s ease-out;
+}
+
+.animate-accordion-up {
+  animation: accordion-up 0.2s ease-out;
+}
+
+/* Additional animations */
+.animate-enter {
+  animation: fade-in 0.3s ease-out, scale-in 0.2s ease-out;
+}
+
+.animate-exit {
+  animation: fade-out 0.3s ease-out, scale-out 0.2s ease-out;
+}
+
+/* Interactive Elements */
+.story-link {
+  position: relative;
+  display: inline-block;
+}
+
+.story-link::after {
+  content: '';
+  position: absolute;
+  width: 100%;
+  transform: scaleX(0);
+  height: 2px;
+  bottom: 0;
+  left: 0;
+  background-color: hsl(var(--primary));
+  transform-origin: bottom right;
+  transition: transform 0.3s ease-out;
+}
+
+.story-link:hover::after {
+  transform: scaleX(1);
+  transform-origin: bottom left;
+}
+
+/* Keyframe Animations */
+@keyframes logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes hologram {
+  0%, 100% { 
+    transform: translateX(-100%); 
+  }
+  50% { 
+    transform: translateX(100%); 
+  }
+}
+
+@keyframes float {
+  0%, 100% { 
+    transform: translateY(0px) rotate(0deg); 
+  }
+  33% { 
+    transform: translateY(-30px) rotate(120deg); 
+  }
+  66% { 
+    transform: translateY(15px) rotate(240deg); 
+  }
+}
+
+@keyframes bounce-slow {
+  0%, 100% { 
+    transform: translateY(0); 
+  }
+  50% { 
+    transform: translateY(-10px); 
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes scale-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+
+@keyframes glow {
+  from {
+    text-shadow: 0 0 5px currentColor, 0 0 10px currentColor, 0 0 15px currentColor;
+  }
+  to {
+    text-shadow: 0 0 10px currentColor, 0 0 20px currentColor, 0 0 30px currentColor;
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 5px currentColor;
+  }
+  50% {
+    box-shadow: 0 0 20px currentColor, 0 0 30px currentColor;
+  }
+}
+
+@keyframes accordion-down {
+  from {
+    height: 0;
+    opacity: 0;
+  }
+  to {
+    height: var(--radix-accordion-content-height);
+    opacity: 1;
+  }
+}
+
+@keyframes accordion-up {
+  from {
+    height: var(--radix-accordion-content-height);
+    opacity: 1;
+  }
+  to {
+    height: 0;
+    opacity: 0;
+  }
+}
+
+/* Responsive Design Utilities */
+@media (max-width: 768px) {
+  .cyber-grid {
+    background-size: 25px 25px;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a:nth-of-type(2) .logo {
+    animation: logo-spin infinite 20s linear;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-bounce-slow,
+  .animate-float,
+  .animate-fade-in,
+  .animate-slide-up,
+  .animate-scale-in {
+    animation: none;
+  }
+}
+
+/* Print Styles */
+@media print {
+  .glow-text,
+  .neon-border,
+  .hologram-effect {
+    text-shadow: none;
+    box-shadow: none;
+    background: none;
+  }
+}

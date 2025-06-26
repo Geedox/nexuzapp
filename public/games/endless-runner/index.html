@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Endless Runner - Crypto Arcade</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #1a1a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Courier New', monospace;
+            color: white;
+            overflow: hidden;
+        }
+
+        #gameContainer {
+            background: #0f0f23;
+            border: 4px solid #4a4a8a;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 0 30px rgba(74, 74, 138, 0.5);
+        }
+
+        #gameCanvas {
+            background: linear-gradient(to bottom, #2a2a4e 0%, #1a1a2e 100%);
+            border: 2px solid #4a4a8a;
+            display: block;
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+        }
+
+        #gameInfo {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding: 10px;
+            background: rgba(74, 74, 138, 0.2);
+            border-radius: 4px;
+        }
+
+        .score {
+            font-size: 24px;
+            color: #00ff00;
+            text-shadow: 0 0 10px #00ff00;
+        }
+
+        .highScore {
+            font-size: 18px;
+            color: #ffff00;
+        }
+
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 30px;
+            border-radius: 10px;
+            border: 2px solid #ff0000;
+            display: none;
+            z-index: 10;
+        }
+
+        #gameOver h2 {
+            color: #ff0000;
+            font-size: 36px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 20px #ff0000;
+        }
+
+        #gameOver .finalScore {
+            font-size: 28px;
+            color: #00ff00;
+            margin-bottom: 10px;
+        }
+
+        #gameOver .newHighScore {
+            font-size: 20px;
+            color: #ffff00;
+            margin-bottom: 20px;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        button {
+            background: #4a4a8a;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            font-family: inherit;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: all 0.3s;
+            margin: 5px;
+        }
+
+        button:hover {
+            background: #6a6aba;
+            transform: scale(1.05);
+            box-shadow: 0 0 20px rgba(106, 106, 186, 0.5);
+        }
+
+        button:disabled {
+            background: #3a3a5a;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        #instructions {
+            text-align: center;
+            margin-top: 10px;
+            color: #888;
+            font-size: 14px;
+        }
+
+        #startScreen {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 40px;
+            border-radius: 10px;
+            border: 2px solid #4a4a8a;
+            z-index: 10;
+        }
+
+        #startScreen h1 {
+            color: #00ff00;
+            font-size: 48px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 20px #00ff00;
+        }
+
+        .controls {
+            margin: 20px 0;
+            font-size: 18px;
+            color: #aaa;
+        }
+
+        .powerup {
+            position: absolute;
+            padding: 5px 10px;
+            background: #ffff00;
+            color: #000;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: bold;
+            animation: fadeOut 2s ease-out;
+            pointer-events: none;
+        }
+
+        @keyframes fadeOut {
+            0% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-30px); }
+        }
+
+        .submitStatus {
+            color: #00ff00;
+            margin-top: 10px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <div id="gameInfo">
+            <div class="score">Score: <span id="score">0</span></div>
+            <div class="highScore">High Score: <span id="highScore">0</span></div>
+        </div>
+        <canvas id="gameCanvas" width="800" height="400"></canvas>
+        <div id="instructions">Press SPACE or Click/Tap to Jump | Hold for Higher Jump</div>
+    </div>
+
+    <div id="startScreen">
+        <h1>ENDLESS RUNNER</h1>
+        <div class="controls">
+            <p>🎮 Press SPACE or Click to Jump</p>
+            <p>⚡ Hold for Higher Jump</p>
+            <p>💎 Collect gems for bonus points</p>
+            <p>🚀 Difficulty increases every 100 points</p>
+        </div>
+        <button onclick="startGame()">START GAME</button>
+    </div>
+
+    <div id="gameOver">
+        <h2>GAME OVER</h2>
+        <div class="finalScore">Score: <span id="finalScore">0</span></div>
+        <div class="newHighScore" style="display: none;">NEW HIGH SCORE!</div>
+        <button onclick="restartGame()">PLAY AGAIN</button>
+        <button id="submitButton" onclick="submitScore()">SUBMIT SCORE</button>
+        <button onclick="exitGame()">EXIT</button>
+        <div id="submitStatus" class="submitStatus"></div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Pixel art settings
+        ctx.imageSmoothingEnabled = false;
+        
+        // Game variables
+        let gameRunning = false;
+        let score = 0;
+        let highScore = localStorage.getItem('endlessRunnerHighScore') || 0;
+        let playerHighScore = 0;
+        let gameSpeed = 5;
+        let baseSpeed = 5;
+        let speedMultiplier = 1;
+        let frame = 0;
+        let scoreSubmitted = false;
+        
+        // Update high score display
+        document.getElementById('highScore').textContent = highScore;
+        
+        // Player object
+        const player = {
+            x: 100,
+            y: 200,
+            width: 40,
+            height: 40,
+            velY: 0,
+            jumping: false,
+            grounded: false,
+            jumpPower: -15,
+            gravity: 0.8,
+            color: '#00ff00',
+            trail: []
+        };
+        
+        // Ground
+        const ground = {
+            y: 350,
+            height: 50
+        };
+        
+        // Obstacles array
+        let obstacles = [];
+        let gems = [];
+        let particles = [];
+        
+        // Obstacle types
+        const obstacleTypes = [
+            { width: 30, height: 50, color: '#ff0066' },
+            { width: 40, height: 40, color: '#ff3366' },
+            { width: 25, height: 60, color: '#ff0099' },
+            { width: 50, height: 30, color: '#ff00cc' }
+        ];
+        
+        // Background elements
+        let bgElements = [];
+        for (let i = 0; i < 20; i++) {
+            bgElements.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * (ground.y - 50),
+                size: Math.random() * 3 + 1,
+                speed: Math.random() * 0.5 + 0.1
+            });
+        }
+        
+        // Listen for rank updates from parent
+        window.addEventListener('message', (event) => {
+            if (event.data.type === 'PLAYER_RANK') {
+                if (event.data.highScore) {
+                    playerHighScore = event.data.highScore;
+                    highScore = Math.max(highScore, playerHighScore);
+                    document.getElementById('highScore').textContent = highScore;
+                }
+            } else if (event.data.type === 'SCORE_SUBMITTED') {
+                handleScoreSubmitted(event.data);
+            }
+        });
+        
+        function updateRankDisplay() {
+            // Function no longer needed but kept for compatibility
+        }
+        
+        // Input handling
+        let jumpPressed = false;
+        
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && gameRunning) {
+                e.preventDefault();
+                jumpPressed = true;
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                jumpPressed = false;
+            }
+        });
+        
+        canvas.addEventListener('mousedown', () => {
+            if (gameRunning) jumpPressed = true;
+        });
+        
+        canvas.addEventListener('mouseup', () => {
+            jumpPressed = false;
+        });
+        
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (gameRunning) jumpPressed = true;
+        });
+        
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            jumpPressed = false;
+        });
+        
+        // Start game
+        function startGame() {
+            document.getElementById('startScreen').style.display = 'none';
+            gameRunning = true;
+            score = 0;
+            gameSpeed = baseSpeed;
+            speedMultiplier = 1;
+            obstacles = [];
+            gems = [];
+            particles = [];
+            player.y = 200;
+            player.velY = 0;
+            player.grounded = false;
+            scoreSubmitted = false;
+            updateScore();
+            gameLoop();
+        }
+        
+        // Game loop
+        function gameLoop() {
+            if (!gameRunning) return;
+            
+            update();
+            draw();
+            frame++;
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Update game state
+        function update() {
+            // Update speed based on score
+            speedMultiplier = 1 + (Math.floor(score / 100) * 0.15);
+            gameSpeed = baseSpeed * speedMultiplier;
+            
+            // Player physics
+            if (jumpPressed && player.grounded) {
+                player.velY = player.jumpPower;
+                player.jumping = true;
+                player.grounded = false;
+                createJumpParticles();
+            }
+            
+            // Hold jump for higher jump
+            if (jumpPressed && player.jumping && player.velY < 0 && player.velY > player.jumpPower * 0.5) {
+                player.velY -= 0.3;
+            }
+            
+            player.velY += player.gravity;
+            player.y += player.velY;
+            
+            // Ground collision
+            if (player.y + player.height >= ground.y) {
+                player.y = ground.y - player.height;
+                player.velY = 0;
+                player.grounded = true;
+                player.jumping = false;
+            }
+            
+            // Update player trail
+            player.trail.push({ x: player.x, y: player.y + player.height / 2 });
+            if (player.trail.length > 10) {
+                player.trail.shift();
+            }
+            
+            // Spawn obstacles
+            if (frame % Math.floor(90 / speedMultiplier) === 0) {
+                const type = obstacleTypes[Math.floor(Math.random() * obstacleTypes.length)];
+                obstacles.push({
+                    x: canvas.width,
+                    y: ground.y - type.height,
+                    width: type.width,
+                    height: type.height,
+                    color: type.color,
+                    passed: false
+                });
+            }
+            
+            // Spawn gems
+            if (frame % Math.floor(150 / speedMultiplier) === 0 && Math.random() > 0.5) {
+                gems.push({
+                    x: canvas.width,
+                    y: ground.y - 100 - Math.random() * 150,
+                    size: 20,
+                    collected: false,
+                    value: 10 * Math.floor(speedMultiplier)
+                });
+            }
+            
+            // Update obstacles
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                obstacles[i].x -= gameSpeed;
+                
+                // Check collision
+                if (checkCollision(player, obstacles[i])) {
+                    endGame();
+                    return;
+                }
+                
+                // Add score when passed
+                if (!obstacles[i].passed && obstacles[i].x + obstacles[i].width < player.x) {
+                    obstacles[i].passed = true;
+                    score += 10;
+                    updateScore();
+                    
+                    // Near miss bonus
+                    if (player.y + player.height > obstacles[i].y - 10) {
+                        score += 5;
+                        showPowerup('+5 CLOSE CALL!', player.x, player.y - 20);
+                    }
+                }
+                
+                // Remove off-screen obstacles
+                if (obstacles[i].x + obstacles[i].width < 0) {
+                    obstacles.splice(i, 1);
+                }
+            }
+            
+            // Update gems
+            for (let i = gems.length - 1; i >= 0; i--) {
+                gems[i].x -= gameSpeed;
+                gems[i].y += Math.sin(frame * 0.1) * 0.5;
+                
+                // Check collection
+                if (!gems[i].collected && checkGemCollision(player, gems[i])) {
+                    gems[i].collected = true;
+                    score += gems[i].value;
+                    updateScore();
+                    createGemParticles(gems[i].x, gems[i].y);
+                    showPowerup(`+${gems[i].value}`, gems[i].x, gems[i].y);
+                }
+                
+                // Remove collected or off-screen gems
+                if (gems[i].collected || gems[i].x + gems[i].size < 0) {
+                    gems.splice(i, 1);
+                }
+            }
+            
+            // Update particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                particles[i].x += particles[i].vx;
+                particles[i].y += particles[i].vy;
+                particles[i].vy += 0.3;
+                particles[i].life--;
+                
+                if (particles[i].life <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
+            
+            // Update background elements
+            bgElements.forEach(element => {
+                element.x -= element.speed * gameSpeed;
+                if (element.x < -10) {
+                    element.x = canvas.width + 10;
+                    element.y = Math.random() * (ground.y - 50);
+                }
+            });
+            
+            // Increment score based on distance
+            if (frame % 10 === 0) {
+                score += 1;
+                updateScore();
+            }
+        }
+        
+        // Draw everything
+        function draw() {
+            // Clear canvas
+            ctx.fillStyle = '#1a1a2e';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw background elements
+            ctx.fillStyle = 'rgba(74, 74, 138, 0.3)';
+            bgElements.forEach(element => {
+                ctx.beginPath();
+                ctx.arc(element.x, element.y, element.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            
+            // Draw ground
+            const gradient = ctx.createLinearGradient(0, ground.y, 0, canvas.height);
+            gradient.addColorStop(0, '#4a4a8a');
+            gradient.addColorStop(1, '#2a2a4a');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, ground.y, canvas.width, ground.height);
+            
+            // Draw ground lines
+            ctx.strokeStyle = '#6a6aba';
+            ctx.lineWidth = 2;
+            for (let i = 0; i < canvas.width; i += 40) {
+                const offset = (frame * gameSpeed) % 40;
+                ctx.beginPath();
+                ctx.moveTo(i - offset, ground.y);
+                ctx.lineTo(i - offset + 20, ground.y);
+                ctx.stroke();
+            }
+            
+            // Draw player trail
+            ctx.strokeStyle = 'rgba(0, 255, 0, 0.3)';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            player.trail.forEach((point, index) => {
+                if (index === 0) {
+                    ctx.moveTo(point.x, point.y);
+                } else {
+                    ctx.lineTo(point.x, point.y);
+                }
+            });
+            ctx.stroke();
+            
+            // Draw player
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+            
+            // Player glow effect
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = player.color;
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+            ctx.shadowBlur = 0;
+            
+            // Draw player eyes
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(player.x + player.width - 10, player.y + 10, 5, 5);
+            ctx.fillRect(player.x + player.width - 10, player.y + 20, 5, 5);
+            
+            // Draw obstacles
+            obstacles.forEach(obstacle => {
+                // Obstacle with gradient
+                const obstacleGradient = ctx.createLinearGradient(
+                    obstacle.x, obstacle.y,
+                    obstacle.x, obstacle.y + obstacle.height
+                );
+                obstacleGradient.addColorStop(0, obstacle.color);
+                obstacleGradient.addColorStop(1, '#660033');
+                ctx.fillStyle = obstacleGradient;
+                ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+                
+                // Obstacle glow
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = obstacle.color;
+                ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+                ctx.shadowBlur = 0;
+            });
+            
+            // Draw gems
+            gems.forEach(gem => {
+                if (!gem.collected) {
+                    ctx.save();
+                    ctx.translate(gem.x + gem.size / 2, gem.y + gem.size / 2);
+                    ctx.rotate(frame * 0.05);
+                    
+                    // Gem shape
+                    ctx.fillStyle = '#ffff00';
+                    ctx.beginPath();
+                    for (let i = 0; i < 6; i++) {
+                        const angle = (i * Math.PI * 2) / 6;
+                        const x = Math.cos(angle) * gem.size / 2;
+                        const y = Math.sin(angle) * gem.size / 2;
+                        if (i === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                    
+                    // Gem glow
+                    ctx.shadowBlur = 15;
+                    ctx.shadowColor = '#ffff00';
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                    
+                    ctx.restore();
+                }
+            });
+            
+            // Draw particles
+            particles.forEach(particle => {
+                ctx.fillStyle = particle.color;
+                ctx.globalAlpha = particle.life / 20;
+                ctx.fillRect(particle.x, particle.y, particle.size, particle.size);
+                ctx.globalAlpha = 1;
+            });
+            
+            // Draw speed indicator
+            if (speedMultiplier > 1) {
+                ctx.fillStyle = '#ff00ff';
+                ctx.font = 'bold 16px Courier New';
+                ctx.fillText(`SPEED x${speedMultiplier.toFixed(1)}`, canvas.width - 120, 30);
+            }
+        }
+        
+        // Collision detection
+        function checkCollision(rect1, rect2) {
+            return rect1.x < rect2.x + rect2.width &&
+                   rect1.x + rect1.width > rect2.x &&
+                   rect1.y < rect2.y + rect2.height &&
+                   rect1.y + rect1.height > rect2.y;
+        }
+        
+        function checkGemCollision(player, gem) {
+            const centerX = gem.x + gem.size / 2;
+            const centerY = gem.y + gem.size / 2;
+            const closestX = Math.max(player.x, Math.min(centerX, player.x + player.width));
+            const closestY = Math.max(player.y, Math.min(centerY, player.y + player.height));
+            const distance = Math.sqrt(Math.pow(centerX - closestX, 2) + Math.pow(centerY - closestY, 2));
+            return distance < gem.size / 2;
+        }
+        
+        // Particle effects
+        function createJumpParticles() {
+            for (let i = 0; i < 10; i++) {
+                particles.push({
+                    x: player.x + player.width / 2,
+                    y: player.y + player.height,
+                    vx: (Math.random() - 0.5) * 5,
+                    vy: Math.random() * -3,
+                    size: Math.random() * 4 + 2,
+                    color: '#4a4a8a',
+                    life: 20
+                });
+            }
+        }
+        
+        function createGemParticles(x, y) {
+            for (let i = 0; i < 15; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 8,
+                    vy: (Math.random() - 0.5) * 8,
+                    size: Math.random() * 3 + 1,
+                    color: '#ffff00',
+                    life: 20
+                });
+            }
+        }
+        
+        // Show powerup text
+        function showPowerup(text, x, y) {
+            const powerup = document.createElement('div');
+            powerup.className = 'powerup';
+            powerup.textContent = text;
+            powerup.style.left = `${x + canvas.offsetLeft}px`;
+            powerup.style.top = `${y + canvas.offsetTop}px`;
+            document.body.appendChild(powerup);
+            
+            setTimeout(() => powerup.remove(), 2000);
+        }
+        
+        // Update score display
+        function updateScore() {
+            document.getElementById('score').textContent = score;
+            
+            // Check if it's a new high score
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('endlessRunnerHighScore', highScore);
+                document.getElementById('highScore').textContent = highScore;
+            }
+        }
+        
+        // End game
+        function endGame() {
+            gameRunning = false;
+            
+            // Check for new high score compared to leaderboard high score
+            const isNewHighScore = score > playerHighScore;
+            if (isNewHighScore) {
+                document.querySelector('.newHighScore').style.display = 'block';
+            } else {
+                document.querySelector('.newHighScore').style.display = 'none';
+            }
+            
+            document.getElementById('finalScore').textContent = score;
+            document.getElementById('gameOver').style.display = 'block';
+            
+            // Update submit button text based on score
+            const submitBtn = document.getElementById('submitButton');
+            if (score > playerHighScore) {
+                submitBtn.textContent = 'SUBMIT HIGH SCORE';
+                submitBtn.className = submitBtn.className.replace('bg-secondary/50', 'bg-gradient-to-r from-primary to-accent');
+            } else {
+                submitBtn.textContent = 'SUBMIT SCORE';
+            }
+            
+            // Send game over event to parent
+            if (window.parent !== window) {
+                window.parent.postMessage({
+                    type: 'GAME_OVER',
+                    score: score,
+                    gameId: 'endless-runner'
+                }, '*');
+            }
+        }
+        
+        // Restart game
+        function restartGame() {
+            document.getElementById('gameOver').style.display = 'none';
+            startGame();
+        }
+        
+        // Submit score
+        function submitScore() {
+            if (scoreSubmitted) return;
+            
+            document.getElementById('submitButton').disabled = true;
+            document.getElementById('submitStatus').textContent = 'Submitting...';
+            
+            if (window.parent !== window) {
+                window.parent.postMessage({
+                    type: 'SUBMIT_SCORE',
+                    score: score,
+                    metadata: {
+                        speedMultiplier: speedMultiplier,
+                        duration: frame / 60,
+                        gemsCollected: Math.floor(score / 20)
+                    }
+                }, '*');
+            }
+        }
+        
+        // Handle score submission result
+        function handleScoreSubmitted(data) {
+            if (data.success) {
+                scoreSubmitted = true;
+                
+                if (data.isNewHighScore) {
+                    document.getElementById('submitStatus').textContent = 'New high score saved! 🎉';
+                    document.getElementById('submitStatus').style.color = '#00ff00';
+                } else {
+                    document.getElementById('submitStatus').textContent = 'Score not saved - beat your high score of ' + playerHighScore + ' to update!';
+                    document.getElementById('submitStatus').style.color = '#ffff00';
+                }
+                
+                // Close the iframe after a short delay
+                setTimeout(() => {
+                    if (window.parent !== window) {
+                        window.parent.postMessage({ type: 'EXIT_GAME' }, '*');
+                    }
+                }, 2500);
+            } else {
+                document.getElementById('submitButton').disabled = false;
+                document.getElementById('submitStatus').textContent = 'Failed to submit. Try again.';
+                document.getElementById('submitStatus').style.color = '#ff0000';
+            }
+        }
+        
+        // Exit game
+        function exitGame() {
+            if (window.parent !== window) {
+                window.parent.postMessage({ type: 'EXIT_GAME' }, '*');
+            } else {
+                location.reload();
+            }
+        }
+        
+        // Request initial rank on load
+        window.addEventListener('load', () => {
+            // Notify parent that game is ready
+            if (window.parent !== window) {
+                window.parent.postMessage({ type: 'GAME_READY' }, '*');
+            }
+        });
+    </script>
+</body>
+</html>
