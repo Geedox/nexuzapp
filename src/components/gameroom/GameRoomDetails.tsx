@@ -1,61 +1,8 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useGameRoom } from '@/contexts/GameRoomContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-
-// Simple GamePlayerModal - no unnecessary effects or dependencies
-// const GamePlayerModal = React.memo(({ game, roomId, onClose }) => {
-//   const gameUrls = {
-//     '11111111-1111-1111-1111-111111111111': '/games/endless-runner/index.html',
-//     '22222222-2222-2222-2222-222222222222': '/games/flappy-bird/index.html',
-//   };
-
-//   const gameUrl = gameUrls[game?.id];
-  
-//   if (!game || !gameUrl) {
-//     return (
-//       <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4">
-//         <div className="bg-background border border-primary/30 rounded-xl p-8 text-center">
-//           <p className="text-muted-foreground mb-4">This game is not available yet</p>
-//           <button 
-//             onClick={onClose}
-//             className="bg-secondary text-primary font-cyber font-bold py-2 px-6 rounded-lg hover:bg-secondary/80 transition-colors"
-//           >
-//             Close
-//           </button>
-//         </div>
-//       </div>
-//     );
-//   }
-
-//   return (
-//     <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4">
-//       <div className="bg-background border border-primary/30 rounded-xl w-full max-w-5xl max-h-[90vh] overflow-hidden">
-//         <div className="flex items-center justify-between p-4 border-b border-primary/20">
-//           <div className="flex items-center gap-4">
-//             <h3 className="font-cyber text-xl text-primary">{game.name}</h3>
-//             <span className="text-sm text-muted-foreground">Room: {roomId.slice(0, 8)}...</span>
-//           </div>
-//           <button 
-//             onClick={onClose}
-//             className="text-muted-foreground hover:text-primary transition-colors text-2xl font-bold"
-//           >
-//             ✕
-//           </button>
-//         </div>
-//         <div className="relative w-full h-[600px] bg-black">
-//           <iframe
-//             src={gameUrl}
-//             className="w-full h-full border-0"
-//             title={game.name}
-//             sandbox="allow-scripts allow-same-origin"
-//           />
-//         </div>
-//       </div>
-//     </div>
-//   );
-// });
 
 const GameRoomDetails = ({ roomId, onBack }) => {
   const { getRoomDetails, getRoomParticipants, updateGameScore, leaveRoom, cancelRoom } = useGameRoom();
@@ -69,62 +16,29 @@ const GameRoomDetails = ({ roomId, onBack }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showGamePlayer, setShowGamePlayer] = useState(false);
   const [isLoadingGame, setIsLoadingGame] = useState(false);
+  const [winners, setWinners] = useState([]);
 
-  const updateRoomStatusIfNeeded = useCallback(async (roomId) => {
-    try {
-      const { data: room, error } = await supabase
-        .from('game_rooms')
-        .select('status, start_time, end_time, current_players, min_players_to_start')
-        .eq('id', roomId)
-        .single();
+  // Function to check if room should auto-complete
+  const checkForAutoCompletion = useCallback(async () => {
+    if (!room) return;
 
-      if (error) {
-        console.error('Error fetching room for status update:', error);
-        return;
-      }
-
-      if (!room) return;
-
-      const now = new Date();
-      const startTime = new Date(room.start_time);
-      const endTime = new Date(room.end_time);
-      let updates = null;
-
-      if (room.status === 'waiting' && now >= startTime && room.current_players >= room.min_players_to_start) {
-        updates = {
-          status: 'ongoing',
-          actual_start_time: now.toISOString()
-        };
-      } else if ((room.status === 'ongoing' || room.status === 'waiting') && now >= endTime) {
-        updates = {
-          status: 'completed',
-          actual_end_time: now.toISOString()
-        };
-      }
-
-      if (updates) {
-        const { error: updateError } = await supabase
-          .from('game_rooms')
-          .update(updates)
-          .eq('id', roomId);
-          
-        if (updateError) {
-          console.error('Error updating room status:', updateError);
-        }
-      }
-    } catch (error) {
-      console.error('Error updating room status:', error);
+    const now = new Date();
+    const endTime = new Date(room.end_time);
+    
+    // If current time has passed end time and room is still ongoing/waiting
+    if (now >= endTime && (room.status === 'ongoing' || room.status === 'waiting')) {
+      console.log('Room should auto-complete, refreshing data...');
+      // Refresh room data to get the updated status after auto-completion
+      await loadRoomData(false);
     }
-  }, []);
+  }, [room]);
 
-  // Stable loadRoomData function with optional loading state
+  // Enhanced loadRoomData function
   const loadRoomData = useCallback(async (showLoader = true) => {
     if (showLoader) {
       setLoading(true);
     }
     try {
-      await updateRoomStatusIfNeeded(roomId);
-      
       const [roomData, participantsData] = await Promise.all([
         getRoomDetails(roomId),
         getRoomParticipants(roomId)
@@ -132,6 +46,16 @@ const GameRoomDetails = ({ roomId, onBack }) => {
       
       if (roomData) {
         setRoom(roomData);
+        
+        // If room is completed, determine winners for display
+        if (roomData.status === 'completed') {
+          const activeParticipants = participantsData || [];
+          const sortedParticipants = activeParticipants.sort((a, b) => (b.score || 0) - (a.score || 0));
+          const winnersWithEarnings = sortedParticipants
+            .filter(p => p.final_position && p.earnings > 0)
+            .sort((a, b) => a.final_position - b.final_position);
+          setWinners(winnersWithEarnings);
+        }
       }
       if (participantsData) {
         setParticipants(participantsData);
@@ -148,17 +72,13 @@ const GameRoomDetails = ({ roomId, onBack }) => {
         setLoading(false);
       }
     }
-  }, [roomId, getRoomDetails, getRoomParticipants, updateRoomStatusIfNeeded, toast]);
+  }, [roomId, getRoomDetails, getRoomParticipants, toast]);
 
-  // Simplified handlers
-  const handleCloseGame = () => {
-    setShowGamePlayer(false);
-    loadRoomData(false);
-  };
-
-   const handleMessage = useCallback(async (event) => {
+  // Message handler for game iframe
+  const handleMessage = useCallback(async (event) => {
     if (event.data.type === 'EXIT_GAME') {
-      handleCloseGame();
+      setShowGamePlayer(false);
+      loadRoomData(false);
     } else if (event.data.type === 'SUBMIT_SCORE') {
       try {
         const score = event.data.score;
@@ -209,15 +129,9 @@ const GameRoomDetails = ({ roomId, onBack }) => {
         playerCurrentScore: participants.find(p => p.user_id === user?.id)?.score || 0
       }, '*');
     }
-  }, [roomId, user, handleCloseGame, loadRoomData, toast, room, participants]);
+  }, [roomId, user, loadRoomData, toast, room, participants]);
 
-  // Listen for messages from game iframe - stable dependencies
-  useEffect(() => {
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, [handleMessage]);
-
-  // Listen for messages from game iframe - stable dependencies
+  // Listen for messages from game iframe
   useEffect(() => {
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
@@ -234,84 +148,47 @@ const GameRoomDetails = ({ roomId, onBack }) => {
     return () => clearInterval(timer);
   }, [loadRoomData]);
 
-  // Check for status updates less frequently - memoized condition
-  const shouldCheckStatus = useMemo(() => {
-    if (!room) return false;
-    return room.status === 'waiting' || room.status === 'ongoing';
-  }, [room?.status]);
-
+  // Check for auto-completion more frequently
   useEffect(() => {
-    if (!shouldCheckStatus) return;
+    if (!room) return;
 
-    const checkInterval = setInterval(async () => {
-      const now = new Date();
-      const startTime = new Date(room.start_time);
-      const endTime = new Date(room.end_time);
-      
-      const shouldReload = 
-        (room.status === 'waiting' && now >= startTime) ||
-        (room.status === 'ongoing' && now >= endTime);
-        
-      if (shouldReload) {
-        await loadRoomData(false);
-      }
-    }, 10000);
+    const autoCompleteCheckInterval = setInterval(() => {
+      checkForAutoCompletion();
+    }, 10000); // Check every 10 seconds
     
-    return () => clearInterval(checkInterval);
-  }, [shouldCheckStatus, room?.start_time, room?.end_time, room?.status, loadRoomData]);
+    return () => clearInterval(autoCompleteCheckInterval);
+  }, [checkForAutoCompletion]);
 
-// Simple GamePlayerModal - no unnecessary effects or dependencies
-// const GamePlayerModal = React.memo(({ game, roomId, onClose }) => {
-//   const gameUrls = {
-//     '11111111-1111-1111-1111-111111111111': '/games/endless-runner/index.html',
-//     '22222222-2222-2222-2222-222222222222': '/games/flappy-bird/index.html',
-//   };
+  // Real-time subscription for room updates
+  useEffect(() => {
+    if (!roomId) return;
 
-//   const gameUrl = gameUrls[game?.id];
-  
-//   if (!game || !gameUrl) {
-//     return (
-//       <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4">
-//         <div className="bg-background border border-primary/30 rounded-xl p-8 text-center">
-//           <p className="text-muted-foreground mb-4">This game is not available yet</p>
-//           <button 
-//             onClick={onClose}
-//             className="bg-secondary text-primary font-cyber font-bold py-2 px-6 rounded-lg hover:bg-secondary/80 transition-colors"
-//           >
-//             Close
-//           </button>
-//         </div>
-//       </div>
-//     );
-//   }
+    const subscription = supabase
+      .channel(`room_${roomId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'game_rooms',
+        filter: `id=eq.${roomId}`
+      }, () => {
+        console.log('Room updated, refreshing data...');
+        loadRoomData(false);
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'game_room_participants',
+        filter: `room_id=eq.${roomId}`
+      }, () => {
+        console.log('Participants updated, refreshing data...');
+        loadRoomData(false);
+      })
+      .subscribe();
 
-//   return (
-//     <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4">
-//       <div className="bg-background border border-primary/30 rounded-xl w-full max-w-5xl max-h-[90vh] overflow-hidden">
-//         <div className="flex items-center justify-between p-4 border-b border-primary/20">
-//           <div className="flex items-center gap-4">
-//             <h3 className="font-cyber text-xl text-primary">{game.name}</h3>
-//             <span className="text-sm text-muted-foreground">Room: {roomId.slice(0, 8)}...</span>
-//           </div>
-//           <button 
-//             onClick={onClose}
-//             className="text-muted-foreground hover:text-primary transition-colors text-2xl font-bold"
-//           >
-//             ✕
-//           </button>
-//         </div>
-//         <div className="relative w-full h-[600px] bg-black">
-//           <iframe
-//             src={gameUrl}
-//             className="w-full h-full border-0"
-//             title={game.name}
-//             sandbox="allow-scripts allow-same-origin"
-//           />
-//         </div>
-//       </div>
-//     </div>
-//   );
-// });
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [roomId, loadRoomData]);
 
   // Determine actual room status based on time
   const getActualStatus = useCallback(() => {
@@ -330,7 +207,6 @@ const GameRoomDetails = ({ roomId, onBack }) => {
     if (now < startTime) {
       return 'waiting';
     } else if (now >= startTime && now < endTime) {
-      // Game should be ongoing if we're past start time
       return 'ongoing';
     } else if (now >= endTime) {
       return 'completed';
@@ -339,13 +215,11 @@ const GameRoomDetails = ({ roomId, onBack }) => {
     return room.status;
   }, [room, currentTime]);
 
+  // Game interaction handlers
   const handlePlayGame = async () => {
     try {
       setIsLoadingGame(true);
-      
-      // Small delay to show loading state
       await new Promise(resolve => setTimeout(resolve, 500));
-      
       setShowGamePlayer(true);
       
       toast({
@@ -361,38 +235,6 @@ const GameRoomDetails = ({ roomId, onBack }) => {
       });
     } finally {
       setIsLoadingGame(false);
-    }
-  };
-
-  const handleStartGame = async () => {
-    try {
-      // Update room status to ongoing
-      const { error } = await supabase
-        .from('game_rooms')
-        .update({ 
-          status: 'ongoing',
-          actual_start_time: new Date().toISOString()
-        })
-        .eq('id', roomId);
-
-      if (error) {
-        throw error;
-      }
-
-      toast({
-        title: "Success",
-        description: "Game started!",
-      });
-
-      // Reload room data
-      await loadRoomData();
-    } catch (error) {
-      console.error('Error starting game:', error);
-      toast({
-        title: "Error",
-        description: "Failed to start game",
-        variant: "destructive",
-      });
     }
   };
 
@@ -419,7 +261,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
       await cancelRoom(roomId);
       toast({
         title: "Success",
-        description: "Room cancelled and participants refunded",
+        description: "Room cancelled and all participants fully refunded",
       });
       onBack();
     } catch (error) {
@@ -432,6 +274,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
     }
   };
 
+  // Helper functions
   const formatDateTime = (date) => {
     return new Date(date).toLocaleString('en-US', {
       month: 'short',
@@ -504,7 +347,6 @@ const GameRoomDetails = ({ roomId, onBack }) => {
   const actualStatus = getActualStatus();
   const hasReachedStartTime = currentTime >= new Date(room.start_time);
   const hasEnoughPlayers = room.current_players >= room.min_players_to_start;
-  const canStartGame = isCreator && actualStatus === 'waiting' && hasEnoughPlayers && hasReachedStartTime;
   const canPlayGame = isParticipant && actualStatus === 'ongoing';
   const canCancelRoom = isCreator && actualStatus === 'waiting' && currentTime < new Date(room.start_time);
 
@@ -519,8 +361,8 @@ const GameRoomDetails = ({ roomId, onBack }) => {
           <span className="text-2xl">←</span>
           <span className="font-cyber">Back to Rooms</span>
         </button>
-        <div className={`px-4 py-2 rounded-full text-sm font-bold font-cyber border ${getStatusColor(room.status)}`}>
-          {room.status.toUpperCase()}
+        <div className={`px-4 py-2 rounded-full text-sm font-bold font-cyber border ${getStatusColor(actualStatus)}`}>
+          {actualStatus.toUpperCase()}
         </div>
       </div>
 
@@ -552,6 +394,11 @@ const GameRoomDetails = ({ roomId, onBack }) => {
             </p>
             {room.is_sponsored && (
               <p className="text-xs font-cyber text-green-300 mt-1">Sponsored</p>
+            )}
+            {actualStatus === 'completed' && room.platform_fee_collected > 0 && (
+              <p className="text-xs font-cyber text-green-300 mt-1">
+                Platform Fee: {room.platform_fee_collected} {room.currency}
+              </p>
             )}
           </div>
 
@@ -590,14 +437,72 @@ const GameRoomDetails = ({ roomId, onBack }) => {
           <div className="bg-secondary/30 rounded-lg p-4 border border-primary/20">
             <p className="text-sm font-cyber text-muted-foreground mb-1">Start Time</p>
             <p className="font-cyber text-foreground">{formatDateTime(room.start_time)}</p>
-            <p className="text-xs font-cyber text-accent mt-1">{getTimeRemaining(room.start_time)}</p>
+            {actualStatus === 'waiting' && (
+              <p className="text-xs font-cyber text-accent mt-1">{getTimeRemaining(room.start_time)}</p>
+            )}
           </div>
           <div className="bg-secondary/30 rounded-lg p-4 border border-primary/20">
             <p className="text-sm font-cyber text-muted-foreground mb-1">End Time</p>
             <p className="font-cyber text-foreground">{formatDateTime(room.end_time)}</p>
+            {room.actual_end_time && (
+              <p className="text-xs font-cyber text-green-400 mt-1">
+                Completed: {formatDateTime(room.actual_end_time)}
+              </p>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Winners Section - Only show if game is completed and there are winners */}
+      {actualStatus === 'completed' && winners.length > 0 && (
+        <div className="bg-gradient-to-br from-card to-secondary/20 border-2 border-primary/30 rounded-2xl p-6 cyber-border">
+          <h2 className="font-cyber text-xl font-bold text-primary mb-4">🏆 Winners</h2>
+          <div className="space-y-3">
+            {winners.map((winner, index) => (
+              <div 
+                key={winner.id}
+                className={`flex items-center justify-between rounded-lg p-4 border ${
+                  winner.final_position === 1 
+                    ? 'bg-gradient-to-r from-yellow-500/20 to-amber-500/20 border-yellow-500/30' 
+                    : winner.final_position === 2 
+                    ? 'bg-gradient-to-r from-gray-300/20 to-gray-400/20 border-gray-400/30'
+                    : winner.final_position === 3
+                    ? 'bg-gradient-to-r from-amber-600/20 to-orange-600/20 border-amber-600/30'
+                    : 'bg-secondary/30 border-primary/20'
+                }`}
+              >
+                <div className="flex items-center gap-4">
+                  <div className="text-2xl">
+                    {winner.final_position === 1 && '🥇'}
+                    {winner.final_position === 2 && '🥈'}
+                    {winner.final_position === 3 && '🥉'}
+                    {winner.final_position > 3 && `#${winner.final_position}`}
+                  </div>
+                  <div>
+                    <p className="font-cyber text-foreground font-bold">
+                      {winner.user?.username || 'Unknown Player'}
+                      {winner.user_id === user?.id && (
+                        <span className="text-xs text-accent ml-2">(You)</span>
+                      )}
+                    </p>
+                    <p className="text-sm font-cyber text-muted-foreground">
+                      Score: {winner.score || 0} points
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="font-cyber text-lg font-bold text-green-400">
+                    +{winner.earnings} {room.currency}
+                  </p>
+                  <p className="text-xs font-cyber text-muted-foreground">
+                    Position {winner.final_position}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Participants */}
       <div className="bg-gradient-to-br from-card to-secondary/20 border-2 border-primary/30 rounded-2xl p-6 cyber-border">
@@ -630,10 +535,15 @@ const GameRoomDetails = ({ roomId, onBack }) => {
                       </p>
                     </div>
                   </div>
-                  {(room.status === 'ongoing' || room.status === 'completed') && (
+                  {(actualStatus === 'ongoing' || actualStatus === 'completed') && (
                     <div className="text-right">
                       <p className="font-cyber text-sm text-muted-foreground">Score</p>
                       <p className="font-cyber text-lg text-accent">{participant.score || 0}</p>
+                      {actualStatus === 'completed' && participant.earnings > 0 && (
+                        <p className="text-xs font-cyber text-green-400">
+                          Won: {participant.earnings} {room.currency}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -662,28 +572,35 @@ const GameRoomDetails = ({ roomId, onBack }) => {
         )}
 
         {/* Waiting for players message */}
-        {room.status === 'waiting' && hasReachedStartTime && !hasEnoughPlayers && (
+        {actualStatus === 'waiting' && hasReachedStartTime && !hasEnoughPlayers && (
           <div className="flex-1 bg-yellow-600/20 border border-yellow-500/30 text-yellow-400 font-cyber font-bold py-3 rounded-xl text-center">
             ⏳ Waiting for minimum {room.min_players_to_start} players (Currently: {room.current_players})
           </div>
         )}
 
         {/* Waiting for start time */}
-        {room.status === 'waiting' && !hasReachedStartTime && isParticipant && (
+        {actualStatus === 'waiting' && !hasReachedStartTime && isParticipant && (
           <div className="flex-1 bg-blue-600/20 border border-blue-500/30 text-blue-400 font-cyber font-bold py-3 rounded-xl text-center">
             ⏰ Game starts {getTimeRemaining(room.start_time)}
           </div>
         )}
 
         {/* Game Completed */}
-        {room.status === 'completed' && (
+        {actualStatus === 'completed' && (
           <div className="flex-1 bg-gray-600/50 text-gray-300 font-cyber font-bold py-3 rounded-xl text-center">
-            Game Completed - View Results Coming Soon
+            🏁 Game Completed - Prizes Distributed
+          </div>
+        )}
+
+        {/* Game Cancelled */}
+        {actualStatus === 'cancelled' && (
+          <div className="flex-1 bg-red-600/50 text-red-300 font-cyber font-bold py-3 rounded-xl text-center">
+            ❌ Game Cancelled - Participants Refunded
           </div>
         )}
 
         {/* Leave Room - Only before game starts */}
-        {room.status === 'waiting' && isParticipant && !isCreator && !hasReachedStartTime && (
+        {actualStatus === 'waiting' && isParticipant && !isCreator && !hasReachedStartTime && (
           <button 
             onClick={() => setShowLeaveConfirm(true)}
             className="flex-1 bg-gradient-to-r from-red-500 to-red-600 text-white font-cyber font-bold py-3 rounded-xl hover:scale-105 transition-all shadow-lg hover:shadow-red-500/50"
@@ -703,7 +620,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
         )}
 
         {/* Disabled Cancel - After start time */}
-        {isCreator && room.status === 'waiting' && hasReachedStartTime && (
+        {isCreator && actualStatus === 'waiting' && hasReachedStartTime && (
           <div className="flex-1 bg-gray-600/30 text-gray-500 font-cyber font-bold py-3 rounded-xl text-center cursor-not-allowed">
             Cannot Cancel - Game Time Reached
           </div>
@@ -742,7 +659,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
           <div className="bg-card border-2 border-primary/50 rounded-2xl p-6 max-w-md w-full mx-4">
             <h3 className="font-cyber text-xl font-bold text-primary mb-4">Cancel Room?</h3>
             <p className="text-muted-foreground mb-6">
-              Are you sure you want to cancel this room? All participants will be refunded their entry fees.
+              Are you sure you want to cancel this room? All participants will receive full refunds (no platform fee charged).
             </p>
             <div className="flex gap-3">
               <button
@@ -772,7 +689,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
                 <span className="text-sm text-muted-foreground">Room: {roomId.slice(0, 8)}...</span>
               </div>
               <button 
-                onClick={handleCloseGame}
+                onClick={() => setShowGamePlayer(false)}
                 className="text-muted-foreground hover:text-primary transition-colors text-2xl font-bold"
               >
                 ✕

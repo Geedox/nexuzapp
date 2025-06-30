@@ -27,7 +27,7 @@ const Navigation = ({ onAuthClick }: NavigationProps) => {
             NEXUZ ARENA
           </div>
           
-          <div className="hidden lg:flex items-center space-x-8">
+          <div className="hidden font-cyber lg:flex items-center space-x-8">
             <a href="#features" className="text-foreground hover:text-primary transition-colors">
               Features
             </a>
@@ -59,7 +59,7 @@ const Navigation = ({ onAuthClick }: NavigationProps) => {
             ) : (
               <Button 
                 onClick={handleAuthAction}
-                className="bg-primary hover:bg-primary/80 text-primary-foreground neon-border text-sm lg:text-base px-3 lg:px-4"
+                className="bg-primary hover:bg-primary/80 text-primary-foreground font-cyber neon-border text-sm lg:text-base px-3 lg:px-4"
               >
                 Sign In with Google
               </Button>

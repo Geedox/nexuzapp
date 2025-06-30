@@ -107,6 +107,566 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
   const { wallets, refreshWallets } = useWallet();
   const { refreshTransactions } = useTransaction();
 
+  // Function to get prize split percentages based on winner split rule
+  const getPrizeSplitPercentages = (splitRule: string) => {
+    const splits = {
+      'winner_takes_all': [{ position: 1, percentage: 100 }],
+      'top_2': [
+        { position: 1, percentage: 60 },
+        { position: 2, percentage: 40 }
+      ],
+      'top_3': [
+        { position: 1, percentage: 50 },
+        { position: 2, percentage: 30 },
+        { position: 3, percentage: 20 }
+      ],
+      'top_4': [
+        { position: 1, percentage: 40 },
+        { position: 2, percentage: 30 },
+        { position: 3, percentage: 20 },
+        { position: 4, percentage: 10 }
+      ],
+      'top_5': [
+        { position: 1, percentage: 30 },
+        { position: 2, percentage: 25 },
+        { position: 3, percentage: 20 },
+        { position: 4, percentage: 15 },
+        { position: 5, percentage: 10 }
+      ],
+      'top_10': [
+        { position: 1, percentage: 20 },
+        { position: 2, percentage: 15 },
+        { position: 3, percentage: 12 },
+        { position: 4, percentage: 10 },
+        { position: 5, percentage: 8 },
+        { position: 6, percentage: 8 },
+        { position: 7, percentage: 7 },
+        { position: 8, percentage: 7 },
+        { position: 9, percentage: 7 },
+        { position: 10, percentage: 6 }
+      ]
+    };
+
+    return splits[splitRule] || splits['winner_takes_all'];
+  };
+
+  // Function to determine winners based on scores and split rule
+  const determineWinners = (participants: any[], splitRule: string) => {
+    // Sort participants by score in descending order
+    const sortedParticipants = [...participants].sort((a, b) => (b.score || 0) - (a.score || 0));
+    
+    const winnerCounts = {
+      'winner_takes_all': 1,
+      'top_2': 2,
+      'top_3': 3,
+      'top_4': 4,
+      'top_5': 5,
+      'top_10': 10
+    };
+
+    const maxWinners = winnerCounts[splitRule] || 1;
+    const actualWinners = Math.min(maxWinners, sortedParticipants.length);
+
+    return sortedParticipants
+      .slice(0, actualWinners)
+      .map((participant, index) => ({
+        userId: participant.user_id,
+        position: index + 1,
+        participantId: participant.id
+      }));
+  };
+
+  // Updated distributePrizes function with profile updates - replace in your GameRoomContext
+  const distributePrizes = async (room: any, participants: any[], winners: any[]) => {
+    try {
+      console.log(`Starting prize distribution for room ${room.id}`);
+      
+      // Calculate platform fee (10%)
+      const platformFee = room.total_prize_pool * 0.1;
+      const distributablePrize = room.total_prize_pool - platformFee;
+
+      // Get prize split percentages
+      const prizeSplits = getPrizeSplitPercentages(room.winner_split_rule);
+
+      console.log(`Prize distribution details:`, {
+        totalPrizePool: room.total_prize_pool,
+        platformFee,
+        distributablePrize,
+        winnersCount: winners.length
+      });
+
+      // Track users who need profile updates
+      const usersToUpdateProfile = new Set();
+
+      // Update participant positions and distribute prizes
+      for (const winner of winners) {
+        const split = prizeSplits.find(s => s.position === winner.position);
+        if (!split) continue;
+
+        const earnings = distributablePrize * (split.percentage / 100);
+        
+        // Find participant data
+        const participant = participants.find(p => p.user_id === winner.userId);
+        if (!participant) continue;
+
+        console.log(`Processing winner - Position ${winner.position}: ${earnings} ${room.currency}`);
+
+        // Update participant with final position and earnings
+        const { error: participantError } = await supabase
+          .from('game_room_participants')
+          .update({
+            final_position: winner.position,
+            earnings: earnings
+          })
+          .eq('room_id', room.id)
+          .eq('user_id', winner.userId);
+
+        if (participantError) {
+          console.error('Error updating participant:', participantError);
+          continue;
+        }
+
+        // Create winning transaction
+        const { data: transaction, error: txError } = await supabase
+          .from('transactions')
+          .insert({
+            user_id: winner.userId,
+            room_id: room.id,
+            type: 'win',
+            amount: earnings,
+            currency: room.currency,
+            status: 'completed',
+            description: `Winnings from room: ${room.name} (Position: ${winner.position})`
+          })
+          .select()
+          .single();
+
+        if (txError) {
+          console.error('Error creating transaction:', txError);
+          continue;
+        }
+
+        // Update wallet balance
+        const { data: walletData, error: walletFetchError } = await supabase
+          .from('wallets')
+          .select('balance')
+          .eq('user_id', winner.userId)
+          .eq('currency', room.currency)
+          .single();
+
+        if (walletFetchError) {
+          console.error('Error fetching wallet:', walletFetchError);
+          continue;
+        }
+
+        const newBalance = (walletData.balance || 0) + earnings;
+
+        const { error: updateWalletError } = await supabase
+          .from('wallets')
+          .update({
+            balance: newBalance,
+            updated_at: new Date().toISOString()
+          })
+          .eq('user_id', winner.userId)
+          .eq('currency', room.currency);
+
+        if (updateWalletError) {
+          console.error('Error updating wallet balance:', updateWalletError);
+          continue;
+        }
+
+        console.log(`Wallet updated: ${winner.userId} - New balance: ${newBalance} ${room.currency}`);
+
+        // Update payout transaction id
+        await supabase
+          .from('game_room_participants')
+          .update({ payout_transaction_id: transaction.id })
+          .eq('room_id', room.id)
+          .eq('user_id', winner.userId);
+
+        // Try to record in winners table (optional - if table exists)
+        try {
+          await supabase
+            .from('game_room_winners')
+            .insert({
+              room_id: room.id,
+              participant_id: participant.id,
+              position: winner.position,
+              prize_percentage: split.percentage,
+              prize_amount: earnings
+            });
+        } catch (winnersTableError) {
+          console.log('Winners table might not exist:', winnersTableError);
+        }
+
+        // Update game-specific leaderboard
+        const isFirstPlace = winner.position === 1;
+        const currentScore = participant.score || 0;
+
+        try {
+          // Update or create game-specific leaderboard entry
+          const { data: existingGameEntry } = await supabase
+            .from('leaderboards')
+            .select('*')
+            .eq('user_id', winner.userId)
+            .eq('game_id', room.game_id)
+            .eq('period', 'all-time')
+            .single();
+
+          if (existingGameEntry) {
+            await supabase
+              .from('leaderboards')
+              .update({
+                total_score: Math.max(existingGameEntry.total_score || 0, currentScore),
+                games_played: (existingGameEntry.games_played || 0) + 1,
+                wins: (existingGameEntry.wins || 0) + (isFirstPlace ? 1 : 0),
+                total_earnings: (existingGameEntry.total_earnings || 0) + earnings,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', existingGameEntry.id);
+          } else {
+            await supabase
+              .from('leaderboards')
+              .insert({
+                user_id: winner.userId,
+                game_id: room.game_id,
+                period: 'all-time',
+                total_score: currentScore,
+                games_played: 1,
+                wins: isFirstPlace ? 1 : 0,
+                total_earnings: earnings
+              });
+          }
+
+          // Update or create global leaderboard entry (game_id = NULL)
+          const { data: existingGlobal } = await supabase
+            .from('leaderboards')
+            .select('*')
+            .eq('user_id', winner.userId)
+            .is('game_id', null)
+            .eq('period', 'all-time')
+            .single();
+
+          if (existingGlobal) {
+            await supabase
+              .from('leaderboards')
+              .update({
+                games_played: (existingGlobal.games_played || 0) + 1,
+                wins: (existingGlobal.wins || 0) + (isFirstPlace ? 1 : 0),
+                total_earnings: (existingGlobal.total_earnings || 0) + earnings,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', existingGlobal.id);
+          } else {
+            await supabase
+              .from('leaderboards')
+              .insert({
+                user_id: winner.userId,
+                game_id: null,
+                period: 'all-time',
+                total_score: 0,
+                games_played: 1,
+                wins: isFirstPlace ? 1 : 0,
+                total_earnings: earnings
+              });
+          }
+
+          console.log(`Updated leaderboards for user ${winner.userId}: position=${winner.position}, earnings=${earnings}`);
+        } catch (leaderboardError) {
+          console.error('Leaderboard update failed:', leaderboardError);
+        }
+
+        // Mark user for profile update
+        usersToUpdateProfile.add(winner.userId);
+      }
+
+      // Update leaderboard for non-winners (they played a game but didn't win)
+      for (const participant of participants) {
+        const isWinner = winners.some(w => w.userId === participant.user_id);
+        if (isWinner) continue; // Already handled above
+
+        try {
+          const currentScore = participant.score || 0;
+
+          // Update game-specific leaderboard for non-winner
+          const { data: existingEntry } = await supabase
+            .from('leaderboards')
+            .select('*')
+            .eq('user_id', participant.user_id)
+            .eq('game_id', room.game_id)
+            .eq('period', 'all-time')
+            .single();
+
+          if (existingEntry) {
+            await supabase
+              .from('leaderboards')
+              .update({
+                total_score: Math.max(existingEntry.total_score || 0, currentScore),
+                games_played: (existingEntry.games_played || 0) + 1,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', existingEntry.id);
+          } else {
+            await supabase
+              .from('leaderboards')
+              .insert({
+                user_id: participant.user_id,
+                game_id: room.game_id,
+                period: 'all-time',
+                total_score: currentScore,
+                games_played: 1,
+                wins: 0,
+                total_earnings: 0
+              });
+          }
+
+          // Update global leaderboard for non-winner
+          const { data: existingGlobal } = await supabase
+            .from('leaderboards')
+            .select('*')
+            .eq('user_id', participant.user_id)
+            .is('game_id', null)
+            .eq('period', 'all-time')
+            .single();
+
+          if (existingGlobal) {
+            await supabase
+              .from('leaderboards')
+              .update({
+                games_played: (existingGlobal.games_played || 0) + 1,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', existingGlobal.id);
+          } else {
+            await supabase
+              .from('leaderboards')
+              .insert({
+                user_id: participant.user_id,
+                game_id: null,
+                period: 'all-time',
+                total_score: 0,
+                games_played: 1,
+                wins: 0,
+                total_earnings: 0
+              });
+          }
+
+          // Mark user for profile update
+          usersToUpdateProfile.add(participant.user_id);
+        } catch (error) {
+          console.error(`Error updating leaderboard for non-winner ${participant.user_id}:`, error);
+        }
+      }
+
+      // Update profile stats for all affected users using the SQL function
+      console.log(`Updating profile stats for ${usersToUpdateProfile.size} users`);
+      for (const userId of usersToUpdateProfile) {
+        try {
+          await supabase.rpc('update_user_profile_stats', { p_user_id: userId });
+          console.log(`Profile stats updated for user ${userId}`);
+        } catch (profileError) {
+          console.error(`Error updating profile stats for user ${userId}:`, profileError);
+          
+          // Fallback: manual profile update
+          try {
+            // Get aggregated stats from transactions
+            const { data: userTransactions } = await supabase
+              .from('transactions')
+              .select('type, amount')
+              .eq('user_id', userId)
+              .eq('status', 'completed');
+
+            if (userTransactions) {
+              const totalEarnings = userTransactions
+                .filter(t => t.type === 'win')
+                .reduce((sum, t) => sum + Number(t.amount), 0);
+              
+              const totalWins = userTransactions.filter(t => t.type === 'win').length;
+              
+              const { data: gameRooms } = await supabase
+                .from('game_room_participants')
+                .select('room_id')
+                .eq('user_id', userId)
+                .eq('is_active', true);
+
+              const totalGames = gameRooms ? gameRooms.length : 0;
+              const experiencePoints = (totalGames * 100) + (totalWins * 500);
+
+              await supabase
+                .from('profiles')
+                .update({
+                  total_earnings: totalEarnings,
+                  total_wins: totalWins,
+                  total_games_played: totalGames,
+                  experience_points: experiencePoints,
+                  level: Math.max(1, Math.floor(experiencePoints / 1000)),
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', userId);
+
+              console.log(`Manual profile update completed for user ${userId}`);
+            }
+          } catch (fallbackError) {
+            console.error(`Fallback profile update also failed for user ${userId}:`, fallbackError);
+          }
+        }
+      }
+
+      // Update room status to completed
+      await supabase
+        .from('game_rooms')
+        .update({
+          status: 'completed',
+          actual_end_time: new Date().toISOString(),
+          platform_fee_collected: platformFee
+        })
+        .eq('id', room.id);
+
+      console.log(`Successfully completed game room ${room.id} and updated ${usersToUpdateProfile.size} user profiles`);
+
+    } catch (error) {
+      console.error('Error distributing prizes:', error);
+      throw error;
+    }
+  };
+
+  // Function to automatically complete a single game
+  const autoCompleteGame = async (room: any) => {
+    try {
+      console.log(`Auto-completing game room: ${room.id} (${room.name})`);
+
+      // Get all active participants with their scores
+      const { data: participants } = await supabase
+        .from('game_room_participants')
+        .select('*')
+        .eq('room_id', room.id)
+        .eq('is_active', true)
+        .order('score', { ascending: false });
+
+      if (!participants || participants.length === 0) {
+        // No participants - just mark as completed
+        await supabase
+          .from('game_rooms')
+          .update({
+            status: 'completed',
+            actual_end_time: new Date().toISOString(),
+            platform_fee_collected: 0
+          })
+          .eq('id', room.id);
+        
+        console.log(`Room ${room.id} completed with no participants`);
+        return;
+      }
+
+      // If only one participant, they win everything (minus platform fee)
+      if (participants.length === 1) {
+        const winners = [{ userId: participants[0].user_id, position: 1, participantId: participants[0].id }];
+        await distributePrizes(room, participants, winners);
+        return;
+      }
+
+      // Determine winners based on winner split rule and scores
+      const winners = determineWinners(participants, room.winner_split_rule);
+      
+      // Distribute prizes
+      await distributePrizes(room, participants, winners);
+
+    } catch (error) {
+      console.error(`Error auto-completing game ${room.id}:`, error);
+      
+      // If auto-completion fails, at least update the status
+      try {
+        await supabase
+          .from('game_rooms')
+          .update({
+            status: 'completed',
+            actual_end_time: new Date().toISOString(),
+            platform_fee_collected: 0
+          })
+          .eq('id', room.id);
+      } catch (statusError) {
+        console.error('Error updating room status as fallback:', statusError);
+      }
+    }
+  };
+
+  // Function to automatically complete expired games
+  const autoCompleteExpiredGames = async () => {
+    try {
+      const now = new Date().toISOString();
+      
+      // Get rooms that have ended but are still marked as ongoing or waiting
+      const { data: expiredRooms } = await supabase
+        .from('game_rooms')
+        .select(`
+          *,
+          participants:game_room_participants(*)
+        `)
+        .in('status', ['waiting', 'ongoing'])
+        .lt('end_time', now);
+
+      if (!expiredRooms || expiredRooms.length === 0) return;
+
+      console.log(`Found ${expiredRooms.length} expired rooms to auto-complete`);
+
+      for (const room of expiredRooms) {
+        await autoCompleteGame(room);
+      }
+    } catch (error) {
+      console.error('Error auto-completing expired games:', error);
+    }
+  };
+
+  // Update room statuses based on time with auto-completion
+  const updateRoomStatuses = async () => {
+    try {
+      const now = new Date().toISOString();
+      
+      // Get rooms that need status updates
+      const { data: roomsToUpdate } = await supabase
+        .from('game_rooms')
+        .select('id, status, start_time, end_time, current_players, min_players_to_start, name')
+        .in('status', ['waiting', 'ongoing']);
+
+      if (!roomsToUpdate) return;
+
+      for (const room of roomsToUpdate) {
+        let newStatus = room.status;
+        let updates: any = {};
+
+        const startTime = new Date(room.start_time);
+        const endTime = new Date(room.end_time);
+        const currentTime = new Date();
+
+        // Check if room should be ongoing (only if enough players)
+        if (room.status === 'waiting' && currentTime >= startTime && room.current_players >= room.min_players_to_start) {
+          newStatus = 'ongoing';
+          updates = {
+            status: 'ongoing',
+            actual_start_time: now
+          };
+        }
+        
+        // Check if room should be completed - AUTO COMPLETE WITH PRIZE DISTRIBUTION
+        if ((room.status === 'ongoing' || room.status === 'waiting') && currentTime >= endTime) {
+          // Auto-complete the game instead of just updating status
+          await autoCompleteGame(room);
+          continue; // Skip the manual status update since autoCompleteGame handles it
+        }
+
+        // Update if status changed (for non-completion updates)
+        if (newStatus !== room.status) {
+          await supabase
+            .from('game_rooms')
+            .update(updates)
+            .eq('id', room.id);
+        }
+      }
+    } catch (error) {
+      console.error('Error updating room statuses:', error);
+    }
+  };
+
   // Fetch all public rooms and user's private rooms
   const fetchRooms = async () => {
     try {
@@ -135,58 +695,6 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
       });
     } finally {
       setLoading(false);
-    }
-  };
-
-  // Update room statuses based on time
-  const updateRoomStatuses = async () => {
-    try {
-      const now = new Date().toISOString();
-      
-      // Get rooms that need status updates
-      const { data: roomsToUpdate } = await supabase
-        .from('game_rooms')
-        .select('id, status, start_time, end_time, current_players, min_players_to_start')
-        .in('status', ['waiting', 'ongoing']);
-
-      if (!roomsToUpdate) return;
-
-      for (const room of roomsToUpdate) {
-        let newStatus = room.status;
-        let updates: any = {};
-
-        const startTime = new Date(room.start_time);
-        const endTime = new Date(room.end_time);
-        const currentTime = new Date();
-
-        // Check if room should be ongoing (only if enough players)
-        if (room.status === 'waiting' && currentTime >= startTime && room.current_players >= room.min_players_to_start) {
-          newStatus = 'ongoing';
-          updates = {
-            status: 'ongoing',
-            actual_start_time: now
-          };
-        }
-        
-        // Check if room should be completed
-        if ((room.status === 'ongoing' || room.status === 'waiting') && currentTime >= endTime) {
-          newStatus = 'completed';
-          updates = {
-            status: 'completed',
-            actual_end_time: now
-          };
-        }
-
-        // Update if status changed
-        if (newStatus !== room.status) {
-          await supabase
-            .from('game_rooms')
-            .update(updates)
-            .eq('id', room.id);
-        }
-      }
-    } catch (error) {
-      console.error('Error updating room statuses:', error);
     }
   };
 
@@ -513,7 +1021,7 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
     }
   };
 
-  // Cancel a room (creator only)
+  // Enhanced cancel room function with proper refunds (no 10% charge)
   const cancelRoom = async (roomId: string) => {
     if (!user) throw new Error('User not authenticated');
 
@@ -538,33 +1046,82 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
         throw new Error('Can only cancel rooms in waiting status');
       }
 
-      // Refund all participants
+      console.log(`Cancelling room ${roomId} and refunding ${room.participants.length} participants`);
+
+      // Refund all participants (NO 10% platform fee on cancellations)
       for (const participant of room.participants) {
         if (participant.payment_amount > 0) {
           // Create refund transaction
-          await supabase
+          const { data: refundTx, error: refundError } = await supabase
             .from('transactions')
             .insert({
               user_id: participant.user_id,
               room_id: roomId,
               type: 'deposit',
-              amount: participant.payment_amount,
+              amount: participant.payment_amount, // Full refund - no platform fee
               currency: participant.payment_currency,
               status: 'completed',
-              description: `Refund for cancelled room: ${room.name}`
-            });
+              description: `Full refund for cancelled room: ${room.name}`
+            })
+            .select()
+            .single();
 
-          // Update wallet balance
-          await supabase
+          if (refundError) {
+            console.error('Error creating refund transaction:', refundError);
+            continue;
+          }
+
+          // Update wallet balance with full refund
+          const { error: walletError } = await supabase
             .from('wallets')
             .update({ 
-              balance: supabase.raw('balance + ?', [participant.payment_amount])
+              balance: supabase.raw(`balance + ${participant.payment_amount}`),
+              updated_at: new Date().toISOString()
             })
             .eq('id', participant.wallet_id);
+
+          if (walletError) {
+            console.error('Error updating wallet for refund:', walletError);
+          }
         }
       }
 
-      // Update room status
+      // If the room was sponsored, refund the sponsor amount too
+      if (room.is_sponsored && room.sponsor_amount > 0) {
+        // Find the creator's wallet
+        const { data: creatorWallet } = await supabase
+          .from('wallets')
+          .select('*')
+          .eq('user_id', room.creator_id)
+          .eq('currency', room.currency)
+          .single();
+
+        if (creatorWallet) {
+          // Create sponsor refund transaction
+          await supabase
+            .from('transactions')
+            .insert({
+              user_id: room.creator_id,
+              room_id: roomId,
+              type: 'deposit',
+              amount: room.sponsor_amount,
+              currency: room.currency,
+              status: 'completed',
+              description: `Sponsor refund for cancelled room: ${room.name}`
+            });
+
+          // Update creator's wallet balance
+          await supabase
+            .from('wallets')
+            .update({ 
+              balance: supabase.raw(`balance + ${room.sponsor_amount}`),
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', creatorWallet.id);
+        }
+      }
+
+      // Update room status to cancelled
       await supabase
         .from('game_rooms')
         .update({ 
@@ -579,7 +1136,7 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
 
       toast({
         title: "Success",
-        description: "Room cancelled and participants refunded",
+        description: "Room cancelled and all participants fully refunded",
       });
     } catch (error: any) {
       console.error('Error cancelling room:', error);
@@ -656,7 +1213,7 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
     }
   };
 
-  // Complete game and distribute winnings
+  // Manual complete game function (for admin use)
   const completeGame = async (roomId: string, winners: { userId: string; position: number }[]) => {
     try {
       // Get room details
@@ -668,114 +1225,17 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
 
       if (roomError) throw roomError;
 
-      // Calculate platform fee (10%)
-      const platformFee = room.total_prize_pool * 0.1;
-      const distributablePrize = room.total_prize_pool - platformFee;
+      // Get participants
+      const { data: participants, error: participantsError } = await supabase
+        .from('game_room_participants')
+        .select('*')
+        .eq('room_id', roomId)
+        .eq('is_active', true);
 
-      // Get winner split percentages
-      const { data: splits, error: splitsError } = await supabase
-        .rpc('calculate_winner_splits', { rule: room.winner_split_rule });
+      if (participantsError) throw participantsError;
 
-      if (splitsError) throw splitsError;
-
-      // Update participant positions and calculate earnings
-      for (const winner of winners) {
-        const split = splits.find((s: any) => s.winner_position === winner.position);
-        if (split) {
-          const earnings = distributablePrize * (split.prize_percentage / 100);
-
-          // Update participant
-          const { data: participant, error: pError } = await supabase
-            .from('game_room_participants')
-            .update({
-              final_position: winner.position,
-              earnings: earnings
-            })
-            .eq('room_id', roomId)
-            .eq('user_id', winner.userId)
-            .select()
-            .single();
-
-          if (pError) throw pError;
-
-          // Create winning transaction
-          const { data: transaction, error: txError } = await supabase
-            .from('transactions')
-            .insert({
-              user_id: winner.userId,
-              room_id: roomId,
-              type: 'win',
-              amount: earnings,
-              currency: room.currency,
-              status: 'completed',
-              description: `Winnings from room: ${room.name} (Position: ${winner.position})`
-            })
-            .select()
-            .single();
-
-          if (txError) throw txError;
-
-          // Update wallet balance
-          await supabase
-            .from('wallets')
-            .update({
-              balance: supabase.raw('balance + ?', [earnings])
-            })
-            .eq('user_id', winner.userId)
-            .eq('currency', room.currency);
-
-          // Update payout transaction id
-          await supabase
-            .from('game_room_participants')
-            .update({ payout_transaction_id: transaction.id })
-            .eq('id', participant.id);
-
-          // Record in winners table
-          await supabase
-            .from('game_room_winners')
-            .insert({
-              room_id: roomId,
-              participant_id: participant.id,
-              position: winner.position,
-              prize_percentage: split.prize_percentage,
-              prize_amount: earnings
-            });
-        }
-      }
-
-      // Update room status
-      await supabase
-        .from('game_rooms')
-        .update({
-          status: 'completed',
-          actual_end_time: new Date().toISOString(),
-          platform_fee_collected: platformFee
-        })
-        .eq('id', roomId);
-
-      // Update leaderboards
-      for (const participant of winners) {
-        // Update global leaderboard
-        await supabase.rpc('update_leaderboard', {
-          p_user_id: participant.userId,
-          p_game_id: room.game_id,
-          p_won: winners.findIndex(w => w.userId === participant.userId) === 0,
-          p_earnings: participant.position <= winners.length ? 
-            distributablePrize * (splits.find((s: any) => s.winner_position === participant.position)?.prize_percentage || 0) / 100 : 0
-        });
-      }
-
-      // Update user profiles
-      for (const winner of winners) {
-        if (winner.position === 1) {
-          await supabase.rpc('increment_user_stats', {
-            p_user_id: winner.userId,
-            p_games_played: 1,
-            p_wins: 1,
-            p_earnings: distributablePrize * (splits[0]?.prize_percentage || 0) / 100
-          });
-        }
-      }
+      // Distribute prizes using the enhanced function
+      await distributePrizes(room, participants, winners);
 
       await refreshRooms();
       await refreshWallets();
@@ -804,6 +1264,23 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
       setRooms([]);
       setLoading(false);
     }
+  }, [user]);
+
+  // Enhanced useEffect to periodically check for expired games
+  useEffect(() => {
+    if (!user) return;
+
+    // Check for expired games every 30 seconds
+    const expiredGamesInterval = setInterval(() => {
+      autoCompleteExpiredGames();
+    }, 30000);
+
+    // Also check immediately
+    autoCompleteExpiredGames();
+
+    return () => {
+      clearInterval(expiredGamesInterval);
+    };
   }, [user]);
 
   // Set up real-time subscriptions

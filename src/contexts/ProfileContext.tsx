@@ -56,6 +56,7 @@ interface ProfileContextType {
   setUsername: (username: string) => Promise<void>;
   refreshProfile: () => Promise<void>;
   refreshStats: () => Promise<void>;
+  refreshProfileStats: () => Promise<void>; // New function
 }
 
 const ProfileContext = createContext<ProfileContextType | undefined>(undefined);
@@ -79,16 +80,50 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
   // Fetch room statistics
   const fetchRoomStats = async (userId: string): Promise<RoomStats> => {
     try {
-      // For now, return empty stats to avoid errors
-      // You can implement the actual fetching logic once the RLS policies are fixed
+      // Get room statistics from game_room_participants and game_rooms
+      const { data: participantData } = await supabase
+        .from('game_room_participants')
+        .select(`
+          *,
+          room:game_rooms(*)
+        `)
+        .eq('user_id', userId);
+
+      if (!participantData) {
+        return {
+          totalRoomsJoined: 0,
+          totalRoomsCreated: 0,
+          activeRooms: 0,
+          completedRooms: 0,
+          totalRoomWinnings: 0,
+          roomWinRate: 0,
+          favoriteGame: null
+        };
+      }
+
+      const totalRoomsJoined = participantData.length;
+      const activeRooms = participantData.filter(p => p.room?.status === 'ongoing' || p.room?.status === 'waiting').length;
+      const completedRooms = participantData.filter(p => p.room?.status === 'completed').length;
+      const wins = participantData.filter(p => p.final_position === 1).length;
+      const totalRoomWinnings = participantData.reduce((sum, p) => sum + (p.earnings || 0), 0);
+      const roomWinRate = completedRooms > 0 ? (wins / completedRooms) * 100 : 0;
+
+      // Get created rooms
+      const { data: createdRooms } = await supabase
+        .from('game_rooms')
+        .select('*')
+        .eq('creator_id', userId);
+
+      const totalRoomsCreated = createdRooms?.length || 0;
+
       return {
-        totalRoomsJoined: 0,
-        totalRoomsCreated: 0,
-        activeRooms: 0,
-        completedRooms: 0,
-        totalRoomWinnings: 0,
-        roomWinRate: 0,
-        favoriteGame: null
+        totalRoomsJoined,
+        totalRoomsCreated,
+        activeRooms,
+        completedRooms,
+        totalRoomWinnings,
+        roomWinRate,
+        favoriteGame: null // You can implement this based on most played game
       };
     } catch (error) {
       console.error('Error fetching room stats:', error);
@@ -107,9 +142,29 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
   // Fetch game-specific statistics
   const fetchGameStats = async (userId: string): Promise<GameStats[]> => {
     try {
-      // For now, return empty array to avoid errors
-      // You can implement the actual fetching logic once the RLS policies are fixed
-      return [];
+      const { data: leaderboardData } = await supabase
+        .from('leaderboards')
+        .select(`
+          *,
+          game:games(name)
+        `)
+        .eq('user_id', userId)
+        .eq('period', 'all-time')
+        .not('game_id', 'is', null);
+
+      if (!leaderboardData) return [];
+
+      const gameStats: GameStats[] = leaderboardData.map(entry => ({
+        gameId: entry.game_id,
+        gameName: entry.game?.name || 'Unknown Game',
+        gamesPlayed: entry.games_played || 0,
+        wins: entry.wins || 0,
+        earnings: Number(entry.total_earnings || 0),
+        winRate: entry.games_played > 0 ? (entry.wins / entry.games_played) * 100 : 0,
+        averagePosition: 0 // You can calculate this from game_room_participants if needed
+      }));
+
+      return gameStats;
     } catch (error) {
       console.error('Error fetching game stats:', error);
       return [];
@@ -128,18 +183,14 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
       if (error) throw error;
       setProfile(data);
 
-      // Temporarily disable room and game stats fetching
-      // until RLS policies are properly fixed
-      setRoomStats({
-        totalRoomsJoined: 0,
-        totalRoomsCreated: 0,
-        activeRooms: 0,
-        completedRooms: 0,
-        totalRoomWinnings: 0,
-        roomWinRate: 0,
-        favoriteGame: null
-      });
-      setGameStats([]);
+      // Fetch room and game stats
+      const [roomStatsData, gameStatsData] = await Promise.all([
+        fetchRoomStats(userId),
+        fetchGameStats(userId)
+      ]);
+
+      setRoomStats(roomStatsData);
+      setGameStats(gameStatsData);
     } catch (error) {
       console.error('Error fetching profile:', error);
       toast({
@@ -172,6 +223,38 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
       setGameStats(gameStatsData);
     } catch (error) {
       console.error('Error refreshing stats:', error);
+    }
+  };
+
+  // NEW: Refresh profile stats using the SQL function
+  const refreshProfileStats = async () => {
+    if (!user) return;
+
+    try {
+      // Use the SQL function to update profile stats
+      await supabase.rpc('update_user_profile_stats', { p_user_id: user.id });
+      
+      // Then refresh the profile data
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      if (error) throw error;
+      setProfile(data);
+
+      toast({
+        title: "Success",
+        description: "Profile stats refreshed successfully",
+      });
+    } catch (error) {
+      console.error('Error refreshing profile stats:', error);
+      toast({
+        title: "Error",
+        description: "Failed to refresh profile stats",
+        variant: "destructive",
+      });
     }
   };
 
@@ -294,6 +377,7 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
     setUsername,
     refreshProfile,
     refreshStats,
+    refreshProfileStats, // New function added
   };
 
   return <ProfileContext.Provider value={value}>{children}</ProfileContext.Provider>;

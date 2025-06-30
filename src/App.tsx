@@ -18,53 +18,56 @@ import { GameProvider } from "./contexts/GameContext";
 import AdminLogin from "./pages/AdminLogin";
 import AdminDashboard from "./pages/AdminDashboard";
 import { GameRoomProvider } from "./contexts/GameRoomContext";
+import WinnerCelebrationProvider from "./hooks/WinnerCelebration";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
-      <CommunityChatProvider>
-        <ProfileProvider>
-          <WalletProvider>
-            <TransactionProvider>
-              <LeaderboardProvider>
-                <GameProvider>
-                  <GameRoomProvider>
-                    <TooltipProvider>
-                      <Toaster />
-                      <Sonner />
-                      <BrowserRouter>
-                        <Routes>
-                          <Route path="/" element={
-                            <ProtectedRoute requireAuth={false}>
-                              <Index />
-                            </ProtectedRoute>
-                          } />
-                          <Route path="/dashboard" element={
-                            <ProtectedRoute requireAuth={true}>
-                              <Dashboard />
-                            </ProtectedRoute>
-                          } />
-                          <Route path="/payment-callback" element={
-                            <ProtectedRoute requireAuth={true}>
-                              <PaymentCallback />
-                            </ProtectedRoute>
-                          } />
-                          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                          <Route path="*" element={<NotFound />} />
-                          <Route path="/admin" element={<AdminLogin />} />
-                          <Route path="/admin/dashboard" element={<AdminDashboard />} />
-                        </Routes>
-                      </BrowserRouter>
-                    </TooltipProvider>
-                  </GameRoomProvider>
-                </GameProvider>
-              </LeaderboardProvider>
-            </TransactionProvider>
-          </WalletProvider>
-        </ProfileProvider>
-      </CommunityChatProvider>
+      <WinnerCelebrationProvider>
+        <CommunityChatProvider>
+          <ProfileProvider>
+            <WalletProvider>
+              <TransactionProvider>
+                <LeaderboardProvider>
+                  <GameProvider>
+                    <GameRoomProvider>
+                      <TooltipProvider>
+                        <Toaster />
+                        <Sonner />
+                        <BrowserRouter>
+                          <Routes>
+                            <Route path="/" element={
+                              <ProtectedRoute requireAuth={false}>
+                                <Index />
+                              </ProtectedRoute>
+                            } />
+                            <Route path="/dashboard" element={
+                              <ProtectedRoute requireAuth={true}>
+                                <Dashboard />
+                              </ProtectedRoute>
+                            } />
+                            <Route path="/payment-callback" element={
+                              <ProtectedRoute requireAuth={true}>
+                                <PaymentCallback />
+                              </ProtectedRoute>
+                            } />
+                            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                            <Route path="*" element={<NotFound />} />
+                            <Route path="/admin" element={<AdminLogin />} />
+                            <Route path="/admin/dashboard" element={<AdminDashboard />} />
+                          </Routes>
+                        </BrowserRouter>
+                      </TooltipProvider>
+                    </GameRoomProvider>
+                  </GameProvider>
+                </LeaderboardProvider>
+              </TransactionProvider>
+            </WalletProvider>
+          </ProfileProvider>
+        </CommunityChatProvider>
+      </WinnerCelebrationProvider>
     </AuthProvider>
   </QueryClientProvider>
 );

@@ -2,13 +2,19 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <title>Flappy Bird - Crypto Arcade</title>
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
         }
 
         body {
@@ -20,16 +26,27 @@
             font-family: 'Courier New', monospace;
             color: white;
             overflow: hidden;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+            touch-action: none;
         }
 
         #gameContainer {
             background: #0f0f23;
-            border: 4px solid #4a4a8a;
+            border: 2px solid #4a4a8a;
             border-radius: 8px;
-            padding: 20px;
+            padding: 10px;
             box-shadow: 0 0 30px rgba(74, 74, 138, 0.5);
+            width: 100%;
+            max-width: 100vw;
+            max-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            position: relative;
         }
 
+        /* Mobile-first responsive canvas */
         #gameCanvas {
             background: linear-gradient(to bottom, #2a2a4e 0%, #4a4a8a 50%, #1a1a2e 100%);
             border: 2px solid #4a4a8a;
@@ -37,60 +54,82 @@
             image-rendering: pixelated;
             image-rendering: -moz-crisp-edges;
             image-rendering: crisp-edges;
+            width: 100%;
+            height: auto;
+            max-height: 70vh;
+            object-fit: contain;
         }
 
         #gameInfo {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 10px;
-            padding: 10px;
+            margin-bottom: 5px;
+            padding: 8px;
             background: rgba(74, 74, 138, 0.2);
             border-radius: 4px;
+            flex-wrap: wrap;
+            gap: 10px;
         }
 
         .score {
-            font-size: 24px;
+            font-size: clamp(16px, 4vw, 24px);
             color: #00ff00;
             text-shadow: 0 0 10px #00ff00;
         }
 
         .highScore {
-            font-size: 18px;
+            font-size: clamp(14px, 3vw, 18px);
             color: #ffff00;
         }
 
-        #gameOver {
-            position: absolute;
+        #gameOver, #startScreen {
+            position: fixed;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
             text-align: center;
-            background: rgba(0, 0, 0, 0.9);
-            padding: 30px;
+            background: rgba(0, 0, 0, 0.95);
+            padding: 20px;
             border-radius: 10px;
-            border: 2px solid #ff0000;
+            border: 2px solid #4a4a8a;
+            z-index: 1000;
+            max-width: 90vw;
+            max-height: 90vh;
+            overflow-y: auto;
+            width: auto;
+            min-width: 280px;
+        }
+
+        #gameOver {
+            border-color: #ff0000;
             display: none;
-            z-index: 10;
+        }
+
+        #gameOver h2, #startScreen h1 {
+            font-size: clamp(24px, 6vw, 48px);
+            margin-bottom: 15px;
+            text-shadow: 0 0 20px currentColor;
         }
 
         #gameOver h2 {
             color: #ff0000;
-            font-size: 36px;
-            margin-bottom: 20px;
-            text-shadow: 0 0 20px #ff0000;
+        }
+
+        #startScreen h1 {
+            color: #00ff00;
         }
 
         #gameOver .finalScore {
-            font-size: 28px;
+            font-size: clamp(18px, 5vw, 28px);
             color: #00ff00;
             margin-bottom: 10px;
         }
 
         #gameOver .newHighScore {
-            font-size: 20px;
+            font-size: clamp(16px, 4vw, 20px);
             color: #ffff00;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             animation: pulse 1s infinite;
         }
 
@@ -103,64 +142,60 @@
             background: #4a4a8a;
             color: white;
             border: none;
-            padding: 15px 30px;
-            font-size: 18px;
+            padding: 12px 20px;
+            font-size: clamp(14px, 4vw, 18px);
             font-family: inherit;
             cursor: pointer;
             border-radius: 5px;
             transition: all 0.3s;
             margin: 5px;
+            min-height: 44px;
+            min-width: 100px;
+            touch-action: manipulation;
         }
 
-        button:hover {
+        button:hover, button:active {
             background: #6a6aba;
             transform: scale(1.05);
             box-shadow: 0 0 20px rgba(106, 106, 186, 0.5);
         }
 
+        button:disabled {
+            background: #3a3a5a;
+            cursor: not-allowed;
+            transform: none;
+        }
+
         #instructions {
             text-align: center;
-            margin-top: 10px;
+            margin-top: 8px;
             color: #888;
-            font-size: 14px;
-        }
-
-        #startScreen {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            text-align: center;
-            background: rgba(0, 0, 0, 0.9);
-            padding: 40px;
-            border-radius: 10px;
-            border: 2px solid #4a4a8a;
-            z-index: 10;
-        }
-
-        #startScreen h1 {
-            color: #00ff00;
-            font-size: 48px;
-            margin-bottom: 20px;
-            text-shadow: 0 0 20px #00ff00;
+            font-size: clamp(12px, 3vw, 14px);
+            padding: 0 10px;
         }
 
         .controls {
-            margin: 20px 0;
-            font-size: 18px;
+            margin: 15px 0;
+            font-size: clamp(14px, 3.5vw, 18px);
             color: #aaa;
+            line-height: 1.4;
+        }
+
+        .controls p {
+            margin: 8px 0;
         }
 
         .powerup {
             position: absolute;
-            padding: 5px 10px;
+            padding: 5px 8px;
             background: #ffff00;
             color: #000;
             border-radius: 5px;
-            font-size: 14px;
+            font-size: clamp(10px, 3vw, 14px);
             font-weight: bold;
             animation: fadeOut 2s ease-out;
             pointer-events: none;
+            z-index: 100;
         }
 
         @keyframes fadeOut {
@@ -170,20 +205,158 @@
 
         .medal {
             display: inline-block;
-            width: 30px;
-            height: 30px;
+            width: clamp(25px, 6vw, 30px);
+            height: clamp(25px, 6vw, 30px);
             border-radius: 50%;
             margin: 5px;
             text-align: center;
-            line-height: 30px;
+            line-height: clamp(25px, 6vw, 30px);
             font-weight: bold;
-            font-size: 14px;
+            font-size: clamp(10px, 3vw, 14px);
         }
 
         .bronze { background: #cd7f32; color: white; }
         .silver { background: #c0c0c0; color: black; }
         .gold { background: #ffd700; color: black; }
         .platinum { background: linear-gradient(45deg, #e5e4e2, #d4d4aa); color: black; }
+
+        #medalDisplay {
+            margin: 15px 0;
+            font-size: clamp(12px, 3vw, 16px);
+        }
+
+        /* Mobile-specific touch control area */
+        #touchArea {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 25%;
+            background: rgba(255, 255, 255, 0.1);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+            z-index: 50;
+        }
+
+        #touchArea.active {
+            display: flex;
+        }
+
+        .touch-indicator {
+            font-size: clamp(16px, 4vw, 20px);
+            color: rgba(255, 255, 255, 0.8);
+            animation: bounce 2s infinite;
+        }
+
+        @keyframes bounce {
+            0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+            40% { transform: translateY(-10px); }
+            60% { transform: translateY(-5px); }
+        }
+
+        /* Landscape orientation adjustments */
+        @media screen and (orientation: landscape) and (max-height: 500px) {
+            #gameContainer {
+                padding: 5px;
+                flex-direction: row;
+                align-items: stretch;
+            }
+            
+            #gameInfo {
+                writing-mode: vertical-lr;
+                text-orientation: mixed;
+                width: auto;
+                min-width: 100px;
+                margin-right: 5px;
+                margin-bottom: 0;
+                flex-direction: column;
+                justify-content: space-around;
+            }
+            
+            #gameCanvas {
+                max-height: 95vh;
+                flex: 1;
+            }
+            
+            #instructions {
+                position: absolute;
+                bottom: 5px;
+                right: 5px;
+                margin: 0;
+                font-size: 10px;
+                max-width: 200px;
+            }
+            
+            #gameOver, #startScreen {
+                max-height: 85vh;
+                padding: 15px;
+            }
+        }
+
+        /* Very small screens */
+        @media screen and (max-width: 320px) {
+            #gameContainer {
+                padding: 5px;
+                border-width: 1px;
+            }
+            
+            #gameInfo {
+                padding: 5px;
+                margin-bottom: 3px;
+            }
+            
+            button {
+                padding: 10px 15px;
+                margin: 3px;
+                min-height: 40px;
+            }
+        }
+
+        /* Large phones and tablets */
+        @media screen and (min-width: 768px) {
+            #gameContainer {
+                max-width: 90vw;
+                max-height: 90vh;
+                padding: 20px;
+            }
+            
+            #gameCanvas {
+                max-height: 60vh;
+            }
+        }
+
+        /* iPhone notch adjustments */
+        @supports (padding-top: env(safe-area-inset-top)) {
+            body {
+                padding-top: env(safe-area-inset-top);
+                padding-bottom: env(safe-area-inset-bottom);
+                padding-left: env(safe-area-inset-left);
+                padding-right: env(safe-area-inset-right);
+            }
+        }
+
+        /* Prevent scrolling on mobile */
+        html, body {
+            overflow: hidden;
+            height: 100%;
+            position: fixed;
+            width: 100%;
+        }
+
+        /* In-game score display adjustments for mobile */
+        .game-score {
+            position: absolute;
+            top: 10%;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: clamp(24px, 8vw, 48px);
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+            z-index: 10;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body>
@@ -193,13 +366,18 @@
             <div class="highScore">High Score: <span id="highScore">0</span></div>
         </div>
         <canvas id="gameCanvas" width="800" height="600"></canvas>
-        <div id="instructions">Press SPACE or Click/Tap to Flap | Avoid the Pipes!</div>
+        <div id="instructions">Tap screen or press SPACE to flap | Avoid the pipes!</div>
+        
+        <!-- Touch control area for mobile -->
+        <div id="touchArea">
+            <div class="touch-indicator">👆 TAP TO FLAP</div>
+        </div>
     </div>
 
     <div id="startScreen">
         <h1>FLAPPY BIRD</h1>
         <div class="controls">
-            <p>🐦 Press SPACE or Click to Flap</p>
+            <p>🐦 Tap screen or press SPACE to Flap</p>
             <p>🚫 Don't hit the pipes or ground</p>
             <p>💎 Collect gems for bonus points</p>
             <p>🏆 Earn medals for high scores</p>
@@ -219,6 +397,37 @@
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
+        
+        // Mobile detection and setup
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
+                         ('ontouchstart' in window) || 
+                         (navigator.maxTouchPoints > 0);
+        
+        // Dynamic canvas sizing for mobile
+        function resizeCanvas() {
+            const container = document.getElementById('gameContainer');
+            const containerRect = container.getBoundingClientRect();
+            const maxWidth = Math.min(800, containerRect.width - 20);
+            const maxHeight = Math.min(600, window.innerHeight * 0.7);
+            
+            // Maintain aspect ratio
+            const aspectRatio = 800 / 600;
+            let newWidth = maxWidth;
+            let newHeight = newWidth / aspectRatio;
+            
+            if (newHeight > maxHeight) {
+                newHeight = maxHeight;
+                newWidth = newHeight * aspectRatio;
+            }
+            
+            canvas.style.width = newWidth + 'px';
+            canvas.style.height = newHeight + 'px';
+            
+            // Show touch area on mobile
+            if (isMobile) {
+                document.getElementById('touchArea').classList.add('active');
+            }
+        }
         
         // Pixel art settings
         ctx.imageSmoothingEnabled = false;
@@ -269,9 +478,11 @@
         const pipeGap = 200;
         const pipeSpeed = 3;
         
-        // Input handling
+        // Enhanced input handling for mobile
         let flapPressed = false;
+        let lastTouchTime = 0;
         
+        // Keyboard controls
         document.addEventListener('keydown', (e) => {
             if (e.code === 'Space') {
                 e.preventDefault();
@@ -281,18 +492,55 @@
             }
         });
         
-        canvas.addEventListener('click', () => {
+        // Enhanced touch controls for mobile
+        function handleTouchStart(e) {
+            e.preventDefault();
             if (gameRunning) {
                 flap();
+                lastTouchTime = Date.now();
             }
-        });
+        }
         
-        canvas.addEventListener('touchstart', (e) => {
+        function handleTouchEnd(e) {
+            e.preventDefault();
+        }
+        
+        // Mouse controls
+        canvas.addEventListener('click', (e) => {
             e.preventDefault();
             if (gameRunning) {
                 flap();
             }
         });
+        
+        // Touch events for canvas
+        canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+        canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
+        canvas.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+        
+        // Touch events for touch area
+        const touchArea = document.getElementById('touchArea');
+        touchArea.addEventListener('touchstart', handleTouchStart, { passive: false });
+        touchArea.addEventListener('touchend', handleTouchEnd, { passive: false });
+        touchArea.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+        
+        // Prevent default touch behaviors on game container
+        document.getElementById('gameContainer').addEventListener('touchstart', (e) => {
+            if (gameRunning) e.preventDefault();
+        }, { passive: false });
+        
+        document.getElementById('gameContainer').addEventListener('touchmove', (e) => {
+            e.preventDefault();
+        }, { passive: false });
+        
+        // Resize handling
+        window.addEventListener('resize', resizeCanvas);
+        window.addEventListener('orientationchange', () => {
+            setTimeout(resizeCanvas, 100);
+        });
+        
+        // Initial resize
+        resizeCanvas();
         
         // Flap function
         function flap() {
@@ -712,8 +960,14 @@
             const powerup = document.createElement('div');
             powerup.className = 'powerup';
             powerup.textContent = text;
-            powerup.style.left = `${x + canvas.offsetLeft}px`;
-            powerup.style.top = `${y + canvas.offsetTop}px`;
+            
+            // Position relative to canvas
+            const canvasRect = canvas.getBoundingClientRect();
+            const scaleX = canvasRect.width / canvas.width;
+            const scaleY = canvasRect.height / canvas.height;
+            
+            powerup.style.left = `${canvasRect.left + (x * scaleX)}px`;
+            powerup.style.top = `${canvasRect.top + (y * scaleY)}px`;
             document.body.appendChild(powerup);
             
             setTimeout(() => powerup.remove(), 2000);
@@ -898,6 +1152,39 @@
                 requestAnimationFrame(animate);
             }
         }
+        
+        // Prevent zoom on double tap for iOS
+        let lastTouchEnd = 0;
+        document.addEventListener('touchend', function (event) {
+            const now = (new Date()).getTime();
+            if (now - lastTouchEnd <= 300) {
+                event.preventDefault();
+            }
+            lastTouchEnd = now;
+        }, false);
+        
+        // Prevent context menu on long press
+        document.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+        });
+        
+        // Handle device orientation changes
+        window.addEventListener('orientationchange', function() {
+            setTimeout(function() {
+                resizeCanvas();
+                // Force a repaint
+                if (!gameRunning && !gameStarted) {
+                    animate();
+                } else if (gameRunning) {
+                    draw();
+                }
+            }, 500);
+        });
+        
+        // Initialize the game
+        window.addEventListener('DOMContentLoaded', function() {
+            resizeCanvas();
+        });
         
         // Start the preview animation
         animate();
