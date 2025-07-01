@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, Play, Users, Clock, Trophy } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Play, Users, Clock, Trophy, Plus } from 'lucide-react';
 import { useProfile } from '@/contexts/ProfileContext';
+import { useGameRoom } from '@/contexts/GameRoomContext';
 import { UsernameModal } from './UsernameModal';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 const gameSlides = [
   {
@@ -38,18 +39,19 @@ const gameSlides = [
   }
 ];
 
-const currentRooms = [
-  { id: 1, name: "Elite Tournament", players: "45/50", prize: "$500", status: "Joining" },
-  { id: 2, name: "Speed Run Challenge", players: "12/20", prize: "$200", status: "Live" },
-  { id: 3, name: "Puzzle Masters", players: "8/10", prize: "$150", status: "Joining" },
-];
-
 const DashboardHome = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [currentSlide, setCurrentSlide] = useState(0);
   const [showUsernameModal, setShowUsernameModal] = useState(false);
   const { profile, loading } = useProfile();
+  const { rooms, loading: roomsLoading } = useGameRoom();
   const [activeSection, setActiveSection] = useState('home');
+
+  // Filter active rooms (not completed)
+  const activeRooms = rooms.filter(room => 
+    room.status === 'waiting' || room.status === 'ongoing' || room.status === 'starting'
+  ).slice(0, 6); // Show max 6 rooms
 
   // Check if username is needed
   useEffect(() => {
@@ -78,6 +80,31 @@ const DashboardHome = () => {
 
   const prevSlide = () => {
     setCurrentSlide((prev) => (prev - 1 + gameSlides.length) % gameSlides.length);
+  };
+
+  // Get room status display
+  const getRoomStatus = (room: any) => {
+    switch (room.status) {
+      case 'waiting':
+        return { text: 'Joining', color: 'bg-blue-500/20 text-blue-400' };
+      case 'ongoing':
+        return { text: 'Live', color: 'bg-green-500/20 text-green-400' };
+      case 'starting':
+        return { text: 'Starting', color: 'bg-yellow-500/20 text-yellow-400' };
+      default:
+        return { text: 'Unknown', color: 'bg-gray-500/20 text-gray-400' };
+    }
+  };
+
+  // Handle room action
+  const handleRoomAction = (room: any) => {
+    if (room.status === 'ongoing') {
+      // Navigate to spectate or view room details
+      navigate(`/rooms/${room.id}`);
+    } else {
+      // Navigate to join room
+      navigate(`/rooms/${room.id}`);
+    }
   };
 
   // Display username or fallback
@@ -215,36 +242,111 @@ const DashboardHome = () => {
         {/* Current Game Rooms */}
         <div>
           <h2 className="font-gaming text-2xl font-bold text-accent mb-6">🎯 Active Game Rooms</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {currentRooms.map((room) => (
-              <div
-                key={room.id}
-                className="bg-gradient-to-br from-card to-secondary/20 border border-primary/20 rounded-xl p-6 hover:border-primary/40 transition-all duration-300 hover:scale-105 group"
-              >
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-gaming text-lg font-bold text-primary">{room.name}</h3>
-                  <div className={`px-2 py-1 rounded-full text-xs font-bold ${
-                    room.status === 'Live' ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'
-                  }`}>
-                    {room.status}
-                  </div>
+          
+          {roomsLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="bg-gradient-to-br from-card to-secondary/20 border border-primary/20 rounded-xl p-6 animate-pulse"
+                >
+                  <div className="h-6 bg-primary/20 rounded mb-4"></div>
+                  <div className="h-4 bg-muted/20 rounded mb-2"></div>
+                  <div className="h-4 bg-muted/20 rounded mb-4"></div>
+                  <div className="h-10 bg-gradient-to-r from-primary/20 to-accent/20 rounded"></div>
                 </div>
-                <div className="space-y-2 text-sm text-muted-foreground">
-                  <div className="flex justify-between">
-                    <span>Players:</span>
-                    <span className="text-foreground font-bold">{room.players}</span>
+              ))}
+            </div>
+          ) : activeRooms.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {activeRooms.map((room) => {
+                const status = getRoomStatus(room);
+                return (
+                  <div
+                    key={room.id}
+                    className="bg-gradient-to-br from-card to-secondary/20 border border-primary/20 rounded-xl p-6 hover:border-primary/40 transition-all duration-300 hover:scale-105 group"
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-gaming text-lg font-bold text-primary truncate">
+                        {room.name}
+                      </h3>
+                      <div className={`px-2 py-1 rounded-full text-xs font-bold ${status.color}`}>
+                        {status.text}
+                      </div>
+                    </div>
+                    <div className="space-y-2 text-sm text-muted-foreground">
+                      <div className="flex justify-between">
+                        <span>Players:</span>
+                        <span className="text-foreground font-bold">
+                          {room.current_players}/{room.max_players}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Entry Fee:</span>
+                        <span className="text-accent font-bold">
+                          {room.is_sponsored 
+                            ? 'FREE' 
+                            : `${room.entry_fee} ${room.currency}`
+                          }
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Prize Pool:</span>
+                        <span className="text-accent font-bold">
+                          {room.total_prize_pool.toFixed(2)} {room.currency}
+                        </span>
+                      </div>
+                      {room.game && (
+                        <div className="flex justify-between">
+                          <span>Game:</span>
+                          <span className="text-foreground font-bold truncate text-xs">
+                            {room.game.name}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <Button 
+                      onClick={() => handleRoomAction(room)}
+                      className="w-full mt-4 bg-gradient-to-r from-primary to-accent text-background font-gaming font-bold hover:scale-105 transition-all duration-300"
+                    >
+                      {room.status === 'ongoing' ? 'View Room' : 'Join Room'}
+                    </Button>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Prize Pool:</span>
-                    <span className="text-accent font-bold">{room.prize}</span>
-                  </div>
-                </div>
-                <Button className="w-full mt-4 bg-gradient-to-r from-primary to-accent text-background font-gaming font-bold hover:scale-105 transition-all duration-300">
-                  {room.status === 'Live' ? 'Spectate' : 'Join Room'}
+                );
+              })}
+            </div>
+          ) : (
+            // No active rooms - animated empty state
+            <div className="text-center py-16">
+              <div className="relative mb-8">
+                <div className="text-8xl animate-bounce-slow mb-4">🎮</div>
+                <div className="absolute inset-0 bg-gradient-to-r from-primary/20 to-accent/20 rounded-full blur-3xl animate-pulse"></div>
+              </div>
+              <h3 className="font-gaming text-2xl font-bold text-primary mb-4 animate-fade-in">
+                No Open Rooms Right Now
+              </h3>
+              <p className="text-muted-foreground mb-8 animate-fade-in" style={{ animationDelay: '0.2s' }}>
+                Be the first to start a new gaming session!
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center animate-fade-in" style={{ animationDelay: '0.4s' }}>
+                <Button 
+                  onClick={() => navigate('/rooms/create')}
+                  className="bg-gradient-to-r from-primary to-accent text-background font-gaming font-bold hover:scale-105 transition-all duration-300 px-8 py-3"
+                >
+                  <Plus className="w-5 h-5 mr-2" />
+                  Create New Room
+                </Button>
+                <Button 
+                  onClick={() => navigate('/rooms')}
+                  variant="outline"
+                  className="border-primary/50 text-primary hover:bg-primary/10 font-gaming font-bold hover:scale-105 transition-all duration-300 px-8 py-3"
+                >
+                  <Clock className="w-5 h-5 mr-2" />
+                  View All Rooms
                 </Button>
               </div>
-            ))}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Quick Stats */}
