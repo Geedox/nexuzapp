@@ -27,7 +27,7 @@ const PayoutSection = () => {
       
       <div className="container mx-auto px-4 relative z-10">
         <div className="text-center mb-16 animate-fade-in">
-          <h2 className="font-gaming text-5xl md:text-6xl font-bold mb-6 text-primary glow-text">
+          <h2 className="font-gaming text-4xl md:text-6xl font-bold mb-6 text-primary glow-text">
             LIGHTNING-FAST PAYOUTS
           </h2>
           <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
@@ -69,19 +69,19 @@ const PayoutSection = () => {
             💰 PAYOUT STATISTICS
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-            <div className="text-center animate-float" style={{ animationDelay: '0s' }}>
+            <div className="text-center animate-bounce-slow" style={{ animationDelay: '0s' }}>
               <div className="text-4xl font-bold text-primary mb-2 font-cyber">$2.5M+</div>
               <div className="text-muted-foreground">Total Paid Out</div>
             </div>
-            <div className="text-center animate-float" style={{ animationDelay: '1s' }}>
+            <div className="text-center animate-bounce-slow delay-75" style={{ animationDelay: '4s' }}>
               <div className="text-4xl font-bold text-accent mb-2 font-cyber">&lt; 30s</div>
               <div className="text-muted-foreground">Average Payout Time</div>
             </div>
-            <div className="text-center animate-float" style={{ animationDelay: '2s' }}>
+            <div className="text-center animate-bounce-slow delay-100" style={{ animationDelay: '4s' }}>
               <div className="text-4xl font-bold text-primary mb-2 font-cyber">99.9%</div>
               <div className="text-muted-foreground">Payout Success Rate</div>
             </div>
-            <div className="text-center animate-float" style={{ animationDelay: '3s' }}>
+            <div className="text-center animate-bounce-slow delay-150" style={{ animationDelay: '6s' }}>
               <div className="text-4xl font-bold text-accent mb-2 font-cyber">24/7</div>
               <div className="text-muted-foreground">Automated Payouts</div>
             </div>

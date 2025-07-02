@@ -101,7 +101,7 @@ const Dashboard = () => {
           <div className="flex-1 flex flex-col min-w-0">
             <DashboardTopbar />
             
-            <div className="flex-1 flex overflow-hidden h-[calc(100vh-64px)]">
+            <div className="flex-1 flex overflow-hidden h-[calc(100vh-64px)] pt-20">
               <main className="flex-1 min-w-0">
                 <ScrollArea className="h-full gaming-scrollbar">
                   <div className="p-2 sm:p-4 md:p-6">

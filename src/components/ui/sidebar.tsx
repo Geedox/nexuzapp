@@ -257,11 +257,15 @@ const Sidebar = React.forwardRef<
 )
 Sidebar.displayName = "Sidebar"
 
+interface SidebarTriggerProps extends React.ComponentProps<typeof Button> {
+  onToggle?: (isOpen: boolean) => void;
+}
+
 const SidebarTrigger = React.forwardRef<
   React.ElementRef<typeof Button>,
-  React.ComponentProps<typeof Button>
->(({ className, onClick, ...props }, ref) => {
-  const { toggleSidebar } = useSidebar()
+  SidebarTriggerProps
+>(({ className, onClick, onToggle, ...props }, ref) => {
+  const { toggleSidebar, open } = useSidebar()
 
   return (
     <Button
@@ -273,6 +277,7 @@ const SidebarTrigger = React.forwardRef<
       onClick={(event) => {
         onClick?.(event)
         toggleSidebar()
+        onToggle?.(!open)
       }}
       {...props}
     >

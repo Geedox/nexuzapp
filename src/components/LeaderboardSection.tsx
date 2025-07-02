@@ -21,7 +21,7 @@ const LeaderboardSection = () => {
       
       <div className="container mx-auto px-4 relative z-10">
         <div className="text-center mb-16 animate-fade-in">
-          <h2 className="font-gaming text-5xl md:text-6xl font-bold mb-6 text-primary glow-text">
+          <h2 className="font-gaming text-4xl md:text-6xl font-bold mb-6 text-primary glow-text">
             GLOBAL LEADERBOARDS
           </h2>
           <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
@@ -31,7 +31,7 @@ const LeaderboardSection = () => {
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-12 max-w-7xl mx-auto">
           {/* Top Players */}
-          <div className="bg-black/40 backdrop-blur-lg border border-primary/30 rounded-2xl p-8 animate-slide-up">
+          <div className="bg-black/40 backdrop-blur-lg border border-primary/30 rounded-2xl p-4 md:p-8 animate-slide-up">
             <div className="flex items-center justify-center mb-8">
               <h3 className="font-cyber text-3xl font-bold text-primary glow-text flex items-center">
                 🏆 TOP PLAYERS
@@ -42,7 +42,7 @@ const LeaderboardSection = () => {
               {topPlayers.map((player, index) => (
                 <div 
                   key={index}
-                  className={`flex items-center justify-between p-4 rounded-lg border transition-all duration-300 hover:scale-105 animate-slide-up ${
+                  className={`flex items-center justify-between p-2 md:p-4 rounded-lg border transition-all duration-300 hover:scale-105 animate-slide-up ${
                     player.rank === 1 
                       ? 'bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border-yellow-500/50' 
                       : player.rank === 2 
@@ -53,15 +53,15 @@ const LeaderboardSection = () => {
                   }`}
                   style={{ animationDelay: `${index * 0.1}s` }}
                 >
-                  <div className="flex items-center space-x-4">
-                    <div className={`text-2xl font-bold font-cyber ${
+                  <div className="flex items-center space-x-2 md:space-x-4">
+                    <div className={`text-lg md:text-2xl font-bold font-cyber ${
                       player.rank <= 3 ? 'text-accent' : 'text-muted-foreground'
                     }`}>
                       #{player.rank}
                     </div>
-                    <div className="text-3xl">{player.avatar}</div>
+                    <div className="text-lg md:text-3xl place-self-start md:place-self-auto">{player.avatar}</div>
                     <div>
-                      <div className="font-gaming text-lg text-foreground">{player.name}</div>
+                      <div className="font-gaming text-sm md:text-lg text-foreground mb-3 md:mb-0">{player.name}</div>
                       <div className="flex items-center space-x-2">
                         <span className={`text-xs px-2 py-1 rounded-full font-bold ${
                           player.badge === 'LEGEND' ? 'bg-yellow-500/20 text-yellow-400' :
@@ -84,18 +84,18 @@ const LeaderboardSection = () => {
           </div>
 
           {/* Top Creators */}
-          <div className="bg-black/40 backdrop-blur-lg border border-accent/30 rounded-2xl p-8 animate-slide-up" style={{ animationDelay: '0.3s' }}>
+          <div className="bg-black/40 backdrop-blur-lg border border-accent/30 rounded-2xl p-4 md:p-8 animate-slide-up" style={{ animationDelay: '0.3s' }}>
             <div className="flex items-center justify-center mb-8">
               <h3 className="font-cyber text-3xl font-bold text-accent glow-text flex items-center">
                 🎨 TOP CREATORS
               </h3>
             </div>
             
-            <div className="space-y-6">
+            <div className="space-y-4 md:space-y-6">
               {topCreators.map((creator, index) => (
                 <div 
                   key={index}
-                  className={`p-6 rounded-lg border transition-all duration-300 hover:scale-105 animate-slide-up ${
+                  className={`p-2 md:p-6 rounded-lg border transition-all duration-300 hover:scale-105 animate-slide-up ${
                     creator.rank === 1 
                       ? 'bg-gradient-to-r from-purple-500/20 to-pink-500/20 border-purple-500/50' 
                       : 'bg-card/50 border-accent/20 hover:border-accent/40'
@@ -103,11 +103,11 @@ const LeaderboardSection = () => {
                   style={{ animationDelay: `${index * 0.1 + 0.3}s` }}
                 >
                   <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center space-x-4">
-                      <div className="text-2xl font-bold text-accent font-cyber">#{creator.rank}</div>
-                      <div className="text-3xl">{creator.avatar}</div>
+                    <div className="flex items-center space-x-2 md:space-x-4">
+                      <div className="text-xl md:text-2xl font-bold text-accent font-cyber">#{creator.rank}</div>
+                      <div className="text-lg md:text-3xl place-self-start md:place-self-auto">{creator.avatar}</div>
                       <div>
-                        <div className="font-gaming text-lg text-foreground">{creator.name}</div>
+                        <div className="font-gaming text-sm md:text-lg text-foreground mb-2">{creator.name}</div>
                         <div className="flex items-center space-x-2 text-sm text-muted-foreground">
                           <span>⭐ {creator.rating}</span>
                           <span>•</span>
@@ -134,7 +134,7 @@ const LeaderboardSection = () => {
 
         {/* Challenge Section */}
         <div className="mt-16 text-center">
-          <div className="bg-gradient-to-r from-primary/20 to-accent/20 border border-primary/30 rounded-2xl p-8 inline-block animate-float">
+          <div className="bg-gradient-to-r from-primary/20 to-accent/20 border border-primary/30 rounded-2xl p-8 inline-block animate-bounce-slow hover:scale-105 transition-all duration-300">
             <h3 className="font-gaming text-2xl font-bold text-primary mb-4">🚀 THINK YOU CAN COMPETE?</h3>
             <p className="text-muted-foreground mb-6 max-w-md">Join thousands of players battling for the top spot and crypto rewards!</p>
             <button className="bg-gradient-to-r from-primary to-accent text-background font-gaming font-bold px-8 py-3 rounded-lg hover:scale-105 transition-all duration-300 neon-border">

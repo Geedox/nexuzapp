@@ -97,7 +97,7 @@ const DashboardSidebar = ({ activeSection, setActiveSection }: DashboardSidebarP
   };
 
   return (
-    <Sidebar className="border-r border-primary/20 bg-gradient-to-b from-card to-secondary/20">
+    <Sidebar className="border-r border-primary/20 bg-gradient-to-b from-card to-secondary/20 z-50">
       <SidebarHeader className="p-6">
         <div className="font-cyber text-2xl font-bold text-primary glow-text">
           NEXUZ ARENA

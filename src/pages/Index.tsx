@@ -11,6 +11,10 @@ import SecuritySection from '@/components/SecuritySection';
 import PayoutSection from '@/components/PayoutSection';
 import FAQSection from '@/components/FAQSection';
 import AuthModal from '@/components/AuthModal';
+import twitter from "/twitter.svg";
+import reddit from "/reddit.svg";
+import discord from "/discord.svg";
+import facebook from "/facebook.svg";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -67,7 +71,7 @@ const Index = () => {
       <SecuritySection />
       <PayoutSection />
       <FAQSection />
-      
+
       <AuthModal
         isOpen={authModal.isOpen}
         onClose={handleAuthClose}
@@ -83,17 +87,25 @@ const Index = () => {
           <p className="text-muted-foreground mb-6 max-w-2xl mx-auto">
             The ultimate decentralized gaming multiverse where creators build, players compete, and everyone earns.
           </p>
-          <div className="flex justify-center space-x-8 text-sm text-muted-foreground mb-6">
+          <div className="flex justify-center space-x-6 md:space-x-8 text-sm text-muted-foreground mb-6">
             <a href="#" className="hover:text-primary transition-colors">Privacy Policy</a>
             <a href="#" className="hover:text-primary transition-colors">Terms of Service</a>
             <a href="#" className="hover:text-primary transition-colors">Documentation</a>
             <a href="#" className="hover:text-primary transition-colors">Support</a>
           </div>
           <div className="flex justify-center space-x-6 mb-6">
-            <a href="#" className="text-2xl hover:text-primary transition-colors">🐦</a>
-            <a href="#" className="text-2xl hover:text-primary transition-colors">💬</a>
-            <a href="#" className="text-2xl hover:text-primary transition-colors">📱</a>
-            <a href="#" className="text-2xl hover:text-primary transition-colors">🎮</a>
+            <a href="#" className="text-2xl hover:text-primary transition-colors" title='Follow us on Twitter'>
+              <img src={twitter} alt="Twitter" className="inline-block w-6 h-6" />
+            </a>
+            <a href="#" className="text-2xl hover:text-primary transition-colors" title='Join us on Reddit'>
+              <img src={reddit} alt="Reddit" className="inline-block w-6 h-6" />
+            </a>
+            <a href="#" className="text-2xl hover:text-primary transition-colors" title='Join our Discord community'>
+              <img src={discord} alt="Discord" className="inline-block w-6 h-6" />
+            </a>
+            <a href="#" className="text-2xl hover:text-primary transition-colors" title='Like us on Facebook'>
+              <img src={facebook} alt="Facebook" className="inline-block w-6 h-6" />
+            </a>
           </div>
           <p className="text-xs text-muted-foreground">
             © 2025 Nexuz Arena. Built on the blockchain, powered by the community.

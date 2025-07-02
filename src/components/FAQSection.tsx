@@ -45,7 +45,7 @@ const FAQSection = () => {
       
       <div className="container mx-auto px-4 relative z-10">
         <div className="text-center mb-16 animate-fade-in">
-          <h2 className="font-gaming text-5xl md:text-6xl font-bold mb-6 text-primary glow-text">
+          <h2 className="font-gaming text-4xl md:text-6xl font-bold mb-6 text-primary glow-text">
             FREQUENTLY ASKED QUESTIONS
           </h2>
           <p className="text-xl text-muted-foreground max-w-3xl mx-auto">

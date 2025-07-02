@@ -38,7 +38,7 @@ const Features = () => {
       
       <div className="container mx-auto px-4 relative z-10">
         <div className="text-center mb-16 animate-fade-in">
-          <h2 className="font-gaming text-5xl md:text-6xl font-bold mb-6 text-primary glow-text">
+          <h2 className="font-gaming text-4xl md:text-6xl font-bold mb-6 text-primary glow-text">
             PLATFORM FEATURES
           </h2>
           <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
@@ -83,16 +83,16 @@ const Features = () => {
         {/* Central Gaming Stats */}
         <div className="mt-20 text-center">
           <div className="inline-block bg-black/40 backdrop-blur-lg border border-accent/30 rounded-2xl p-8 hologram-effect">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              <div className="animate-float" style={{ animationDelay: '0s' }}>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-8">
+              <div className="animate-bounce-slow delay-100" style={{ animationDelay: '0s' }}>
                 <div className="text-4xl font-bold text-primary mb-2 font-cyber">10K+</div>
                 <div className="text-muted-foreground">Active Games</div>
               </div>
-              <div className="animate-float" style={{ animationDelay: '1s' }}>
+              <div className="animate-bounce-slow" style={{ animationDelay: '1s' }}>
                 <div className="text-4xl font-bold text-accent mb-2 font-cyber">50K+</div>
                 <div className="text-muted-foreground">Players</div>
               </div>
-              <div className="animate-float" style={{ animationDelay: '2s' }}>
+              <div className="animate-bounce-slow delay-75 col-span-2 md:col-span-1" style={{ animationDelay: '2s' }}>
                 <div className="text-4xl font-bold text-primary mb-2 font-cyber">1M+</div>
                 <div className="text-muted-foreground">Tournaments</div>
               </div>
