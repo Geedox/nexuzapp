@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProfile } from '@/contexts/ProfileContext';
 import { Button } from '@/components/ui/button';
@@ -18,8 +18,33 @@ const DashboardTopbar = () => {
   const [isWalletConnected, setIsWalletConnected] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const navigate = useNavigate();
+  const location = useLocation();
   const { signOut } = useAuth();
   const { profile } = useProfile();
+
+  const getPageTitle = () => {
+    const pathSegments = location.pathname.split('/').filter(Boolean);
+    const lastSegment = pathSegments[pathSegments.length - 1];
+
+    // Handle the base dashboard route
+    if (!lastSegment || lastSegment === 'dashboard') {
+      return 'Dashboard';
+    }
+
+    const titleMap = {
+      'games': 'Games',
+      'leaderboards': 'Leaderboards',
+      'wallet': 'Wallet',
+      'community': 'Community',
+      'rooms': 'Rooms',
+      'creators': 'Creators',
+      'analytics': 'Analytics',
+      'settings': 'Settings',
+      'support': 'Support'
+    };
+
+    return titleMap[lastSegment] || lastSegment.charAt(0).toUpperCase() + lastSegment.slice(1);
+  };
 
   const handleLogout = async () => {
     await signOut();
@@ -43,7 +68,7 @@ const DashboardTopbar = () => {
               console.log("Sidebar is now:", isOpen ? "open" : "closed")
             }}
           />
-          <div className="text-base sm:text-lg font-cyber text-primary">Dashboard</div>
+          <div className="text-base sm:text-lg font-cyber text-primary">{getPageTitle()}</div>
         </div>
 
         <div className="flex items-center space-x-1 sm:space-x-2 lg:space-x-4">

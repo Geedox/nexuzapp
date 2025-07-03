@@ -19,6 +19,17 @@ import AdminLogin from "./pages/AdminLogin";
 import AdminDashboard from "./pages/AdminDashboard";
 import { GameRoomProvider } from "./contexts/GameRoomContext";
 import WinnerCelebrationProvider from "./hooks/WinnerCelebration";
+import DashboardHome from '@/components/dashboard/DashboardHome';
+import GamesPage from '@/components/dashboard/pages/GamesPage';
+import LeaderboardsPage from '@/components/dashboard/pages/LeaderboardsPage';
+import WalletPage from '@/components/dashboard/pages/WalletPage';
+import CommunityPage from '@/components/dashboard/pages/CommunityPage';
+import RoomsPage from '@/components/dashboard/pages/RoomsPage';
+import CreatorsPage from '@/components/dashboard/pages/CreatorsPage';
+import AnalyticsPage from '@/components/dashboard/pages/AnalyticsPage';
+import SettingsPage from '@/components/dashboard/pages/SettingsPage';
+import SupportPage from "@/components/dashboard/pages/SupportPage";
+
 
 const queryClient = new QueryClient();
 
@@ -47,13 +58,23 @@ const App = () => (
                               <ProtectedRoute requireAuth={true}>
                                 <Dashboard />
                               </ProtectedRoute>
-                            } />
+                            }>
+                              <Route index element={<DashboardHome />} />
+                              <Route path="games" element={<GamesPage />} />
+                              <Route path="leaderboards" element={<LeaderboardsPage />} />
+                              <Route path="wallet" element={<WalletPage />} />
+                              <Route path="community" element={<CommunityPage />} />
+                              <Route path="rooms" element={<RoomsPage />} />
+                              <Route path="creators" element={<CreatorsPage />} />
+                              <Route path="analytics" element={<AnalyticsPage />} />
+                              <Route path="settings" element={<SettingsPage />} />
+                              <Route path="support" element={<SupportPage />} />
+                            </Route>
                             <Route path="/payment-callback" element={
                               <ProtectedRoute requireAuth={true}>
                                 <PaymentCallback />
                               </ProtectedRoute>
                             } />
-                            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                             <Route path="*" element={<NotFound />} />
                             <Route path="/admin" element={<AdminLogin />} />
                             <Route path="/admin/dashboard" element={<AdminDashboard />} />
