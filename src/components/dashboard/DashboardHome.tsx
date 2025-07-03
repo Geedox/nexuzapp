@@ -139,7 +139,7 @@ const DashboardHome = () => {
                     ].find(a => a.id === avatarId);
                     
                     return (
-                      <div className={`w-16 h-16 rounded-xl bg-gradient-to-br ${avatar?.color || 'from-primary to-accent'} flex items-center justify-center text-4xl shadow-lg shadow-primary/30`}>
+                      <div className={`w-10 h-10 md:w-16 md:h-16 rounded-xl bg-gradient-to-br ${avatar?.color || 'from-primary to-accent'} flex items-center justify-center text-3xl md:text-4xl shadow-lg shadow-primary/30`}>
                         {decodeURIComponent(emoji)}
                       </div>
                     );
@@ -149,18 +149,18 @@ const DashboardHome = () => {
               </div>
             )}
             <div className="flex-1">
-              <h1 className="font-gaming text-3xl font-bold text-primary mb-2">
+              <h1 className="font-gaming text-xl md:text-3xl font-bold text-primary mb-2">
                 Welcome back, {displayName}! 🎮
               </h1>
               <p className="text-muted-foreground">Ready to dominate the leaderboards today?</p>
               <div className="flex items-center space-x-4 mt-4">
-                <div className="bg-green-500/20 px-3 py-1 rounded-full text-green-400 text-sm">
+                <div className="bg-green-500/20 px-3 py-1 rounded-xl md:rounded-full text-green-400 text-sm text-center md:text-start">
                   Level {profile?.level || 1}
                 </div>
-                <div className="bg-yellow-500/20 px-3 py-1 rounded-full text-yellow-400 text-sm">
+                <div className="bg-yellow-500/20 px-3 py-1 rounded-xl md:rounded-full text-yellow-400 text-sm text-center md:text-start">
                   {profile?.current_rank || 'Junior'} Rank
                 </div>
-                <div className="bg-blue-500/20 px-3 py-1 rounded-full text-blue-400 text-sm">
+                <div className="bg-blue-500/20 px-3 py-1 rounded-xl md:rounded-full text-blue-400 text-sm text-center md:text-start">
                   {profile?.current_win_streak || 0} Win Streak
                 </div>
               </div>
@@ -180,12 +180,12 @@ const DashboardHome = () => {
                     index === currentSlide ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
                   }`}
                 >
-                  <div className={`bg-gradient-to-r ${game.gradient} h-full flex items-center justify-between p-12`}>
+                  <div className={`bg-gradient-to-r ${game.gradient} h-full flex items-center justify-between px-12 py-8 md:px-16 md:py-12`}>
                     <div className="flex-1">
-                      <div className="text-8xl mb-6 animate-bounce-slow">{game.image}</div>
-                      <h3 className="font-gaming text-4xl font-bold text-white mb-4">{game.title}</h3>
+                      <div className="text-4xl md:text-6xl lg:text-8xl mb-3 md:mb-6 animate-bounce-slow">{game.image}</div>
+                      <h3 className="font-gaming text-2xl md:text-4xl font-bold text-white mb-4">{game.title}</h3>
                       <p className="text-xl text-white/80 mb-6">{game.description}</p>
-                      <div className="flex items-center space-x-6 mb-6">
+                      <div className="flex items-center space-x-2  md:space-x-6 mb-6">
                         <div className="flex items-center text-white">
                           <Users className="w-5 h-5 mr-2" />
                           {game.players} players
@@ -213,13 +213,13 @@ const DashboardHome = () => {
             {/* Navigation Buttons */}
             <button
               onClick={prevSlide}
-              className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/20 backdrop-blur-lg p-3 rounded-full hover:bg-white/30 transition-all duration-300"
+              className="absolute left-0 md:left-4 top-1/2 -translate-y-1/2 bg-white/20 backdrop-blur-lg p-3 rounded-full hover:bg-white/30 transition-all duration-300"
             >
               <ChevronLeft className="w-6 h-6 text-white" />
             </button>
             <button
               onClick={nextSlide}
-              className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/20 backdrop-blur-lg p-3 rounded-full hover:bg-white/30 transition-all duration-300"
+              className="absolute right-0 md:right-4 top-1/2 -translate-y-1/2 bg-white/20 backdrop-blur-lg p-3 rounded-full hover:bg-white/30 transition-all duration-300"
             >
               <ChevronRight className="w-6 h-6 text-white" />
             </button>

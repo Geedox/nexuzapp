@@ -13,7 +13,7 @@ import FriendRequests from '../community/FriendRequest';
 import { CreateChatRoomModal } from '../community/CreateChatRoomModal';
 
 interface CommunityPageProps {
-  supabase: any;
+  supabase?: any;
 }
 
 const CommunityPage = ({ supabase }: CommunityPageProps) => {

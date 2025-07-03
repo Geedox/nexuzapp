@@ -167,7 +167,7 @@ const DashboardRightPanel = () => {
   }));
 
   return (
-    <aside className="bg-card/50 backdrop-blur-lg h-full">
+    <aside className="bg-card/50 backdrop-blur-lg h-full fixed right-0 w-full lg:w-1/5 border-l border-secondary/20 z-10 overflow-y-auto">
       <div className="p-3 lg:p-6 space-y-6 lg:space-y-8">
         {/* Top Gamers Leaderboard */}
         <div className="animate-slide-up">

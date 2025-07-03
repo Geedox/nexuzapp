@@ -2,7 +2,7 @@
 const WalletsSection = () => {
   const wallets = [
     { name: "MetaMask", icon: "🦊", supported: true },
-    { name: "WalletConnect", icon: "🔗", supported: true },
+    { name: "Wallet Connect", icon: "🔗", supported: true },
     { name: "Coinbase Wallet", icon: "🔵", supported: true },
     { name: "Trust Wallet", icon: "🛡️", supported: true },
     { name: "Phantom", icon: "👻", supported: true },
@@ -24,7 +24,7 @@ const WalletsSection = () => {
       
       <div className="container mx-auto px-4 relative z-10">
         <div className="text-center mb-16 animate-fade-in">
-          <h2 className="font-gaming text-5xl md:text-6xl font-bold mb-6 text-primary glow-text">
+          <h2 className="font-gaming text-4xl md:text-6xl font-bold mb-6 text-primary glow-text">
             UNIVERSAL WALLET SUPPORT
           </h2>
           <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
