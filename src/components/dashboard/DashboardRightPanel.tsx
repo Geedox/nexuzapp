@@ -167,8 +167,8 @@ const DashboardRightPanel = () => {
   }));
 
   return (
-    <aside className="bg-card/50 backdrop-blur-lg h-full fixed right-0 w-full lg:w-1/5 border-l border-secondary/20 z-10 overflow-y-auto">
-      <div className="p-3 lg:p-6 space-y-6 lg:space-y-8">
+    <aside className="pt-20 bg-card/50 backdrop-blur-lg h-full fixed right-0 w-full lg:w-1/5 2xl:w-1/6 border-l border-secondary/20 z-10 overflow-y-scroll">
+      <div className="p-3 lg:p-6 space-y-6 lg:space-y-8 ">
         {/* Top Gamers Leaderboard */}
         <div className="animate-slide-up">
           <h3 className="font-cyber text-lg lg:text-xl font-bold text-primary mb-4 lg:mb-6 flex items-center">
@@ -219,7 +219,7 @@ const DashboardRightPanel = () => {
           </div>
           
           <button 
-            onClick={() => navigate('/leaderboards')}
+            onClick={() => navigate('/dashboard/leaderboards')}
             className="w-full mt-3 lg:mt-4 text-center text-accent hover:text-primary transition-colors font-cyber text-xs lg:text-sm"
           >
             View Full Leaderboard →
