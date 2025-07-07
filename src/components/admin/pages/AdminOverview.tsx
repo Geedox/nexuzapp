@@ -3,6 +3,8 @@ import { Button } from '@/components/ui/button';
 import { Users, Gamepad2, CreditCard, TrendingUp, Activity, DollarSign, Trophy, Crown, Medal } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Bell, User } from 'lucide-react';
+
 
 interface AdminOverviewProps {
   onOpenLeaderboard: () => void;
@@ -49,31 +51,31 @@ const AdminOverview = ({ onOpenLeaderboard }: AdminOverviewProps) => {
   ];
 
   const topPerformers = [
-    { 
-      game: 'Endless Runner', 
-      player: 'speed_demon', 
-      score: 15420, 
+    {
+      game: 'Endless Runner',
+      player: 'speed_demon',
+      score: 15420,
       earnings: 425.50,
       rank: 1
     },
-    { 
-      game: 'Flappy Bird Pro', 
-      player: 'player_pro', 
-      score: 287, 
+    {
+      game: 'Flappy Bird Pro',
+      player: 'player_pro',
+      score: 287,
       earnings: 290.80,
       rank: 1
     },
-    { 
-      game: 'Racing Legends', 
-      player: 'arena_master', 
-      score: 9875, 
+    {
+      game: 'Racing Legends',
+      player: 'arena_master',
+      score: 9875,
       earnings: 520.75,
       rank: 1
     },
-    { 
-      game: 'Puzzle Master', 
-      player: 'crypto_gamer', 
-      score: 2845, 
+    {
+      game: 'Puzzle Master',
+      player: 'crypto_gamer',
+      score: 2845,
       earnings: 180.25,
       rank: 1
     }
@@ -98,7 +100,7 @@ const AdminOverview = ({ onOpenLeaderboard }: AdminOverviewProps) => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row items-center justify-between text-center md:text-start">
         <div>
           <h1 className="text-3xl font-cyber font-bold text-primary">Admin Dashboard</h1>
           <p className="text-muted-foreground">Comprehensive platform overview and analytics</p>
@@ -111,7 +113,7 @@ const AdminOverview = ({ onOpenLeaderboard }: AdminOverviewProps) => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat, index) => (
-          <Card key={index} className="border-primary/20 bg-card/50 backdrop-blur-sm">
+          <Card key={index} className="border-primary/20 bg-card/50 backdrop-blur-sm ">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
               <stat.icon className={`h-4 w-4 ${stat.color}`} />
