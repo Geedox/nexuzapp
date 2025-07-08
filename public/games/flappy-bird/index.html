@@ -1188,6 +1188,67 @@
         
         // Start the preview animation
         animate();
+
+        const params = new URLSearchParams(window.location.search);
+        const userId = params.get('user_id');
+        const gameId = params.get('game_id');
+        const sessionToken = params.get('session_token');
+        const url = new URL(window.location.href);
+        const gameName = url.searchParams.get('game_name');
+        const instructions = url.searchParams.get('instructions');
+        const status = url.searchParams.get('status');
+        const players = url.searchParams.get('players');
+
+
+        console.log('[SESSION]', { userId, gameId, sessionToken, gameName, instructions, status, players });
+
+        // ✅ Optional: You can use this info to display or validate the session before starting
+        // e.g., disable "START GAME" if sessionToken is missing or expired
+
+        // 🔄 Update "exitGame" to notify backend about session close
+        function exitGame() {
+        if (window.opener && !window.opener.closed) {
+            // Send message back to parent tab
+            window.opener.postMessage({
+            type: 'EXIT_GAME',
+            userId,
+            gameId,
+            sessionToken
+            }, '*');
+        }
+        window.close();
+        }
+
+        // 🔄 Send score back on submit
+        function submitScore() {
+        if (scoreSubmitted) return;
+
+        document.getElementById('submitButton').disabled = true;
+        document.getElementById('submitStatus').textContent = 'Submitting...';
+
+        // If opened via new tab (not iframe), send message to opener
+        if (window.opener && !window.opener.closed) {
+            window.opener.postMessage({
+            type: 'SUBMIT_SCORE',
+            score: score,
+            userId,
+            gameId,
+            sessionToken,
+            metadata: {
+                speedMultiplier: speedMultiplier,
+                duration: frame / 60,
+                gemsCollected: Math.floor(score / 20)
+            }
+            }, '*');
+        }
+
+        // Optionally simulate success and show message locally
+        scoreSubmitted = true;
+        document.getElementById('submitStatus').textContent = 'Score submitted!';
+        document.getElementById('submitStatus').style.color = '#00ff00';
+
+        setTimeout(() => exitGame(), 2500);
+        }
     </script>
 </body>
 </html>
