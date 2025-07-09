@@ -29,68 +29,111 @@ import CreatorsPage from '@/components/dashboard/pages/CreatorsPage';
 import AnalyticsPage from '@/components/dashboard/pages/AnalyticsPage';
 import SettingsPage from '@/components/dashboard/pages/SettingsPage';
 import SupportPage from "@/components/dashboard/pages/SupportPage";
+import MarketplacePage from "./components/dashboard/pages/MarketPlacePage";
+import { MarketPlaceItem } from "./lib/utils";
+import { useState } from "react";
+import { CartItem } from "./components/dashboard/MarketCartSidebar";
+import { useToast } from "./hooks/use-toast";
 
 
 const queryClient = new QueryClient();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <AuthProvider>
-      <WinnerCelebrationProvider>
-        <CommunityChatProvider>
-          <ProfileProvider>
-            <WalletProvider>
-              <TransactionProvider>
-                <LeaderboardProvider>
-                  <GameProvider>
-                    <GameRoomProvider>
-                      <TooltipProvider>
-                        <Toaster />
-                        <Sonner />
-                        <BrowserRouter>
-                          <Routes>
-                            <Route path="/" element={
-                              <ProtectedRoute requireAuth={false}>
-                                <Index />
-                              </ProtectedRoute>
-                            } />
-                            <Route path="/dashboard" element={
-                              <ProtectedRoute requireAuth={true}>
-                                <Dashboard />
-                              </ProtectedRoute>
-                            }>
-                              <Route index element={<DashboardHome />} />
-                              <Route path="games" element={<GamesPage />} />
-                              <Route path="leaderboards" element={<LeaderboardsPage />} />
-                              <Route path="wallet" element={<WalletPage />} />
-                              <Route path="community" element={<CommunityPage />} />
-                              <Route path="rooms" element={<RoomsPage />} />
-                              <Route path="creators" element={<CreatorsPage />} />
-                              <Route path="analytics" element={<AnalyticsPage />} />
-                              <Route path="settings" element={<SettingsPage />} />
-                              <Route path="support" element={<SupportPage />} />
-                            </Route>
-                            <Route path="/payment-callback" element={
-                              <ProtectedRoute requireAuth={true}>
-                                <PaymentCallback />
-                              </ProtectedRoute>
-                            } />
-                            <Route path="*" element={<NotFound />} />
-                            <Route path="/admin" element={<AdminLogin />} />
-                            <Route path="/admin/dashboard" element={<AdminDashboard />} />
-                          </Routes>
-                        </BrowserRouter>
-                      </TooltipProvider>
-                    </GameRoomProvider>
-                  </GameProvider>
-                </LeaderboardProvider>
-              </TransactionProvider>
-            </WalletProvider>
-          </ProfileProvider>
-        </CommunityChatProvider>
-      </WinnerCelebrationProvider>
-    </AuthProvider>
-  </QueryClientProvider>
-);
+const App = () => {
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [isCartOpen, setIsCartOpen] = useState(false);
+  const { toast } = useToast();
+
+  const handleAddToCart = (item: MarketPlaceItem) => {
+    setCartItems(prevItems => {
+      const existingItem = prevItems.find(cartItem => cartItem.id === item.id);
+
+      if (existingItem) {
+        return prevItems.map(cartItem =>
+          cartItem.id === item.id
+            ? { ...cartItem, quantity: cartItem.quantity + 1 }
+            : cartItem
+        );
+      } else {
+        return [...prevItems, { ...item, quantity: 1 }];
+      }
+    });
+
+    toast({
+      title: "Added to Cart",
+      description: `${item.name} has been added to your cart.`,
+    });
+  };
+
+  const cartItemsCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <WinnerCelebrationProvider>
+          <CommunityChatProvider>
+            <ProfileProvider>
+              <WalletProvider>
+                <TransactionProvider>
+                  <LeaderboardProvider>
+                    <GameProvider>
+                      <GameRoomProvider>
+                        <TooltipProvider>
+                          <Toaster />
+                          <Sonner />
+                          <BrowserRouter>
+                            <Routes>
+                              <Route path="/" element={
+                                <ProtectedRoute requireAuth={false}>
+                                  <Index />
+                                </ProtectedRoute>
+                              } />
+                              <Route path="/dashboard" element={
+                                <ProtectedRoute requireAuth={true}>
+                                  <Dashboard />
+                                </ProtectedRoute>
+                              }>
+                                <Route index element={<DashboardHome />} />
+                                <Route path="games" element={<GamesPage />} />
+                                <Route path="leaderboards" element={<LeaderboardsPage />} />
+                                <Route path="wallet" element={<WalletPage />} />
+                                <Route path="community" element={<CommunityPage />} />
+                                <Route path="rooms" element={<RoomsPage />} />
+                                <Route path="creators" element={<CreatorsPage />} />
+                                <Route path="analytics" element={<AnalyticsPage />} />
+                                <Route path="settings" element={<SettingsPage />} />
+                                <Route path="support" element={<SupportPage />} />
+                                <Route path="marketplace" element={
+                                  <MarketplacePage
+                                    onOpenCart={() => setIsCartOpen(true)}
+                                    onAddToCart={handleAddToCart}
+                                    cartItemsCount={cartItemsCount}
+                                  />
+                                }
+                                />
+                              </Route>
+                              <Route path="/payment-callback" element={
+                                <ProtectedRoute requireAuth={true}>
+                                  <PaymentCallback />
+                                </ProtectedRoute>
+                              } />
+                              <Route path="*" element={<NotFound />} />
+                              <Route path="/admin" element={<AdminLogin />} />
+                              <Route path="/admin/dashboard" element={<AdminDashboard />} />
+                            </Routes>
+                          </BrowserRouter>
+                        </TooltipProvider>
+                      </GameRoomProvider>
+                    </GameProvider>
+                  </LeaderboardProvider>
+                </TransactionProvider>
+              </WalletProvider>
+            </ProfileProvider>
+          </CommunityChatProvider>
+        </WinnerCelebrationProvider>
+      </AuthProvider>
+    </QueryClientProvider>
+  );
+};
 
 export default App;
