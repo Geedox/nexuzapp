@@ -105,7 +105,7 @@ const AdminOverview = ({ onOpenLeaderboard }: AdminOverviewProps) => {
           <h1 className="text-3xl font-cyber font-bold text-primary">Admin Dashboard</h1>
           <p className="text-muted-foreground">Comprehensive platform overview and analytics</p>
         </div>
-        <Button onClick={onOpenLeaderboard} variant="outline">
+        <Button onClick={onOpenLeaderboard} variant="outline" className='mt-3 md:mt-0'>
           <Trophy className="w-4 h-4 mr-2" />
           View Leaderboards
         </Button>
@@ -233,8 +233,8 @@ const AdminOverview = ({ onOpenLeaderboard }: AdminOverviewProps) => {
 
       <Card className="border-primary/20 bg-card/50 backdrop-blur-sm">
         <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
+          <CardTitle className="flex flex-col md:flex-row gap-4 md:gap-0 text-center md:text-start items-center justify-between">
+            <div className="flex  items-center space-x-2">
               <Trophy className="w-5 h-5 text-primary" />
               <span>Top Performers by Game</span>
             </div>

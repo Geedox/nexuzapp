@@ -39,7 +39,7 @@ const AdminAnalytics = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row gap-4 md:gap-0 text-center md:text-start items-center justify-between">
         <div>
           <h1 className="text-3xl font-cyber font-bold text-primary">Analytics Dashboard</h1>
           <p className="text-muted-foreground">Comprehensive platform analytics and insights</p>

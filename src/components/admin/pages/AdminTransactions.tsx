@@ -113,7 +113,7 @@ const AdminTransactions = () => {
   return (
     <>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col md:flex-row gap-4 md:gap-0 text-center md:text-start items-center justify-between">
           <div>
             <h1 className="text-3xl font-cyber font-bold text-primary">Transaction Management</h1>
             <p className="text-muted-foreground">Monitor all platform transactions with detailed analytics</p>
@@ -171,10 +171,10 @@ const AdminTransactions = () => {
           </Card>
         </div>
 
-        <Card className="border-primary/20 bg-card/50 backdrop-blur-sm">
+        <Card className="border-primary/20 bg-card/50 backdrop-blur-sm overflow-x-scroll w-full max-w-[350px] md:max-w-none mx-auto md:mx-0">
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
+            <div className="flex flex-col md:flex-row gap-4 md:gap-0 text-center md:text-start items-center justify-between">
+              <div className='space-y-4 md:space-y-0'>
                 <CardTitle>Enhanced Transactions</CardTitle>
                 <CardDescription>Detailed transaction history with wallet balances</CardDescription>
               </div>

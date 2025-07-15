@@ -101,7 +101,7 @@ const AdminRooms = () => {
   return (
     <>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col md:flex-row gap-4 md:gap-0 text-center md:text-start items-center justify-between">
           <div>
             <h1 className="text-3xl font-cyber font-bold text-primary">Room Management</h1>
             <p className="text-muted-foreground">Monitor and manage game rooms</p>
@@ -159,10 +159,10 @@ const AdminRooms = () => {
           </Card>
         </div>
 
-        <Card className="border-primary/20 bg-card/50 backdrop-blur-sm">
+        <Card className="border-primary/20 bg-card/50 backdrop-blur-sm overflow-x-scroll w-full max-w-[350px] md:max-w-none mx-auto md:mx-0">
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
+            <div className="flex flex-col md:flex-row gap-4 md:gap-0 text-center md:text-start items-center justify-between">
+              <div className='space-y-4 md:space-y-0'>
                 <CardTitle>Game Rooms</CardTitle>
                 <CardDescription>All active and recent game rooms</CardDescription>
               </div>
