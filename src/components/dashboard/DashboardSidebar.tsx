@@ -1,4 +1,4 @@
-import { Home, Gamepad2, Trophy, Wallet, Users, Settings, Paintbrush, BarChart3, Radio, HelpCircle, LogOut } from 'lucide-react';
+import { Home, Gamepad2, Trophy, Wallet, Users, Settings, Paintbrush, BarChart3, Radio, HelpCircle, LogOut, ShoppingBag } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProfile } from '@/contexts/ProfileContext';
@@ -35,6 +35,11 @@ const sidebarItems = [
     title: "Wallet",
     icon: Wallet,
     id: "wallet",
+  },
+  {
+    title: "Marketplace",
+    icon: ShoppingBag,
+    id: "marketplace",
   },
   {
     title: "Community",
@@ -99,7 +104,7 @@ const DashboardSidebar = ({ activeSection, setActiveSection }: DashboardSidebarP
   };
 
   const handleNavigation = (section) => {
-    if (section === 'home'){
+    if (section === 'home') {
       return navigate('/dashboard');
     }
     setActiveSection(section);

@@ -24,7 +24,7 @@ const GamesPage = () => {
       players: 2150, 
       status: "LIVE", 
       image: "🏃", 
-      gameUrl: "/games/endless-runner/index.html",
+      gameUrl: "https://cheerful-entremet-2dbb07.netlify.app/",
       instructions: "Press SPACE or Click to jump. Hold for higher jumps. Collect gems for bonus points! Difficulty increases every 100 points."
     },
     { 
@@ -33,7 +33,7 @@ const GamesPage = () => {
       players: 1840, 
       status: "LIVE", 
       image: "🐦", 
-      gameUrl: "/games/flappy-bird/index.html",
+      gameUrl: "https://stirring-unicorn-441851.netlify.app/",
       instructions: "Tap or click to flap. Navigate through pipes without hitting them! How far can you fly?"
     },
     { 
@@ -116,15 +116,44 @@ const GamesPage = () => {
   }, [handleGameMessage]);
 
   // Handle playing a game
-  const handlePlayGame = async (game) => {
-    if (game.gameUrl) {
-      setIsLoadingGame(true);
-      setSelectedGame(game);
-      await initializeGame(game.id);
-      setShowGamePlayer(true);
-      setIsLoadingGame(false);
+const handlePlayGame = async (game) => {
+  if (!game.gameUrl) return;
+
+  setIsLoadingGame(true);
+
+  // Initialize session and get current user info (you may already have this in context)
+  const { data: { user } } = await supabase.auth.getUser(); // or use from context
+  const userId = user?.id || 'guest';
+  const sessionToken = Math.random().toString(36).substring(2); // generate one or use real token
+  const gameId = game.id;
+
+  // Construct URL with query params
+  const url = new URL(game.gameUrl);
+  url.searchParams.set('user_id', userId);
+  url.searchParams.set('game_id', gameId);
+  url.searchParams.set('session_token', sessionToken);
+  url.searchParams.set('game_name', game.name);
+  url.searchParams.set('instructions', game.instructions);
+  url.searchParams.set('status', game.status);
+  url.searchParams.set('players', game.players.toString());
+
+
+  // Open in new tab or window
+  const gameWindow = window.open(url.toString(), '_blank');
+
+  // Track when user closes the game tab
+  const interval = setInterval(() => {
+    if (gameWindow?.closed) {
+      clearInterval(interval);
+      endGameSession(); // clean up session
+      console.log(`Game session ended for ${game.name}`);
     }
-  };
+  }, 1000);
+
+  setIsLoadingGame(false);
+};
+
+
 
   // Handle showing game details
   const handleShowDetails = async (game) => {
@@ -256,50 +285,50 @@ const GamesPage = () => {
   };
 
   // Game Player Modal Component
-  const GamePlayerModal = () => {
-    useEffect(() => {
-      // Send player rank to iframe when it changes
-      if (selectedGame && playerRank && showGamePlayer) {
-        const iframe = document.querySelector('iframe');
-        if (iframe && iframe.contentWindow) {
-          iframe.contentWindow.postMessage({
-            type: 'PLAYER_RANK',
-            rank: playerRank.rank,
-            totalPlayers: playerRank.total_players,
-            highScore: playerRank.high_score || 0
-          }, '*');
-        }
-      }
-    }, [playerRank, selectedGame, showGamePlayer]);
+  // const GamePlayerModal = () => {
+  //   useEffect(() => {
+  //     // Send player rank to iframe when it changes
+  //     if (selectedGame && playerRank && showGamePlayer) {
+  //       const iframe = document.querySelector('iframe');
+  //       if (iframe && iframe.contentWindow) {
+  //         iframe.contentWindow.postMessage({
+  //           type: 'PLAYER_RANK',
+  //           rank: playerRank.rank,
+  //           totalPlayers: playerRank.total_players,
+  //           highScore: playerRank.high_score || 0
+  //         }, '*');
+  //       }
+  //     }
+  //   }, [playerRank, selectedGame, showGamePlayer]);
 
-    if (!selectedGame) return null;
+  //   if (!selectedGame) return null;
 
-    return (
-      <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 animate-fade-in">
-        <div className="bg-background border border-primary/30 rounded-xl w-full max-w-5xl max-h-[90vh] overflow-hidden">
-          <div className="flex items-center justify-between p-4 border-b border-primary/20">
-            <div className="flex items-center gap-4">
-              <h3 className="font-cyber text-xl text-primary">{selectedGame.name}</h3>
-            </div>
-            <button 
-              onClick={closeGamePlayer}
-              className="text-muted-foreground hover:text-primary transition-colors text-2xl font-bold"
-            >
-              ✕
-            </button>
-          </div>
-          <div className="relative w-full h-[600px] bg-black">
-            <iframe
-              src={selectedGame.gameUrl}
-              className="w-full h-full border-0"
-              title={selectedGame.name}
-              sandbox="allow-scripts allow-same-origin"
-            />
-          </div>
-        </div>
-      </div>
-    );
-  };
+  //   return (
+  //     <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 animate-fade-in">
+  //       <div className="bg-background border border-primary/30 rounded-xl w-full max-w-5xl max-h-[90vh] overflow-hidden">
+  //         <div className="flex items-center justify-between p-4 border-b border-primary/20">
+  //           <div className="flex items-center gap-4">
+  //             <h3 className="font-cyber text-xl text-primary">{selectedGame.name}</h3>
+  //           </div>
+  //           <button 
+  //             onClick={closeGamePlayer}
+  //             className="text-muted-foreground hover:text-primary transition-colors text-2xl font-bold"
+  //           >
+  //             ✕
+  //           </button>
+  //         </div>
+  //         <div className="relative w-full h-[600px] bg-black">
+  //           <iframe
+  //             src={selectedGame.gameUrl}
+  //             className="w-full h-full border-0"
+  //             title={selectedGame.name}
+  //             sandbox="allow-scripts allow-same-origin"
+  //           />
+  //         </div>
+  //       </div>
+  //     </div>
+  //   );
+  // };
 
   return (
     <>
@@ -378,7 +407,7 @@ const GamesPage = () => {
       </div>
 
       {/* Modals */}
-      {showGamePlayer && selectedGame && <GamePlayerModal />}
+      {/* {showGamePlayer && selectedGame && <GamePlayerModal />} */}
       {showGameDetails && detailsGame && <GameDetailsModal />}
     </>
   );
