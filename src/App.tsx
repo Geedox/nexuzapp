@@ -29,7 +29,7 @@ import CreatorsPage from '@/components/dashboard/pages/CreatorsPage';
 import AnalyticsPage from '@/components/dashboard/pages/AnalyticsPage';
 import SettingsPage from '@/components/dashboard/pages/SettingsPage';
 import SupportPage from "@/components/dashboard/pages/SupportPage";
-import MarketplacePage from "./components/dashboard/pages/MarketPlacePage";
+import MarketplacePage from "@/components/dashboard/pages/MarketplacePage";
 import { MarketPlaceItem } from "./lib/utils";
 import { useState } from "react";
 import { CartItem } from "./components/dashboard/MarketCartSidebar";
