@@ -1,4 +1,3 @@
-
 @import "tailwindcss";
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap');
 
@@ -114,7 +113,7 @@ body {
 
 /* Cyber Grid Background */
 .cyber-grid {
-  background-image: 
+  background-image:
     linear-gradient(rgba(59, 130, 246, 0.1) 1px, transparent 1px),
     linear-gradient(90deg, rgba(59, 130, 246, 0.1) 1px, transparent 1px);
   background-size: 50px 50px;
@@ -204,7 +203,7 @@ body {
 .gaming-border {
   border: 2px solid transparent;
   background: linear-gradient(hsl(var(--background)), hsl(var(--background))) padding-box,
-              linear-gradient(45deg, hsl(var(--primary)), hsl(var(--accent))) border-box;
+    linear-gradient(45deg, hsl(var(--primary)), hsl(var(--accent))) border-box;
 }
 
 .cyber-button {
@@ -275,38 +274,49 @@ body {
   from {
     transform: rotate(0deg);
   }
+
   to {
     transform: rotate(360deg);
   }
 }
 
 @keyframes hologram {
-  0%, 100% { 
-    transform: translateX(-100%); 
+
+  0%,
+  100% {
+    transform: translateX(-100%);
   }
-  50% { 
-    transform: translateX(100%); 
+
+  50% {
+    transform: translateX(100%);
   }
 }
 
 @keyframes float {
-  0%, 100% { 
-    transform: translateY(0px) rotate(0deg); 
+
+  0%,
+  100% {
+    transform: translateY(0px) rotate(0deg);
   }
-  33% { 
-    transform: translateY(-30px) rotate(120deg); 
+
+  33% {
+    transform: translateY(-30px) rotate(120deg);
   }
-  66% { 
-    transform: translateY(15px) rotate(240deg); 
+
+  66% {
+    transform: translateY(15px) rotate(240deg);
   }
 }
 
 @keyframes bounce-slow {
-  0%, 100% { 
-    transform: translateY(0); 
+
+  0%,
+  100% {
+    transform: translateY(0);
   }
-  50% { 
-    transform: translateY(-10px); 
+
+  50% {
+    transform: translateY(-10px);
   }
 }
 
@@ -315,6 +325,7 @@ body {
     opacity: 0;
     transform: translateY(20px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -326,6 +337,7 @@ body {
     opacity: 1;
     transform: translateY(0);
   }
+
   to {
     opacity: 0;
     transform: translateY(20px);
@@ -337,6 +349,7 @@ body {
     opacity: 0;
     transform: translateY(30px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -348,6 +361,7 @@ body {
     opacity: 0;
     transform: scale(0.9);
   }
+
   to {
     opacity: 1;
     transform: scale(1);
@@ -359,6 +373,7 @@ body {
     opacity: 1;
     transform: scale(1);
   }
+
   to {
     opacity: 0;
     transform: scale(0.9);
@@ -369,15 +384,19 @@ body {
   from {
     text-shadow: 0 0 5px currentColor, 0 0 10px currentColor, 0 0 15px currentColor;
   }
+
   to {
     text-shadow: 0 0 10px currentColor, 0 0 20px currentColor, 0 0 30px currentColor;
   }
 }
 
 @keyframes pulse-glow {
-  0%, 100% {
+
+  0%,
+  100% {
     box-shadow: 0 0 5px currentColor;
   }
+
   50% {
     box-shadow: 0 0 20px currentColor, 0 0 30px currentColor;
   }
@@ -388,6 +407,7 @@ body {
     height: 0;
     opacity: 0;
   }
+
   to {
     height: var(--radix-accordion-content-height);
     opacity: 1;
@@ -399,6 +419,7 @@ body {
     height: var(--radix-accordion-content-height);
     opacity: 1;
   }
+
   to {
     height: 0;
     opacity: 0;
@@ -419,6 +440,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   .animate-bounce-slow,
   .animate-float,
   .animate-fade-in,
@@ -430,6 +452,7 @@ body {
 
 /* Print Styles */
 @media print {
+
   .glow-text,
   .neon-border,
   .hologram-effect {

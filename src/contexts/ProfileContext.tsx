@@ -24,6 +24,13 @@ interface Profile {
   last_seen: string | null;
   created_at: string | null;
   updated_at: string | null;
+  sui_wallet_data: {
+    address: string;
+    publicKey: string;
+    privateKey: string;
+    createdAt: string;
+    balance: number;
+  } | null;
 }
 
 interface RoomStats {
@@ -212,7 +219,7 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
   // Refresh only statistics
   const refreshStats = async () => {
     if (!user) return;
-    
+
     try {
       const [roomStatsData, gameStatsData] = await Promise.all([
         fetchRoomStats(user.id),
@@ -233,7 +240,7 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
     try {
       // Use the SQL function to update profile stats
       await supabase.rpc('update_user_profile_stats', { p_user_id: user.id });
-      
+
       // Then refresh the profile data
       const { data, error } = await supabase
         .from('profiles')
@@ -301,7 +308,7 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
         .maybeSingle();
 
       if (error) throw error;
-      
+
       // If data is null, username is available
       return data === null;
     } catch (error) {
@@ -317,7 +324,7 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
     try {
       // First check if username is available
       const isAvailable = await checkUsernameAvailability(username);
-      
+
       if (!isAvailable) {
         toast({
           title: "Error",

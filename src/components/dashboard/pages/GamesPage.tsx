@@ -12,59 +12,59 @@ const GamesPage = () => {
   const [isLoadingGame, setIsLoadingGame] = useState(false);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [activeUsers, setActiveUsers] = useState({});
-  
+
   const { initializeGame, handleGameMessage, playerRank, endGameSession } = useGame();
   const { fetchLeaderboard, subscribeToLeaderboard, getTopPlayers } = useLeaderboard();
 
   // Game data with UUID IDs matching the database
   const games = [
-    { 
-      id: '11111111-1111-1111-1111-111111111111', 
-      name: "Endless Runner", 
-      players: 2150, 
-      status: "LIVE", 
-      image: "🏃", 
+    {
+      id: '11111111-1111-1111-1111-111111111111',
+      name: "Endless Runner",
+      players: 2150,
+      status: "LIVE",
+      image: "🏃",
       gameUrl: "https://cheerful-entremet-2dbb07.netlify.app/",
       instructions: "Press SPACE or Click to jump. Hold for higher jumps. Collect gems for bonus points! Difficulty increases every 100 points."
     },
-    { 
-      id: '22222222-2222-2222-2222-222222222222', 
-      name: "Flappy Bird", 
-      players: 1840, 
-      status: "LIVE", 
-      image: "🐦", 
+    {
+      id: '22222222-2222-2222-2222-222222222222',
+      name: "Flappy Bird",
+      players: 1840,
+      status: "LIVE",
+      image: "🐦",
       gameUrl: "https://stirring-unicorn-441851.netlify.app/",
       instructions: "Tap or click to flap. Navigate through pipes without hitting them! How far can you fly?"
     },
-    { 
-      id: 'defi-racing', 
-      name: "DeFi Racing Championship", 
-      players: 890, 
-      status: "STARTING", 
+    {
+      id: 'defi-racing',
+      name: "Crypto Jump",
+      players: 890,
+      status: "STARTING",
       image: "🏎️",
       instructions: "Coming soon! Race against other players in this high-speed DeFi racing game."
     },
-    { 
-      id: 'nft-battle', 
-      name: "NFT Battle Arena", 
-      players: 650, 
-      status: "LIVE", 
+    {
+      id: 'nft-battle',
+      name: "NFT Battle Arena",
+      players: 650,
+      status: "LIVE",
       image: "⚔️",
       instructions: "Coming soon! Battle with your NFTs in this strategic combat game."
     },
-    { 
-      id: 'blockchain-puzzle', 
-      name: "Blockchain Puzzle Master", 
-      players: 420, 
-      status: "WAITING", 
+    {
+      id: 'blockchain-puzzle',
+      name: "Blockchain Puzzle Master",
+      players: 420,
+      status: "WAITING",
       image: "🧩",
       instructions: "Coming soon! Solve blockchain-themed puzzles to earn rewards."
     },
-    { 
-      id: 'space-mining', 
-      name: "Space Mining Simulator", 
-      players: 380, 
-      status: "LIVE", 
+    {
+      id: 'space-mining',
+      name: "Space Mining Simulator",
+      players: 380,
+      status: "LIVE",
       image: "⛏️",
       instructions: "Coming soon! Mine asteroids and build your space empire."
     }
@@ -75,12 +75,12 @@ const GamesPage = () => {
     const fetchActiveUsers = async () => {
       const gameIds = ['11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222'];
       const counts = {};
-      
+
       for (const gameId of gameIds) {
         try {
           const { data, error } = await supabase
             .rpc('get_active_users_count', { p_game_id: gameId });
-          
+
           if (!error && data !== null) {
             counts[gameId] = data;
           }
@@ -88,7 +88,7 @@ const GamesPage = () => {
           console.error('Error fetching active users:', error);
         }
       }
-      
+
       setActiveUsers(counts);
     };
 
@@ -116,42 +116,42 @@ const GamesPage = () => {
   }, [handleGameMessage]);
 
   // Handle playing a game
-const handlePlayGame = async (game) => {
-  if (!game.gameUrl) return;
+  const handlePlayGame = async (game) => {
+    if (!game.gameUrl) return;
 
-  setIsLoadingGame(true);
+    setIsLoadingGame(true);
 
-  // Initialize session and get current user info (you may already have this in context)
-  const { data: { user } } = await supabase.auth.getUser(); // or use from context
-  const userId = user?.id || 'guest';
-  const sessionToken = Math.random().toString(36).substring(2); // generate one or use real token
-  const gameId = game.id;
+    // Initialize session and get current user info (you may already have this in context)
+    const { data: { user } } = await supabase.auth.getUser(); // or use from context
+    const userId = user?.id || 'guest';
+    const sessionToken = Math.random().toString(36).substring(2); // generate one or use real token
+    const gameId = game.id;
 
-  // Construct URL with query params
-  const url = new URL(game.gameUrl);
-  url.searchParams.set('user_id', userId);
-  url.searchParams.set('game_id', gameId);
-  url.searchParams.set('session_token', sessionToken);
-  url.searchParams.set('game_name', game.name);
-  url.searchParams.set('instructions', game.instructions);
-  url.searchParams.set('status', game.status);
-  url.searchParams.set('players', game.players.toString());
+    // Construct URL with query params
+    const url = new URL(game.gameUrl);
+    url.searchParams.set('user_id', userId);
+    url.searchParams.set('game_id', gameId);
+    url.searchParams.set('session_token', sessionToken);
+    url.searchParams.set('game_name', game.name);
+    url.searchParams.set('instructions', game.instructions);
+    url.searchParams.set('status', game.status);
+    url.searchParams.set('players', game.players.toString());
 
 
-  // Open in new tab or window
-  const gameWindow = window.open(url.toString(), '_blank');
+    // Open in new tab or window
+    const gameWindow = window.open(url.toString(), '_blank');
 
-  // Track when user closes the game tab
-  const interval = setInterval(() => {
-    if (gameWindow?.closed) {
-      clearInterval(interval);
-      endGameSession(); // clean up session
-      console.log(`Game session ended for ${game.name}`);
-    }
-  }, 1000);
+    // Track when user closes the game tab
+    const interval = setInterval(() => {
+      if (gameWindow?.closed) {
+        clearInterval(interval);
+        endGameSession(); // clean up session
+        console.log(`Game session ended for ${game.name}`);
+      }
+    }, 1000);
 
-  setIsLoadingGame(false);
-};
+    setIsLoadingGame(false);
+  };
 
 
 
@@ -159,14 +159,14 @@ const handlePlayGame = async (game) => {
   const handleShowDetails = async (game) => {
     setIsLoadingDetails(true);
     setDetailsGame(game);
-    
+
     // Only fetch leaderboard for games that exist in database
-    if (game.id === '11111111-1111-1111-1111-111111111111' || 
-        game.id === '22222222-2222-2222-2222-222222222222') {
+    if (game.id === '11111111-1111-1111-1111-111111111111' ||
+      game.id === '22222222-2222-2222-2222-222222222222') {
       await fetchLeaderboard(game.id);
       subscribeToLeaderboard(game.id);
     }
-    
+
     setShowGameDetails(true);
     setIsLoadingDetails(false);
   };
@@ -187,24 +187,24 @@ const handlePlayGame = async (game) => {
   // Game Details Modal Component
   const GameDetailsModal = () => {
     if (!detailsGame) return null;
-    
+
     const topPlayers = getTopPlayers(detailsGame.id, 10);
-    const hasLeaderboard = detailsGame.id === '11111111-1111-1111-1111-111111111111' || 
-                          detailsGame.id === '22222222-2222-2222-2222-222222222222';
-    
+    const hasLeaderboard = detailsGame.id === '11111111-1111-1111-1111-111111111111' ||
+      detailsGame.id === '22222222-2222-2222-2222-222222222222';
+
     return (
       <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 animate-fade-in">
         <div className="bg-background border border-primary/30 rounded-xl w-full max-w-3xl max-h-[90vh] overflow-hidden">
           <div className="flex items-center justify-between p-4 border-b border-primary/20">
             <h3 className="font-cyber text-xl text-primary">{detailsGame.name} - Details</h3>
-            <button 
+            <button
               onClick={closeGameDetails}
               className="text-muted-foreground hover:text-primary transition-colors text-2xl font-bold"
             >
               ✕
             </button>
           </div>
-          
+
           <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
             {/* Game Instructions */}
             <div className="mb-6">
@@ -213,16 +213,15 @@ const handlePlayGame = async (game) => {
                 {detailsGame.instructions}
               </p>
             </div>
-            
+
             {/* Game Stats */}
             <div className="mb-6 flex gap-4">
               <div className="bg-secondary/20 p-4 rounded-lg flex-1">
                 <div className="text-sm text-muted-foreground mb-1">Status</div>
-                <div className={`font-cyber font-bold ${
-                  detailsGame.status === 'LIVE' ? 'text-green-400' : 
-                  detailsGame.status === 'STARTING' ? 'text-yellow-400' :
-                  'text-gray-400'
-                }`}>
+                <div className={`font-cyber font-bold ${detailsGame.status === 'LIVE' ? 'text-green-400' :
+                    detailsGame.status === 'STARTING' ? 'text-yellow-400' :
+                      'text-gray-400'
+                  }`}>
                   {detailsGame.status}
                 </div>
               </div>
@@ -233,7 +232,7 @@ const handlePlayGame = async (game) => {
                 </div>
               </div>
             </div>
-            
+
             {/* Leaderboard */}
             {hasLeaderboard && (
               <div>
@@ -246,17 +245,16 @@ const handlePlayGame = async (game) => {
                     </div>
                   ) : (
                     topPlayers.map((entry, index) => (
-                      <div 
-                        key={entry.id} 
+                      <div
+                        key={entry.id}
                         className="flex items-center justify-between bg-secondary/20 p-3 rounded-lg hover:bg-secondary/30 transition-colors"
                       >
                         <div className="flex items-center gap-3">
-                          <span className={`font-cyber text-lg min-w-[40px] ${
-                            index === 0 ? 'text-yellow-400' :
-                            index === 1 ? 'text-gray-300' :
-                            index === 2 ? 'text-orange-400' :
-                            'text-muted-foreground'
-                          }`}>
+                          <span className={`font-cyber text-lg min-w-[40px] ${index === 0 ? 'text-yellow-400' :
+                              index === 1 ? 'text-gray-300' :
+                                index === 2 ? 'text-orange-400' :
+                                  'text-muted-foreground'
+                            }`}>
                             {index < 3 ? ['🥇', '🥈', '🥉'][index] : `#${entry.rank}`}
                           </span>
                           <span className="text-primary font-semibold">
@@ -272,7 +270,7 @@ const handlePlayGame = async (game) => {
                 </div>
               </div>
             )}
-            
+
             {!hasLeaderboard && detailsGame.status !== 'LIVE' && (
               <div className="text-center py-8 bg-secondary/20 rounded-lg">
                 <p className="text-muted-foreground">Leaderboard will be available when the game goes live!</p>
@@ -354,29 +352,28 @@ const handlePlayGame = async (game) => {
               <div className="text-6xl mb-4 text-center group-hover:scale-110 transition-transform">
                 {game.image}
               </div>
-              
+
               {/* Game Name */}
               <h3 className="font-cyber text-lg font-bold text-primary mb-2">
                 {game.name}
               </h3>
-              
+
               {/* Game Info */}
               <div className="flex justify-between items-center mb-4">
                 <span className="text-sm text-muted-foreground font-cyber">
                   {activeUsers[game.id] || 0} active users
                 </span>
-                <div className={`px-2 py-1 rounded-full text-xs font-bold font-cyber ${
-                  game.status === 'LIVE' ? 'bg-green-500/20 text-green-400' : 
-                  game.status === 'STARTING' ? 'bg-yellow-500/20 text-yellow-400' :
-                  'bg-gray-500/20 text-gray-400'
-                }`}>
+                <div className={`px-2 py-1 rounded-full text-xs font-bold font-cyber ${game.status === 'LIVE' ? 'bg-green-500/20 text-green-400' :
+                    game.status === 'STARTING' ? 'bg-yellow-500/20 text-yellow-400' :
+                      'bg-gray-500/20 text-gray-400'
+                  }`}>
                   {game.status}
                 </div>
               </div>
-              
+
               {/* Action Buttons */}
               <div className="flex gap-2">
-                <button 
+                <button
                   onClick={() => handlePlayGame(game)}
                   className="flex-1 bg-gradient-to-r from-primary to-accent text-background font-cyber font-bold py-2 rounded-lg hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 relative"
                   disabled={!game.gameUrl || isLoadingGame}
@@ -389,7 +386,7 @@ const handlePlayGame = async (game) => {
                     game.gameUrl ? 'Play' : 'Coming Soon'
                   )}
                 </button>
-                <button 
+                <button
                   onClick={() => handleShowDetails(game)}
                   className="px-4 bg-secondary/50 text-primary font-cyber font-bold py-2 rounded-lg hover:bg-secondary/70 transition-all duration-300 relative"
                   disabled={isLoadingDetails && detailsGame?.id === game.id}

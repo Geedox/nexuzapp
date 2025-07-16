@@ -26,7 +26,7 @@ const Navigation = ({ onAuthClick }: NavigationProps) => {
           <div className="font-gaming text-xl lg:text-2xl font-bold text-primary glow-text">
             NEXUZ ARENA
           </div>
-          
+
           <div className="hidden font-cyber lg:flex items-center space-x-8">
             <a href="#features" className="text-foreground hover:text-primary transition-colors">
               Features
@@ -48,8 +48,8 @@ const Navigation = ({ onAuthClick }: NavigationProps) => {
                 <span className="text-sm text-foreground">
                   Welcome, {user.user_metadata?.name || user.email}
                 </span>
-                <Button 
-                  variant="ghost" 
+                <Button
+                  variant="ghost"
                   onClick={handleAuthAction}
                   className="text-foreground hover:text-primary text-sm lg:text-base px-3 lg:px-4"
                 >
@@ -57,11 +57,11 @@ const Navigation = ({ onAuthClick }: NavigationProps) => {
                 </Button>
               </>
             ) : (
-              <Button 
+              <Button
                 onClick={handleAuthAction}
                 className="bg-primary hover:bg-primary/80 text-primary-foreground font-cyber neon-border text-sm lg:text-base px-3 lg:px-4"
               >
-                Sign In with Google
+                Join the fun
               </Button>
             )}
           </div>
@@ -91,11 +91,11 @@ const Navigation = ({ onAuthClick }: NavigationProps) => {
               Tournaments
             </a>
             <div className="flex flex-col space-y-3 pt-4 border-t border-primary/20">
-              <Button 
+              <Button
                 onClick={handleAuthAction}
                 className="bg-primary hover:bg-primary/80 text-primary-foreground w-full"
               >
-                {user ? 'Sign Out' : 'Sign In with Google'}
+                {user ? 'Sign Out' : 'Join the fun'}
               </Button>
             </div>
           </div>

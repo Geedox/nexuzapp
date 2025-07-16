@@ -5,6 +5,7 @@ import { useProfile } from '@/contexts/ProfileContext';
 import { useGameRoom } from '@/contexts/GameRoomContext';
 import { UsernameModal } from './UsernameModal';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { WalletSetupModal } from './WalletSetupModal';
 
 const gameSlides = [
   {
@@ -44,12 +45,13 @@ const DashboardHome = () => {
   const navigate = useNavigate();
   const [currentSlide, setCurrentSlide] = useState(0);
   const [showUsernameModal, setShowUsernameModal] = useState(false);
+  const [showWalletSetup, setShowWalletSetup] = useState(false);
   const { profile, loading } = useProfile();
   const { rooms, loading: roomsLoading } = useGameRoom();
   const [activeSection, setActiveSection] = useState('home');
 
   // Filter active rooms (not completed)
-  const activeRooms = rooms.filter(room => 
+  const activeRooms = rooms.filter(room =>
     room.status === 'waiting' || room.status === 'ongoing' || room.status === 'starting'
   ).slice(0, 6); // Show max 6 rooms
 
@@ -60,7 +62,14 @@ const DashboardHome = () => {
     }
   }, [profile, loading]);
 
-    // Handle navigation state
+  // Check if wallet setup is needed after username is set
+  useEffect(() => {
+    if (!loading && profile && profile.username && !profile.sui_wallet_data) {
+      setShowWalletSetup(true);
+    }
+  }, [profile, loading]);
+
+  // Handle navigation state
   useEffect(() => {
     if (location.state?.activeSection) {
       setActiveSection(location.state.activeSection);
@@ -110,6 +119,12 @@ const DashboardHome = () => {
   // Display username or fallback
   const displayName = profile?.username || profile?.display_name || 'Gamer';
 
+  // Handle username modal completion
+  const handleUsernameComplete = () => {
+    setShowUsernameModal(false);
+    // Wallet setup will be triggered by the useEffect above
+  };
+
   return (
     <>
       <div className="space-y-8 animate-fade-in">
@@ -137,7 +152,7 @@ const DashboardHome = () => {
                       { id: 9, color: 'from-cyan-500 to-blue-500' },
                       { id: 10, color: 'from-yellow-400 to-orange-500' },
                     ].find(a => a.id === avatarId);
-                    
+
                     return (
                       <div className={`w-10 h-10 md:w-16 md:h-16 rounded-xl bg-gradient-to-br ${avatar?.color || 'from-primary to-accent'} flex items-center justify-center text-3xl md:text-4xl shadow-lg shadow-primary/30`}>
                         {decodeURIComponent(emoji)}
@@ -176,9 +191,8 @@ const DashboardHome = () => {
               {gameSlides.map((game, index) => (
                 <div
                   key={game.id}
-                  className={`absolute inset-0 transition-all duration-700 ease-in-out ${
-                    index === currentSlide ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
-                  }`}
+                  className={`absolute inset-0 transition-all duration-700 ease-in-out ${index === currentSlide ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
+                    }`}
                 >
                   <div className={`bg-gradient-to-r ${game.gradient} h-full flex items-center justify-between px-12 py-8 md:px-16 md:py-12`}>
                     <div className="flex-1">
@@ -194,9 +208,8 @@ const DashboardHome = () => {
                           <Trophy className="w-5 h-5 mr-2" />
                           {game.prize} prize
                         </div>
-                        <div className={`px-3 py-1 rounded-full text-sm font-bold ${
-                          game.status === 'LIVE' ? 'bg-green-500/30 text-green-300' : 'bg-yellow-500/30 text-yellow-300'
-                        }`}>
+                        <div className={`px-3 py-1 rounded-full text-sm font-bold ${game.status === 'LIVE' ? 'bg-green-500/30 text-green-300' : 'bg-yellow-500/30 text-yellow-300'
+                          }`}>
                           {game.status}
                         </div>
                       </div>
@@ -209,7 +222,7 @@ const DashboardHome = () => {
                 </div>
               ))}
             </div>
-            
+
             {/* Navigation Buttons */}
             <button
               onClick={prevSlide}
@@ -223,16 +236,15 @@ const DashboardHome = () => {
             >
               <ChevronRight className="w-6 h-6 text-white" />
             </button>
-            
+
             {/* Slide Indicators */}
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex space-x-2">
               {gameSlides.map((_, index) => (
                 <button
                   key={index}
                   onClick={() => setCurrentSlide(index)}
-                  className={`w-3 h-3 rounded-full transition-all duration-300 ${
-                    index === currentSlide ? 'bg-white' : 'bg-white/40'
-                  }`}
+                  className={`w-3 h-3 rounded-full transition-all duration-300 ${index === currentSlide ? 'bg-white' : 'bg-white/40'
+                    }`}
                 />
               ))}
             </div>
@@ -242,7 +254,7 @@ const DashboardHome = () => {
         {/* Current Game Rooms */}
         <div>
           <h2 className="font-gaming text-2xl font-bold text-accent mb-6">🎯 Active Game Rooms</h2>
-          
+
           {roomsLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {[1, 2, 3].map((i) => (
@@ -284,8 +296,8 @@ const DashboardHome = () => {
                       <div className="flex justify-between">
                         <span>Entry Fee:</span>
                         <span className="text-accent font-bold">
-                          {room.is_sponsored 
-                            ? 'FREE' 
+                          {room.is_sponsored
+                            ? 'FREE'
                             : `${room.entry_fee} ${room.currency}`
                           }
                         </span>
@@ -305,7 +317,7 @@ const DashboardHome = () => {
                         </div>
                       )}
                     </div>
-                    <Button 
+                    <Button
                       onClick={() => handleRoomAction(room)}
                       className="w-full mt-4 bg-gradient-to-r from-primary to-accent text-background font-gaming font-bold hover:scale-105 transition-all duration-300"
                     >
@@ -329,14 +341,14 @@ const DashboardHome = () => {
                 Be the first to start a new gaming session!
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center animate-fade-in" style={{ animationDelay: '0.4s' }}>
-                <Button 
+                <Button
                   onClick={() => navigate('/rooms/create')}
                   className="bg-gradient-to-r from-primary to-accent text-background font-gaming font-bold hover:scale-105 transition-all duration-300 px-8 py-3"
                 >
                   <Plus className="w-5 h-5 mr-2" />
                   Create New Room
                 </Button>
-                <Button 
+                <Button
                   onClick={() => navigate('/rooms')}
                   variant="outline"
                   className="border-primary/50 text-primary hover:bg-primary/10 font-gaming font-bold hover:scale-105 transition-all duration-300 px-8 py-3"
@@ -378,9 +390,18 @@ const DashboardHome = () => {
 
       {/* Username Modal */}
       <UsernameModal
-        open={showUsernameModal} 
-        onClose={() => setShowUsernameModal(false)} 
+        open={showUsernameModal}
+        onClose={handleUsernameComplete}
+        onComplete={handleUsernameComplete}
       />
+
+      {/* Wallet Setup Modal */}
+      {showWalletSetup && (
+        <WalletSetupModal
+          open={showWalletSetup}
+          onClose={() => setShowWalletSetup(false)}
+        />
+      )}
     </>
   );
 };

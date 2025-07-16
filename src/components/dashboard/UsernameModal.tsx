@@ -30,9 +30,10 @@ const GAMING_AVATARS = [
 interface UsernameModalProps {
   open: boolean;
   onClose?: () => void;
+  onComplete?: () => void;
 }
 
-export const UsernameModal = ({ open, onClose }: UsernameModalProps) => {
+export const UsernameModal = ({ open, onClose, onComplete }: UsernameModalProps) => {
   const [username, setUsername] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState<typeof GAMING_AVATARS[0] | null>(null);
   const [checking, setChecking] = useState(false);
@@ -65,7 +66,7 @@ export const UsernameModal = ({ open, onClose }: UsernameModalProps) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!username || username.length < 3 || !isAvailable || !selectedAvatar) {
       if (!selectedAvatar) {
         toast({
@@ -81,14 +82,15 @@ export const UsernameModal = ({ open, onClose }: UsernameModalProps) => {
     try {
       // Create avatar URL (in a real app, you might upload to storage)
       const avatarUrl = `avatar_${selectedAvatar.id}_${selectedAvatar.emoji}`;
-      
-      await updateProfile({ 
+
+      await updateProfile({
         username,
         avatar_url: avatarUrl,
         display_name: username
       });
-      
-      onClose?.();
+
+      // Call onComplete to trigger wallet setup
+      onComplete?.();
     } catch (error) {
       // Error is handled in the context
     } finally {
@@ -136,9 +138,9 @@ export const UsernameModal = ({ open, onClose }: UsernameModalProps) => {
   };
 
   return (
-    <Dialog open={open} onOpenChange={() => {}}>
-      <DialogContent 
-        className="sm:max-w-[600px] bg-gradient-to-br from-background via-card to-secondary/20 border-primary/30" 
+    <Dialog open={open} onOpenChange={() => { }}>
+      <DialogContent
+        className="sm:max-w-[600px] bg-gradient-to-br from-background via-card to-secondary/20 border-primary/30"
         onPointerDownOutside={(e) => e.preventDefault()}
       >
         <DialogHeader>
@@ -150,7 +152,7 @@ export const UsernameModal = ({ open, onClose }: UsernameModalProps) => {
             Choose your unique username and gaming avatar to enter the arena
           </DialogDescription>
         </DialogHeader>
-        
+
         <form onSubmit={handleSubmit} className="space-y-6 mt-6">
           {/* Username Input */}
           <div className="space-y-2">
@@ -198,8 +200,8 @@ export const UsernameModal = ({ open, onClose }: UsernameModalProps) => {
                     w-full aspect-square rounded-xl bg-gradient-to-br ${avatar.color} 
                     flex items-center justify-center text-4xl
                     border-2 transition-all duration-300
-                    ${selectedAvatar?.id === avatar.id 
-                      ? 'border-primary shadow-lg shadow-primary/50' 
+                    ${selectedAvatar?.id === avatar.id
+                      ? 'border-primary shadow-lg shadow-primary/50'
                       : 'border-transparent hover:border-primary/50'
                     }
                   `}>
@@ -248,7 +250,7 @@ export const UsernameModal = ({ open, onClose }: UsernameModalProps) => {
             ) : (
               <>
                 <Sparkles className="mr-2 h-5 w-5" />
-                Enter The Arena
+                Continue to Wallet Setup
               </>
             )}
           </Button>
