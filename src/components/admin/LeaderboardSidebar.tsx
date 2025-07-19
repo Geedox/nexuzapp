@@ -58,7 +58,7 @@ const LeaderboardSidebar = ({ isOpen, onClose }: LeaderboardSidebarProps) => {
 
   return (
     <Sheet open={isOpen} onOpenChange={onClose}>
-      <SheetContent className="w-[500px] overflow-y-auto">
+      <SheetContent className="w-screen md:w-[500px] overflow-y-auto">
         <SheetHeader>
           <SheetTitle className="flex items-center space-x-2">
             <Trophy className="w-5 h-5 text-primary" />
