@@ -37,12 +37,13 @@ const GamesPage = () => {
       instructions: "Tap or click to flap. Navigate through pipes without hitting them! How far can you fly?"
     },
     {
-      id: 'defi-racing',
+      id: '33333333-3333-3333-3333-333333333333',
       name: "Crypto Jump",
       players: 890,
-      status: "STARTING",
+      status: "LIVE",
       image: "🏎️",
-      instructions: "Coming soon! Race against other players in this high-speed DeFi racing game."
+      gameUrl: "https://ornate-lamington-115e41.netlify.app/", // Replace with actual URL
+      instructions: "Jump over obstacles and collect coins to score points. Use arrow keys to move left/right."
     },
     {
       id: 'nft-battle',
@@ -73,7 +74,7 @@ const GamesPage = () => {
   // Fetch active users for all games
   useEffect(() => {
     const fetchActiveUsers = async () => {
-      const gameIds = ['11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222'];
+      const gameIds = ['11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', '33333333-3333-3333-3333-333333333333'];
       const counts = {};
 
       for (const gameId of gameIds) {
@@ -219,8 +220,8 @@ const GamesPage = () => {
               <div className="bg-secondary/20 p-4 rounded-lg flex-1">
                 <div className="text-sm text-muted-foreground mb-1">Status</div>
                 <div className={`font-cyber font-bold ${detailsGame.status === 'LIVE' ? 'text-green-400' :
-                    detailsGame.status === 'STARTING' ? 'text-yellow-400' :
-                      'text-gray-400'
+                  detailsGame.status === 'STARTING' ? 'text-yellow-400' :
+                    'text-gray-400'
                   }`}>
                   {detailsGame.status}
                 </div>
@@ -251,9 +252,9 @@ const GamesPage = () => {
                       >
                         <div className="flex items-center gap-3">
                           <span className={`font-cyber text-lg min-w-[40px] ${index === 0 ? 'text-yellow-400' :
-                              index === 1 ? 'text-gray-300' :
-                                index === 2 ? 'text-orange-400' :
-                                  'text-muted-foreground'
+                            index === 1 ? 'text-gray-300' :
+                              index === 2 ? 'text-orange-400' :
+                                'text-muted-foreground'
                             }`}>
                             {index < 3 ? ['🥇', '🥈', '🥉'][index] : `#${entry.rank}`}
                           </span>
@@ -364,8 +365,8 @@ const GamesPage = () => {
                   {activeUsers[game.id] || 0} active users
                 </span>
                 <div className={`px-2 py-1 rounded-full text-xs font-bold font-cyber ${game.status === 'LIVE' ? 'bg-green-500/20 text-green-400' :
-                    game.status === 'STARTING' ? 'bg-yellow-500/20 text-yellow-400' :
-                      'bg-gray-500/20 text-gray-400'
+                  game.status === 'STARTING' ? 'bg-yellow-500/20 text-yellow-400' :
+                    'bg-gray-500/20 text-gray-400'
                   }`}>
                   {game.status}
                 </div>
