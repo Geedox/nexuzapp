@@ -1,25 +1,35 @@
-import { useState, useEffect } from 'react';
-import { useProfile } from '@/contexts/ProfileContext';
+import { useState, useEffect } from "react";
+import { useProfile } from "@/contexts/ProfileContext";
+import { useWallet } from "@/contexts/WalletContext";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { Loader2, ArrowUpDown, AlertTriangle, ExternalLink, Info } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-import { Ed25519Keypair } from '@mysten/sui.js/keypairs/ed25519';
+} from "@/components/ui/select";
+import {
+  Loader2,
+  ArrowUpDown,
+  AlertTriangle,
+  ExternalLink,
+  Info,
+} from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { Ed25519Keypair } from "@mysten/sui.js/keypairs/ed25519";
+import { GameTokenManager } from "@/integrations/smartcontracts/gameToken";
+import type { Currency } from "@/lib/utils";
+import { Swap as CetusSwap } from "@/integrations/swap";
 
 interface SwapModalProps {
   open: boolean;
@@ -37,16 +47,22 @@ interface SwapModalProps {
     toCurrency: string;
     transactionHash: string;
   }) => void;
-  gameTokenManager: any;
+  gameTokenManager: GameTokenManager | null;
 }
 
-export const SwapModal = ({ open, onClose, currentBalances, onSwapSuccess, gameTokenManager }: SwapModalProps) => {
-  const [fromCurrency, setFromCurrency] = useState<'SUI' | 'GAME_TOKEN'>('SUI');
-  const [toCurrency, setToCurrency] = useState<'SUI' | 'GAME_TOKEN'>('GAME_TOKEN');
-  const [fromAmount, setFromAmount] = useState<string>('');
-  const [toAmount, setToAmount] = useState<string>('');
+export const SwapModal = ({
+  open,
+  onClose,
+  currentBalances,
+  onSwapSuccess,
+  gameTokenManager,
+}: SwapModalProps) => {
+  const [fromCurrency, setFromCurrency] = useState<Currency>("SUI");
+  const [toCurrency, setToCurrency] = useState<Currency>("GAME_TOKEN");
+  const [fromAmount, setFromAmount] = useState<string>("");
+  const [toAmount, setToAmount] = useState<string>("");
   const [isSwapping, setIsSwapping] = useState(false);
-  const [txDigest, setTxDigest] = useState<string>('');
+  const [txDigest, setTxDigest] = useState<string>("");
   const [exchangeRate, setExchangeRate] = useState<number>(3100); // SUI to GT rate
   const [estimatedGasFee, setEstimatedGasFee] = useState<number>(0);
   const [reserves, setReserves] = useState<{
@@ -58,18 +74,25 @@ export const SwapModal = ({ open, onClose, currentBalances, onSwapSuccess, gameT
     usdc: 0,
     usdt: 0,
   });
-  const [availableSwapPairs, setAvailableSwapPairs] = useState<string[]>(['SUI']);
+  const [availableSwapPairs, setAvailableSwapPairs] = useState<string[]>([
+    "SUI",
+  ]);
 
   const { profile } = useProfile();
   const { toast } = useToast();
+  const { cetusClient } = useWallet();
 
   // Network configuration
-  const NETWORK = 'testnet';
+  const NETWORK = "testnet";
 
   // Create keypair from hex private key
-  const createKeyPairFromHexPrivateKey = (hexPrivateKey: string): Ed25519Keypair => {
+  const createKeyPairFromHexPrivateKey = (
+    hexPrivateKey: string
+  ): Ed25519Keypair => {
     try {
-      let cleanHex = hexPrivateKey.startsWith('0x') ? hexPrivateKey.slice(2) : hexPrivateKey;
+      const cleanHex = hexPrivateKey.startsWith("0x")
+        ? hexPrivateKey.slice(2)
+        : hexPrivateKey;
 
       if (!/^[0-9a-fA-F]{64}$/.test(cleanHex)) {
         throw new Error(`Invalid hex private key format`);
@@ -92,7 +115,7 @@ export const SwapModal = ({ open, onClose, currentBalances, onSwapSuccess, gameT
 
     try {
       const userAddress = profile.sui_wallet_data.address;
-      const available = ['SUI']; // SUI is always available
+      const available = ["SUI"]; // SUI is always available
 
       // Check if user has any USDC coins
       try {
@@ -101,10 +124,10 @@ export const SwapModal = ({ open, onClose, currentBalances, onSwapSuccess, gameT
           coinType: gameTokenManager.USDC_TYPE,
         });
         if (usdcCoins.data.length > 0) {
-          available.push('USDC');
+          available.push("USDC");
         }
       } catch (error) {
-        console.log('USDC not available:', error.message);
+        console.log("USDC not available:", error.message);
       }
 
       // Check if user has any USDT coins
@@ -114,17 +137,17 @@ export const SwapModal = ({ open, onClose, currentBalances, onSwapSuccess, gameT
           coinType: gameTokenManager.USDT_TYPE,
         });
         if (usdtCoins.data.length > 0) {
-          available.push('USDT');
+          available.push("USDT");
         }
       } catch (error) {
-        console.log('USDT not available:', error.message);
+        console.log("USDT not available:", error.message);
       }
 
       setAvailableSwapPairs(available);
-      console.log('Available swap pairs:', available);
+      console.log("Available swap pairs:", available);
     } catch (error) {
-      console.error('Error checking available swap pairs:', error);
-      setAvailableSwapPairs(['SUI']); // Fallback to SUI only
+      console.error("Error checking available swap pairs:", error);
+      setAvailableSwapPairs(["SUI"]); // Fallback to SUI only
     }
   };
 
@@ -138,7 +161,7 @@ export const SwapModal = ({ open, onClose, currentBalances, onSwapSuccess, gameT
         await checkAvailableSwapPairs();
 
         // Get exchange rate
-        const rate = await gameTokenManager.getExchangeRate('SUI');
+        const rate = await gameTokenManager.getExchangeRate("SUI");
         setExchangeRate(rate || 3100);
 
         // Get reserves
@@ -151,11 +174,12 @@ export const SwapModal = ({ open, onClose, currentBalances, onSwapSuccess, gameT
           });
         }
       } catch (error) {
-        console.error('Error fetching data:', error);
+        console.error("Error fetching data:", error);
       }
     };
 
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, gameTokenManager, profile?.sui_wallet_data?.address]);
 
   // Gas estimation
@@ -167,7 +191,7 @@ export const SwapModal = ({ open, onClose, currentBalances, onSwapSuccess, gameT
       }
 
       // Different gas estimates based on swap type
-      if (fromCurrency === 'GAME_TOKEN') {
+      if (fromCurrency === "GAME_TOKEN") {
         setEstimatedGasFee(0.025); // Selling GT requires more gas
       } else {
         setEstimatedGasFee(0.015); // Buying GT is simpler
@@ -182,11 +206,11 @@ export const SwapModal = ({ open, onClose, currentBalances, onSwapSuccess, gameT
   const getExchangeRate = (from: string, to: string) => {
     if (from === to) return 1;
 
-    if (from === 'SUI' && to === 'GAME_TOKEN') {
+    if (from === "SUI" && to === "GAME_TOKEN") {
       return exchangeRate; // 1 SUI = 3100 GT
     }
 
-    if (from === 'GAME_TOKEN' && to === 'SUI') {
+    if (from === "GAME_TOKEN" && to === "SUI") {
       return 1 / exchangeRate; // 1 GT = 1/3100 SUI
     }
 
@@ -195,10 +219,10 @@ export const SwapModal = ({ open, onClose, currentBalances, onSwapSuccess, gameT
 
   // Calculate to amount
   const calculateToAmount = (amount: string, from: string, to: string) => {
-    if (!amount || isNaN(Number(amount))) return '';
+    if (!amount || isNaN(Number(amount))) return "";
     const rate = getExchangeRate(from, to);
     const result = Number(amount) * rate;
-    return result.toFixed(to === 'GAME_TOKEN' ? 0 : 4);
+    return result.toFixed(to === "GAME_TOKEN" ? 0 : 4);
   };
 
   // Handle amount changes
@@ -220,11 +244,16 @@ export const SwapModal = ({ open, onClose, currentBalances, onSwapSuccess, gameT
   // Get available balance
   const getAvailableBalance = (currency: string) => {
     switch (currency) {
-      case 'SUI': return currentBalances.sui;
-      case 'USDC': return currentBalances.usdc;
-      case 'USDT': return currentBalances.usdt;
-      case 'GAME_TOKEN': return currentBalances.gameTokens;
-      default: return 0;
+      case "SUI":
+        return currentBalances.sui;
+      case "USDC":
+        return currentBalances.usdc;
+      case "USDT":
+        return currentBalances.usdt;
+      case "GAME_TOKEN":
+        return currentBalances.gameTokens;
+      default:
+        return 0;
     }
   };
 
@@ -233,49 +262,60 @@ export const SwapModal = ({ open, onClose, currentBalances, onSwapSuccess, gameT
     const amount = Number(fromAmount);
     const available = getAvailableBalance(fromCurrency);
 
-    if (!amount || amount <= 0) return 'Please enter a valid amount';
-    if (amount < 0.01 && fromCurrency !== 'GAME_TOKEN') return `Minimum swap amount is 0.01 ${fromCurrency}`;
-    if (amount < 1 && fromCurrency === 'GAME_TOKEN') return 'Minimum swap amount is 1 GT';
+    if (!amount || amount <= 0) return "Please enter a valid amount";
+    if (amount < 0.01 && fromCurrency !== "GAME_TOKEN")
+      return `Minimum swap amount is 0.01 ${fromCurrency}`;
+    if (amount < 1 && fromCurrency === "GAME_TOKEN")
+      return "Minimum swap amount is 1 GT";
 
     // Check user balance
-    if (fromCurrency === 'SUI') {
+    if (fromCurrency === "SUI") {
       const totalNeeded = amount + estimatedGasFee;
       if (totalNeeded > available) {
-        return `Insufficient SUI balance (need ${totalNeeded.toFixed(4)} SUI including gas)`;
+        return `Insufficient SUI balance (need ${totalNeeded.toFixed(
+          4
+        )} SUI including gas)`;
       }
     } else if (amount > available) {
       return `Insufficient ${fromCurrency} balance`;
     }
 
     // Check gas for non-SUI transactions
-    if (fromCurrency !== 'SUI' && currentBalances.sui < estimatedGasFee) {
-      return `Insufficient SUI for gas fees (need ${estimatedGasFee.toFixed(4)} SUI)`;
+    if (fromCurrency !== "SUI" && currentBalances.sui < estimatedGasFee) {
+      return `Insufficient SUI for gas fees (need ${estimatedGasFee.toFixed(
+        4
+      )} SUI)`;
     }
 
     // Check if swapping same currency
-    if (fromCurrency === toCurrency) return 'Cannot swap same currency';
+    if (fromCurrency === toCurrency) return "Cannot swap same currency";
 
     // Check if GT is involved (required for all swaps)
-    if (fromCurrency !== 'GAME_TOKEN' && toCurrency !== 'GAME_TOKEN') {
-      return 'All swaps must involve Game Tokens (GT)';
-    }
+    // if (fromCurrency !== "GAME_TOKEN" && toCurrency !== "GAME_TOKEN") {
+    //   return "All swaps must involve Game Tokens (GT)";
+    // }
 
     // Check reserves for selling GT
-    if (fromCurrency === 'GAME_TOKEN') {
+    if (fromCurrency === "GAME_TOKEN") {
       const toAmountNum = Number(toAmount);
       const availableReserves = reserves.sui; // Only SUI reserves matter for now
 
       if (toAmountNum > availableReserves) {
-        return `Insufficient SUI reserves (available: ${availableReserves.toFixed(4)})`;
+        return `Insufficient SUI reserves (available: ${availableReserves.toFixed(
+          4
+        )})`;
       }
     }
 
     // Check if currency is available
-    if (fromCurrency !== 'GAME_TOKEN' && !availableSwapPairs.includes(fromCurrency)) {
+    if (
+      fromCurrency !== "GAME_TOKEN" &&
+      !availableSwapPairs.includes(fromCurrency)
+    ) {
       return `${fromCurrency} not available on testnet`;
     }
 
-    if (!gameTokenManager) return 'Game Token manager not available';
+    if (!gameTokenManager) return "Game Token manager not available";
 
     return null;
   };
@@ -283,7 +323,7 @@ export const SwapModal = ({ open, onClose, currentBalances, onSwapSuccess, gameT
   // Execute blockchain swap
   const executeBlockchainSwap = async () => {
     if (!profile?.sui_wallet_data || !gameTokenManager) {
-      throw new Error('No wallet connected or GameToken manager unavailable');
+      throw new Error("No wallet connected or GameToken manager unavailable");
     }
 
     try {
@@ -291,36 +331,77 @@ export const SwapModal = ({ open, onClose, currentBalances, onSwapSuccess, gameT
       const walletKeyPair = createKeyPairFromHexPrivateKey(privateKey);
       const swapAmount = Number(fromAmount);
 
-      console.log('🔄 Executing swap:', {
+      console.log("🔄 Executing swap:", {
         from: fromCurrency,
         to: toCurrency,
         amount: swapAmount,
-        expectedOutput: toAmount
+        expectedOutput: toAmount,
       });
 
-      let result;
+      // Helper to run a Cetus swap
+      const runCetusSwap = async (
+        coinA: "SUI" | "USDC" | "USDT",
+        coinB: "SUI" | "USDC" | "USDT",
+        amount: number
+      ) => {
+        if (!cetusClient) {
+          throw new Error("Cetus client unavailable");
+        }
+        const cetusSwap = new CetusSwap(cetusClient, gameTokenManager, walletKeyPair);
+        await cetusSwap.getPoolDetails(coinA, coinB);
+        const pre = await cetusSwap.calculateSwapRates(coinA, coinB, amount);
+        const tx = await cetusSwap.swap(coinA, coinB, amount, pre);
+        const digest = (tx as any)?.digest || (tx as any)?.effects?.transactionDigest || "";
+        return { success: true, digest } as const;
+      };
 
-      // Handle swap combinations (only SUI ↔ GT for now)
-      if (fromCurrency === 'SUI' && toCurrency === 'GAME_TOKEN') {
-        result = await gameTokenManager.buyGameTokensWithSui(walletKeyPair, swapAmount);
-      } else if (fromCurrency === 'GAME_TOKEN' && toCurrency === 'SUI') {
-        result = await gameTokenManager.sellGameTokensForSui(walletKeyPair, swapAmount);
-      } else {
-        throw new Error(`Swap pair ${fromCurrency} → ${toCurrency} not available on testnet`);
+      // 1) Direct SUI ↔ GT
+      if (fromCurrency === "SUI" && toCurrency === "GAME_TOKEN") {
+        const res = await gameTokenManager.buyGameTokensWithSui(walletKeyPair, swapAmount);
+        if (!res.success) throw new Error(res.error || "Swap failed");
+        return { success: true, digest: res.digest, events: res.events || [] } as const;
       }
 
-      if (result.success) {
-        return {
-          success: true,
-          digest: result.digest,
-          events: result.events || [],
-        };
-      } else {
-        throw new Error(result.error || 'Swap failed');
+      if (fromCurrency === "GAME_TOKEN" && toCurrency === "SUI") {
+        const res = await gameTokenManager.sellGameTokensForSui(walletKeyPair, swapAmount);
+        if (!res.success) throw new Error(res.error || "Swap failed");
+        return { success: true, digest: res.digest, events: res.events || [] } as const;
       }
 
+      // 2) GT → (USDC | USDT): GT→SUI (contract), then SUI→token (Cetus)
+      if (fromCurrency === "GAME_TOKEN" && (toCurrency === "USDC" || toCurrency === "USDT")) {
+        const sellRes = await gameTokenManager.sellGameTokensForSui(walletKeyPair, swapAmount);
+        if (!sellRes.success) throw new Error(sellRes.error || "GT→SUI leg failed");
+        // Estimate SUI out from rate to execute next hop
+        const suiOut = Number((swapAmount / exchangeRate).toFixed(6));
+        const secondRes = await runCetusSwap("SUI", toCurrency as any, suiOut);
+        return { success: true, digest: secondRes.digest, events: sellRes.events || [] } as const;
+      }
+
+      // 3) (USDC | USDT) → GT: token→SUI (Cetus), then SUI→GT (contract)
+      if ((fromCurrency === "USDC" || fromCurrency === "USDT") && toCurrency === "GAME_TOKEN") {
+        const firstRes = await runCetusSwap(fromCurrency as any, "SUI", swapAmount);
+        // We spent `swapAmount` of token A; now spend the SUI we aimed for using the same gross amount
+        // To be safe, use the calculated SUI we expect from SUI leg if user wants exact execution; here we proceed with `Number(toAmount) || swapAmount` heuristic is not applicable for multi-hop; use swapAmount/exchangeRate for minimum buy
+        const suiForBuy = Number((swapAmount / 1).toFixed(6)); // we will let contract handle split; amount should be in SUI units
+        const buyRes = await gameTokenManager.buyGameTokensWithSui(walletKeyPair, suiForBuy);
+        if (!buyRes.success) throw new Error(buyRes.error || "SUI→GT leg failed");
+        return { success: true, digest: buyRes.digest, events: buyRes.events || [] } as const;
+      }
+
+      // 4) Non-GT pairs via Cetus directly: USDC↔SUI, USDT↔SUI, USDC↔USDT
+      if (
+        (fromCurrency === "SUI" && (toCurrency === "USDC" || toCurrency === "USDT")) ||
+        ((fromCurrency === "USDC" || fromCurrency === "USDT") && toCurrency === "SUI") ||
+        ((fromCurrency === "USDC" || fromCurrency === "USDT") && (toCurrency === "USDC" || toCurrency === "USDT"))
+      ) {
+        const direct = await runCetusSwap(fromCurrency as any, toCurrency as any, swapAmount);
+        return { success: true, digest: direct.digest, events: [] } as const;
+      }
+
+      throw new Error(`Swap pair ${fromCurrency} → ${toCurrency} not supported`);
     } catch (error) {
-      console.error('💥 Error in executeBlockchainSwap:', error);
+      console.error("💥 Error in executeBlockchainSwap:", error);
       throw error;
     }
   };
@@ -338,7 +419,7 @@ export const SwapModal = ({ open, onClose, currentBalances, onSwapSuccess, gameT
     }
 
     setIsSwapping(true);
-    setTxDigest('');
+    setTxDigest("");
 
     try {
       const result = await executeBlockchainSwap();
@@ -355,22 +436,23 @@ export const SwapModal = ({ open, onClose, currentBalances, onSwapSuccess, gameT
           fromCurrency,
           toAmount,
           toCurrency,
-          transactionHash: result.digest
+          transactionHash: result.digest,
         };
 
-        setFromAmount('');
-        setToAmount('');
+        setFromAmount("");
+        setToAmount("");
         onSwapSuccess(swapData);
 
         setTimeout(() => onClose(), 3000);
       } else {
-        throw new Error(result.error || 'Swap failed');
+        throw new Error(JSON.stringify(result) || "Swap failed");
       }
     } catch (error) {
-      console.error('Swap error:', error);
+      console.error("Swap error:", error);
       toast({
         title: "Swap Failed",
-        description: error.message || "Failed to execute swap. Please try again.",
+        description:
+          error.message || "Failed to execute swap. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -380,11 +462,11 @@ export const SwapModal = ({ open, onClose, currentBalances, onSwapSuccess, gameT
 
   // Reset form
   const resetForm = () => {
-    setFromAmount('');
-    setToAmount('');
-    setFromCurrency('SUI');
-    setToCurrency('GAME_TOKEN');
-    setTxDigest('');
+    setFromAmount("");
+    setToAmount("");
+    setFromCurrency("SUI");
+    setToCurrency("GAME_TOKEN");
+    setTxDigest("");
     setEstimatedGasFee(0);
   };
 
@@ -397,24 +479,32 @@ export const SwapModal = ({ open, onClose, currentBalances, onSwapSuccess, gameT
   // Open explorer
   const openExplorer = () => {
     if (txDigest) {
-      window.open(`https://suivision.xyz/txblock/${txDigest}?network=${NETWORK}`, '_blank');
+      window.open(
+        `https://suivision.xyz/txblock/${txDigest}?network=${NETWORK}`,
+        "_blank"
+      );
     }
   };
 
   // Get currency icon
   const getCurrencyIcon = (currency: string) => {
     switch (currency) {
-      case 'SUI': return '🔵';
-      case 'USDC': return '💎';
-      case 'USDT': return '🟢';
-      case 'GAME_TOKEN': return '🎮';
-      default: return '🪙';
+      case "SUI":
+        return "🔵";
+      case "USDC":
+        return "💎";
+      case "USDT":
+        return "🟢";
+      case "GAME_TOKEN":
+        return "🎮";
+      default:
+        return "🪙";
     }
   };
 
   // Get currency display name
   const getCurrencyDisplayName = (currency: string) => {
-    return currency === 'GAME_TOKEN' ? 'GT' : currency;
+    return currency === "GAME_TOKEN" ? "GT" : currency;
   };
 
   return (
@@ -435,7 +525,9 @@ export const SwapModal = ({ open, onClose, currentBalances, onSwapSuccess, gameT
           <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
             <div className="flex items-center gap-2 text-sm text-blue-400 font-cyber">
               <Info className="w-4 h-4" />
-              <span>Testnet: Only SUI ↔ GT swaps available. USDC/USDT coming soon!</span>
+              <span>
+                Testnet: Only SUI ↔ GT swaps available. USDC/USDT coming soon!
+              </span>
             </div>
           </div>
 
@@ -444,9 +536,18 @@ export const SwapModal = ({ open, onClose, currentBalances, onSwapSuccess, gameT
               <div className="flex items-start gap-3">
                 <div className="text-green-400 text-2xl">✅</div>
                 <div className="flex-1">
-                  <p className="text-green-400 font-cyber font-bold mb-1">Swap Completed Successfully!</p>
-                  <p className="text-xs text-green-400/80 font-cyber mb-2">Transaction Hash: {txDigest.slice(0, 20)}...</p>
-                  <Button onClick={openExplorer} variant="outline" size="sm" className="border-green-500/50 text-green-400 hover:bg-green-500/20 font-cyber">
+                  <p className="text-green-400 font-cyber font-bold mb-1">
+                    Swap Completed Successfully!
+                  </p>
+                  <p className="text-xs text-green-400/80 font-cyber mb-2">
+                    Transaction Hash: {txDigest.slice(0, 20)}...
+                  </p>
+                  <Button
+                    onClick={openExplorer}
+                    variant="outline"
+                    size="sm"
+                    className="border-green-500/50 text-green-400 hover:bg-green-500/20 font-cyber"
+                  >
                     <ExternalLink className="w-3 h-3 mr-1" />
                     View on Explorer
                   </Button>
@@ -460,17 +561,34 @@ export const SwapModal = ({ open, onClose, currentBalances, onSwapSuccess, gameT
               <div className="flex items-center justify-between mb-3">
                 <Label className="font-cyber text-accent">From</Label>
                 <span className="text-xs text-muted-foreground font-cyber">
-                  Balance: {getAvailableBalance(fromCurrency).toFixed(fromCurrency === 'GAME_TOKEN' ? 0 : 4)} {getCurrencyDisplayName(fromCurrency)}
+                  Balance:{" "}
+                  {getAvailableBalance(fromCurrency).toFixed(
+                    fromCurrency === "GAME_TOKEN" ? 0 : 4
+                  )}{" "}
+                  {getCurrencyDisplayName(fromCurrency)}
                 </span>
               </div>
               <div className="flex gap-3">
-                <Select value={fromCurrency} onValueChange={(value: any) => setFromCurrency(value)}>
+                <Select
+                  value={fromCurrency}
+                  onValueChange={(value: any) => setFromCurrency(value)}
+                >
                   <SelectTrigger className="w-32 bg-black/40 border-primary/30">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="SUI">{getCurrencyIcon('SUI')} SUI</SelectItem>
-                    <SelectItem value="GAME_TOKEN">{getCurrencyIcon('GAME_TOKEN')} GT</SelectItem>
+                    <SelectItem value="SUI">
+                      {getCurrencyIcon("SUI")} SUI
+                    </SelectItem>
+                    <SelectItem value="GAME_TOKEN">
+                      {getCurrencyIcon("GAME_TOKEN")} GT
+                    </SelectItem>
+                    <SelectItem value="USDT">
+                      {getCurrencyIcon("USDT")} USDT
+                    </SelectItem>
+                    <SelectItem value="USDC">
+                      {getCurrencyIcon("USDC")} USDC
+                    </SelectItem>
                   </SelectContent>
                 </Select>
                 <Input
@@ -479,14 +597,18 @@ export const SwapModal = ({ open, onClose, currentBalances, onSwapSuccess, gameT
                   value={fromAmount}
                   onChange={(e) => handleFromAmountChange(e.target.value)}
                   className="flex-1 font-cyber bg-black/40 border-primary/30 text-lg"
-                  step={fromCurrency === 'GAME_TOKEN' ? '1' : '0.0001'}
+                  step={fromCurrency === "GAME_TOKEN" ? "1" : "0.0001"}
                   min="0"
                   max={getAvailableBalance(fromCurrency)}
                   disabled={isSwapping}
                 />
               </div>
               <Button
-                onClick={() => handleFromAmountChange(getAvailableBalance(fromCurrency).toString())}
+                onClick={() =>
+                  handleFromAmountChange(
+                    getAvailableBalance(fromCurrency).toString()
+                  )
+                }
                 variant="ghost"
                 size="sm"
                 className="mt-2 text-xs text-primary hover:text-primary/80 font-cyber"
@@ -512,17 +634,34 @@ export const SwapModal = ({ open, onClose, currentBalances, onSwapSuccess, gameT
               <div className="flex items-center justify-between mb-3">
                 <Label className="font-cyber text-accent">To</Label>
                 <span className="text-xs text-muted-foreground font-cyber">
-                  Balance: {getAvailableBalance(toCurrency).toFixed(toCurrency === 'GAME_TOKEN' ? 0 : 4)} {getCurrencyDisplayName(toCurrency)}
+                  Balance:{" "}
+                  {getAvailableBalance(toCurrency).toFixed(
+                    toCurrency === "GAME_TOKEN" ? 0 : 4
+                  )}{" "}
+                  {getCurrencyDisplayName(toCurrency)}
                 </span>
               </div>
               <div className="flex gap-3">
-                <Select value={toCurrency} onValueChange={(value: any) => setToCurrency(value)}>
+                <Select
+                  value={toCurrency}
+                  onValueChange={(value: any) => setToCurrency(value)}
+                >
                   <SelectTrigger className="w-32 bg-black/40 border-accent/30">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="SUI">{getCurrencyIcon('SUI')} SUI</SelectItem>
-                    <SelectItem value="GAME_TOKEN">{getCurrencyIcon('GAME_TOKEN')} GT</SelectItem>
+                    <SelectItem value="SUI">
+                      {getCurrencyIcon("SUI")} SUI
+                    </SelectItem>
+                    <SelectItem value="GAME_TOKEN">
+                      {getCurrencyIcon("GAME_TOKEN")} GT
+                    </SelectItem>
+                    <SelectItem value="USDT">
+                      {getCurrencyIcon("USDT")} USDT
+                    </SelectItem>
+                    <SelectItem value="USDC">
+                      {getCurrencyIcon("USDC")} USDC
+                    </SelectItem>
                   </SelectContent>
                 </Select>
                 <Input
@@ -540,16 +679,24 @@ export const SwapModal = ({ open, onClose, currentBalances, onSwapSuccess, gameT
             <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
               <div className="flex items-center gap-2 text-sm text-blue-400 font-cyber">
                 <span>Exchange Rate:</span>
-                <span className="font-bold">1 {getCurrencyDisplayName(fromCurrency)} = {getExchangeRate(fromCurrency, toCurrency).toFixed(fromCurrency === 'GAME_TOKEN' ? 8 : 0)} {getCurrencyDisplayName(toCurrency)}</span>
+                <span className="font-bold">
+                  1 {getCurrencyDisplayName(fromCurrency)} ={" "}
+                  {getExchangeRate(fromCurrency, toCurrency).toFixed(
+                    fromCurrency === "GAME_TOKEN" ? 8 : 0
+                  )}{" "}
+                  {getCurrencyDisplayName(toCurrency)}
+                </span>
               </div>
             </div>
           )}
 
-          {fromCurrency === 'GAME_TOKEN' && toAmount && (
+          {fromCurrency === "GAME_TOKEN" && toAmount && (
             <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3">
               <div className="flex items-center justify-between text-sm font-cyber">
                 <span className="text-yellow-400">SUI Reserve Available:</span>
-                <span className="text-yellow-300 font-bold">{reserves.sui.toFixed(4)} SUI</span>
+                <span className="text-yellow-300 font-bold">
+                  {reserves.sui.toFixed(4)} SUI
+                </span>
               </div>
             </div>
           )}
@@ -558,7 +705,9 @@ export const SwapModal = ({ open, onClose, currentBalances, onSwapSuccess, gameT
             <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-3">
               <div className="flex items-center justify-between text-sm font-cyber">
                 <span className="text-orange-400">Estimated Gas Fee:</span>
-                <span className="text-orange-300 font-bold">{estimatedGasFee.toFixed(4)} SUI</span>
+                <span className="text-orange-300 font-bold">
+                  {estimatedGasFee.toFixed(4)} SUI
+                </span>
               </div>
             </div>
           )}
@@ -566,7 +715,10 @@ export const SwapModal = ({ open, onClose, currentBalances, onSwapSuccess, gameT
           <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-3">
             <div className="flex items-center gap-2 text-xs text-green-400 font-cyber">
               <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-              <span>Clean testnet implementation • Business-optimized rates • 1000 GT ≈ $1 gaming value</span>
+              <span>
+                Clean testnet implementation • Business-optimized rates • 1000
+                GT ≈ $1 gaming value
+              </span>
             </div>
           </div>
 
@@ -577,11 +729,16 @@ export const SwapModal = ({ open, onClose, currentBalances, onSwapSuccess, gameT
               className="flex-1 border-primary/50 text-primary hover:bg-primary/10 font-cyber"
               disabled={isSwapping}
             >
-              {txDigest ? 'Close' : 'Cancel'}
+              {txDigest ? "Close" : "Cancel"}
             </Button>
             <Button
               onClick={executeSwap}
-              disabled={!fromAmount || !toAmount || isSwapping || !!validateSwap() || !!txDigest}
+              disabled={
+                !fromAmount ||
+                isSwapping ||
+                !!validateSwap() ||
+                !!txDigest
+              }
               className="flex-1 bg-gradient-to-r from-primary to-accent text-background font-gaming font-bold hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:hover:scale-100"
             >
               {isSwapping ? (
@@ -590,7 +747,7 @@ export const SwapModal = ({ open, onClose, currentBalances, onSwapSuccess, gameT
                   Executing...
                 </>
               ) : txDigest ? (
-                '✅ Complete'
+                "✅ Complete"
               ) : (
                 <>
                   <ArrowUpDown className="mr-2 h-4 w-4" />

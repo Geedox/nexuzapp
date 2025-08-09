@@ -45,3 +45,7 @@ cleanup_old_gcloudbuild.sh
 cloudbuild.yaml
 ./cleanup_old_gcloudbuild.sh
 ./cloudbuild.yaml
+scripts/cetus.mjs
+src/constants.ts
+pnpm-lock.yaml
+pnpm-workspace.yaml
