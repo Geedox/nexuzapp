@@ -8,11 +8,9 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
-    "preview": "vite preview",
-    "cetus": "node scripts/cetus.mjs"
+    "preview": "vite preview"
   },
   "dependencies": {
-    "@cetusprotocol/sui-clmm-sdk": "^1.1.3",
     "@hookform/resolvers": "^3.9.0",
     "@mysten/dapp-kit": "^0.16.15",
     "@mysten/sui.js": "^0.54.1",

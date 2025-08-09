@@ -14,5 +14,3 @@ export interface MarketPlaceItem {
   category: 'nfts' | 'gaming' | 'arts' | 'assets' | 'general';
   rarity?: string;
 }
-
-export type Currency = "SUI" | "GAME_TOKEN" | "USDC" | "USDT";
