@@ -54,7 +54,6 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
   const [refreshingBalances, setRefreshingBalances] = useState(false);
   const [gameTokenManager, setGameTokenManager] =
     useState<GameTokenManager | null>(null);
-  const [swap, setSwap] = useState<Swap | null>(null);
   const [cetusClient, setCetusClient] = useState<CetusClmmSDK | null>(null);
 
   const { user } = useAuth();
@@ -62,7 +61,7 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
   const { toast } = useToast();
 
   // Initialize Sui client and GameToken manager
-  const NETWORK = "testnet";
+  const NETWORK = "mainnet";
   const suiClient = new SuiClient({ url: getFullnodeUrl(NETWORK) });
 
   // CORRECTED USDC and USDT token types on Sui (these are the actual testnet addresses)
@@ -83,7 +82,6 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
     const sdk = CetusClmmSDK.createSDK({ env: NETWORK });
     sdk.setSenderAddress(profile?.sui_wallet_data?.address || "");
     setCetusClient(sdk);
-    setSwap(new Swap(sdk, manager));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -104,43 +102,43 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
         sui_balance: number;
         game_tokens_balance: number;
       }[] = [
-        {
-          user_id: user.id,
-          currency: "SUI",
-          balance: 0,
-          wallet_address: address,
-          is_connected: true,
-          sui_balance: 0,
-          game_tokens_balance: 0,
-        },
-        {
-          user_id: user.id,
-          currency: "USDC",
-          balance: 0,
-          wallet_address: address,
-          is_connected: true,
-          sui_balance: 0,
-          game_tokens_balance: 0,
-        },
-        {
-          user_id: user.id,
-          currency: "USDT",
-          balance: 0,
-          wallet_address: address,
-          is_connected: true,
-          sui_balance: 0,
-          game_tokens_balance: 0,
-        },
-        {
-          user_id: user.id,
-          currency: "GAME_TOKEN",
-          balance: 0,
-          wallet_address: address,
-          is_connected: true,
-          sui_balance: 0,
-          game_tokens_balance: 0,
-        },
-      ];
+          {
+            user_id: user.id,
+            currency: "SUI",
+            balance: 0,
+            wallet_address: address,
+            is_connected: true,
+            sui_balance: 0,
+            game_tokens_balance: 0,
+          },
+          {
+            user_id: user.id,
+            currency: "USDC",
+            balance: 0,
+            wallet_address: address,
+            is_connected: true,
+            sui_balance: 0,
+            game_tokens_balance: 0,
+          },
+          {
+            user_id: user.id,
+            currency: "USDT",
+            balance: 0,
+            wallet_address: address,
+            is_connected: true,
+            sui_balance: 0,
+            game_tokens_balance: 0,
+          },
+          {
+            user_id: user.id,
+            currency: "GAME_TOKEN",
+            balance: 0,
+            wallet_address: address,
+            is_connected: true,
+            sui_balance: 0,
+            game_tokens_balance: 0,
+          },
+        ];
 
       const { error } = await supabase.from("wallets").upsert(walletRecords, {
         onConflict: "user_id,currency",
