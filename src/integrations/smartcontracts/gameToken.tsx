@@ -19,7 +19,7 @@ export class GameTokenManager {
   public GAME_TOKEN_TYPE: string = "";
   public USDC_TYPE =
     "0x5d4b302506645c37ff133b98c4b50a5ae14841659738d6d733d59d0d217a93bf::coin::COIN"; // Default Wormhole USDC
-  public USDT_TYPE: string = "";
+  public USDT_TYPE: string = "0x375f70cf2ae4c00bf37117d0c85a2c71545e6ee05c4a5c7d282cd66a4504b068::usdt::USDT";
   public GT_DECIMALS: number = 6;
   public USDC_DECIMALS: number = 6;
   public USDT_DECIMALS: number = 6;
@@ -37,7 +37,6 @@ export class GameTokenManager {
     this.GAME_TOKEN_TYPE = `${this.PACKAGE_ID}::game_token::GAME_TOKEN`;
     // USDC type will be detected dynamically - common testnet types:
     // USDT not used for now
-    this.USDT_TYPE = `${this.PACKAGE_ID}::game_token::USDT`;
 
     // Token decimals
   }
@@ -72,10 +71,8 @@ export class GameTokenManager {
 
       if (totalBalance < requiredAmountMist + 50_000_000) {
         throw new Error(
-          `Insufficient SUI balance. Have: ${
-            totalBalance / Math.pow(10, this.SUI_DECIMALS)
-          } SUI, Need: ${
-            (requiredAmountMist + 50_000_000) / Math.pow(10, this.SUI_DECIMALS)
+          `Insufficient SUI balance. Have: ${totalBalance / Math.pow(10, this.SUI_DECIMALS)
+          } SUI, Need: ${(requiredAmountMist + 50_000_000) / Math.pow(10, this.SUI_DECIMALS)
           } SUI`
         );
       }
@@ -101,8 +98,7 @@ export class GameTokenManager {
 
       if (result.effects?.status?.status !== "success") {
         throw new Error(
-          `Transaction failed: ${
-            result.effects?.status?.error || "Unknown error"
+          `Transaction failed: ${result.effects?.status?.error || "Unknown error"
           }`
         );
       }
@@ -150,10 +146,8 @@ export class GameTokenManager {
 
       if (totalBalance < requiredAmountSmallest) {
         throw new Error(
-          `Insufficient USDC balance. Have: ${
-            totalBalance / Math.pow(10, this.USDC_DECIMALS)
-          } USDC, Need: ${
-            requiredAmountSmallest / Math.pow(10, this.USDC_DECIMALS)
+          `Insufficient USDC balance. Have: ${totalBalance / Math.pow(10, this.USDC_DECIMALS)
+          } USDC, Need: ${requiredAmountSmallest / Math.pow(10, this.USDC_DECIMALS)
           } USDC`
         );
       }
@@ -188,8 +182,7 @@ export class GameTokenManager {
 
       if (result.effects?.status?.status !== "success") {
         throw new Error(
-          `Transaction failed: ${
-            result.effects?.status?.error || "Unknown error"
+          `Transaction failed: ${result.effects?.status?.error || "Unknown error"
           }`
         );
       }
@@ -236,10 +229,8 @@ export class GameTokenManager {
 
       if (totalBalance < requiredAmountSmallest) {
         throw new Error(
-          `Insufficient USDT balance. Have: ${
-            totalBalance / Math.pow(10, this.USDT_DECIMALS)
-          } USDT, Need: ${
-            requiredAmountSmallest / Math.pow(10, this.USDT_DECIMALS)
+          `Insufficient USDT balance. Have: ${totalBalance / Math.pow(10, this.USDT_DECIMALS)
+          } USDT, Need: ${requiredAmountSmallest / Math.pow(10, this.USDT_DECIMALS)
           } USDT`
         );
       }
@@ -274,8 +265,7 @@ export class GameTokenManager {
 
       if (result.effects?.status?.status !== "success") {
         throw new Error(
-          `Transaction failed: ${
-            result.effects?.status?.error || "Unknown error"
+          `Transaction failed: ${result.effects?.status?.error || "Unknown error"
           }`
         );
       }
@@ -341,8 +331,7 @@ export class GameTokenManager {
 
       if (result.effects?.status?.status !== "success") {
         throw new Error(
-          `Transaction failed: ${
-            result.effects?.status?.error || "Unknown error"
+          `Transaction failed: ${result.effects?.status?.error || "Unknown error"
           }`
         );
       }
@@ -405,8 +394,7 @@ export class GameTokenManager {
 
       if (result.effects?.status?.status !== "success") {
         throw new Error(
-          `Transaction failed: ${
-            result.effects?.status?.error || "Unknown error"
+          `Transaction failed: ${result.effects?.status?.error || "Unknown error"
           }`
         );
       }
@@ -469,8 +457,7 @@ export class GameTokenManager {
 
       if (result.effects?.status?.status !== "success") {
         throw new Error(
-          `Transaction failed: ${
-            result.effects?.status?.error || "Unknown error"
+          `Transaction failed: ${result.effects?.status?.error || "Unknown error"
           }`
         );
       }

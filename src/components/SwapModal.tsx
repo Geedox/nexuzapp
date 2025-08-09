@@ -368,27 +368,34 @@ export const SwapModal = ({
         return { success: true, digest: res.digest, events: res.events || [] } as const;
       }
 
-      // 2) GT → (USDC | USDT): GT→SUI (contract), then SUI→token (Cetus)
-      if (fromCurrency === "GAME_TOKEN" && (toCurrency === "USDC" || toCurrency === "USDT")) {
-        const sellRes = await gameTokenManager.sellGameTokensForSui(walletKeyPair, swapAmount);
+      // 2) GT → (USDC)
+      if (fromCurrency === "GAME_TOKEN" && (toCurrency === "USDC")) {
+        const sellRes = await gameTokenManager.sellGameTokensForUsdc(walletKeyPair, swapAmount);
         if (!sellRes.success) throw new Error(sellRes.error || "GT→SUI leg failed");
-        // Estimate SUI out from rate to execute next hop
-        const suiOut = Number((swapAmount / exchangeRate).toFixed(6));
-        const secondRes = await runCetusSwap("SUI", toCurrency as any, suiOut);
+        const secondRes = await runCetusSwap("SUI", toCurrency as any, swapAmount);
+        return { success: true, digest: secondRes.digest, events: sellRes.events || [] } as const;
+      }
+      // 2) GT → (USDT)
+      if (fromCurrency === "GAME_TOKEN" && (toCurrency === "USDT")) {
+        const sellRes = await gameTokenManager.sellGameTokensForUsdt(walletKeyPair, swapAmount);
+        if (!sellRes.success) throw new Error(sellRes.error || "GT→SUI leg failed");
+        const secondRes = await runCetusSwap("SUI", toCurrency as any, swapAmount);
         return { success: true, digest: secondRes.digest, events: sellRes.events || [] } as const;
       }
 
-      // 3) (USDC | USDT) → GT: token→SUI (Cetus), then SUI→GT (contract)
-      if ((fromCurrency === "USDC" || fromCurrency === "USDT") && toCurrency === "GAME_TOKEN") {
-        const firstRes = await runCetusSwap(fromCurrency as any, "SUI", swapAmount);
-        // We spent `swapAmount` of token A; now spend the SUI we aimed for using the same gross amount
-        // To be safe, use the calculated SUI we expect from SUI leg if user wants exact execution; here we proceed with `Number(toAmount) || swapAmount` heuristic is not applicable for multi-hop; use swapAmount/exchangeRate for minimum buy
-        const suiForBuy = Number((swapAmount / 1).toFixed(6)); // we will let contract handle split; amount should be in SUI units
-        const buyRes = await gameTokenManager.buyGameTokensWithSui(walletKeyPair, suiForBuy);
+      // 3) (USDC) → GT
+      if ((fromCurrency === "USDC") && toCurrency === "GAME_TOKEN") {
+        const buyRes = await gameTokenManager.buyGameTokensWithUsdc(walletKeyPair, swapAmount);
         if (!buyRes.success) throw new Error(buyRes.error || "SUI→GT leg failed");
         return { success: true, digest: buyRes.digest, events: buyRes.events || [] } as const;
       }
 
+      // 3) (USDT) → GT
+      if ((fromCurrency === "USDT") && toCurrency === "GAME_TOKEN") {
+        const buyRes = await gameTokenManager.buyGameTokensWithUsdt(walletKeyPair, swapAmount);
+        if (!buyRes.success) throw new Error(buyRes.error || "SUI→GT leg failed");
+        return { success: true, digest: buyRes.digest, events: buyRes.events || [] } as const;
+      }
       // 4) Non-GT pairs via Cetus directly: USDC↔SUI, USDT↔SUI, USDC↔USDT
       if (
         (fromCurrency === "SUI" && (toCurrency === "USDC" || toCurrency === "USDT")) ||
@@ -398,7 +405,6 @@ export const SwapModal = ({
         const direct = await runCetusSwap(fromCurrency as any, toCurrency as any, swapAmount);
         return { success: true, digest: direct.digest, events: [] } as const;
       }
-
       throw new Error(`Swap pair ${fromCurrency} → ${toCurrency} not supported`);
     } catch (error) {
       console.error("💥 Error in executeBlockchainSwap:", error);

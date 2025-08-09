@@ -15,7 +15,7 @@ interface WalletContextType {
   gameTokenBalance: number;
   usdcBalance: number;
   usdtBalance: number;
-
+  network: "mainnet" | "testnet";
   // Loading states
   loading: boolean;
   refreshingBalances: boolean;
@@ -400,6 +400,7 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
     gameTokenBalance,
     usdcBalance,
     usdtBalance,
+    network: NETWORK,
 
     // Loading states
     loading,
