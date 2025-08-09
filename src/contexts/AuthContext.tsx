@@ -40,7 +40,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         console.log('Auth state changed:', event, session?.user?.id);
         setSession(session);
         setUser(session?.user ?? null);
-        
+
         if (session?.user) {
           // Fetch user profile after authentication
           setTimeout(async () => {
@@ -54,7 +54,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         } else {
           setProfile(null);
         }
-        
+
         setLoading(false);
       }
     );
@@ -63,13 +63,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      
+
       if (session?.user) {
         profileService.getProfile(session.user.id)
           .then(setProfile)
           .catch(console.error);
       }
-      
+
       setLoading(false);
     });
 
@@ -79,14 +79,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const signInWithGoogle = async () => {
     try {
       const redirectUrl = `${window.location.origin}/dashboard`;
-      
+      // const redirectUrl = `nexuz.xyz/dashboard`;
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: redirectUrl
         }
       });
-      
+
       if (error) {
         toast({
           title: "Error",
@@ -126,7 +127,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const updateProfile = async (updates: any) => {
     if (!user) return;
-    
+
     try {
       const updatedProfile = await profileService.updateProfile(user.id, updates);
       setProfile(updatedProfile);

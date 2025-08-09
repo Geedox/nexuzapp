@@ -4,208 +4,251 @@ import { useTransaction } from '@/contexts/TransactionContext';
 import { useWallet } from '@/contexts/WalletContext';
 import { formatDistanceToNow } from 'date-fns';
 import { DepositModal } from '../DepositModal';
-import { Copy, ExternalLink, Loader2, RefreshCw } from 'lucide-react';
+import { Copy, ExternalLink, Loader2, RefreshCw, DollarSign, Zap, TrendingUp, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { SwapModal } from '@/components/SwapModal';
+import { CetusSwapModal } from '@/components/SwapModal';
 
 const WalletPage = () => {
   const [showDepositModal, setShowDepositModal] = useState(false);
   const [showSwapModal, setShowSwapModal] = useState(false);
-  const [suiTransactions, setSuiTransactions] = useState<any[]>([]);
+  const [blockchainTransactions, setBlockchainTransactions] = useState<any[]>([]);
   const [loadingTransactions, setLoadingTransactions] = useState(false);
 
   const { profile } = useProfile();
-  const { transactions, loading: transactionsLoading, refreshTransactions } = useTransaction();
+  const { transactions: platformTransactions, loading: transactionsLoading, refreshTransactions } = useTransaction();
   const {
     suiBalance,
-    gameTokenBalance,
     usdcBalance,
     usdtBalance,
     loading: walletsLoading,
     refreshingBalances,
     refreshBalances,
     getTotalBalanceInUSD,
-    gameTokenManager
+    suiClient,
+    saveTransactionToDatabase
   } = useWallet();
   const { toast } = useToast();
 
   // Network configuration
   const NETWORK = 'testnet';
 
-  // Debug gameTokenManager on load
-  useEffect(() => {
-    if (gameTokenManager) {
-      console.log('🔍 === GAME TOKEN MANAGER DEBUG ===');
-      console.log('gameTokenManager:', gameTokenManager);
-      console.log('Available methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(gameTokenManager)));
-      console.log('getTokenHistory exists?', typeof gameTokenManager.getTokenHistory);
-      console.log('getTokenPurchaseHistory exists?', typeof gameTokenManager.getTokenPurchaseHistory);
-      console.log('Package ID:', gameTokenManager.PACKAGE_ID);
-      console.log('Game Token Type:', gameTokenManager.GAME_TOKEN_TYPE);
-    }
-  }, [gameTokenManager]);
+  // Token types mapping
+  const getTokenTypes = () => ({
+    SUI: '0x2::sui::SUI',
+    USDC: '0x5d4b302506645c37ff133b98c4b50a5ae14841659738d6d733d59d0d217a93bf::coin::COIN',
+    USDT: '0xc060006111016b8a020ad5b33834984a437aaa7d3c74c18e09a95d48aceab08c::coin::COIN',
+  });
 
-  // Debug Game Token balance
-  useEffect(() => {
-    const debugGameTokenBalance = async () => {
-      if (!profile?.sui_wallet_data?.address || !gameTokenManager) return;
+  // Get currency from coin type
+  const getCurrencyFromCoinType = (coinType: string): string => {
+    if (coinType.includes('sui::SUI')) return 'SUI';
+    if (coinType.toLowerCase().includes('usdc')) return 'USDC';
+    if (coinType.toLowerCase().includes('usdt')) return 'USDT';
+    return 'UNKNOWN';
+  };
 
-      console.log('🎮 === GAME TOKEN BALANCE DEBUG ===');
-      console.log('Address:', profile.sui_wallet_data.address);
-      console.log('GameTokenManager available:', !!gameTokenManager);
+  // Format amount based on currency
+  const formatTokenAmount = (amount: string, currency: string): number => {
+    const decimals = currency === 'SUI' ? 9 : 6;
+    return Number(amount) / Math.pow(10, decimals);
+  };
 
-      try {
-        if (typeof gameTokenManager.getGameTokenBalance === 'function') {
-          const balance = await gameTokenManager.getGameTokenBalance(profile.sui_wallet_data.address);
-          console.log('🎮 GT Balance result:', balance);
-        } else {
-          console.log('❌ getGameTokenBalance function not available');
-        }
-      } catch (error) {
-        console.error('❌ Error getting GT balance:', error);
-      }
-    };
-
-    debugGameTokenBalance();
-  }, [profile?.sui_wallet_data?.address, gameTokenManager]);
-
-  // Fetch Sui transaction history
-  const fetchSuiTransactions = async () => {
-    if (!profile?.sui_wallet_data?.address || !gameTokenManager) {
-      console.log('❌ Missing requirements for fetchSuiTransactions');
+  // Fetch blockchain transaction history
+  const fetchTransactionHistory = async () => {
+    if (!profile?.sui_wallet_data?.address || !suiClient) {
+      console.log('❌ Missing requirements for transaction fetch');
       return;
     }
 
     setLoadingTransactions(true);
     try {
-      console.log('📋 Fetching transaction history...');
+      console.log('📋 Fetching wallet transaction history...');
+      const address = profile.sui_wallet_data.address;
 
-      let purchaseHistory = [];
-
-      // Try different function names
-      if (typeof gameTokenManager.getTokenHistory === 'function') {
-        console.log('✅ Using getTokenHistory');
-        purchaseHistory = await gameTokenManager.getTokenHistory(20);
-      } else if (typeof gameTokenManager.getTokenPurchaseHistory === 'function') {
-        console.log('✅ Using getTokenPurchaseHistory');
-        purchaseHistory = await gameTokenManager.getTokenPurchaseHistory(20);
-      } else {
-        console.log('⚠️ No transaction history function available');
-        setSuiTransactions([]);
-        return;
-      }
-
-      console.log('📋 Raw purchase history:', purchaseHistory);
-
-      if (!purchaseHistory || purchaseHistory.length === 0) {
-        console.log('ℹ️ No purchase history found');
-        setSuiTransactions([]);
-        return;
-      }
-
-      const formattedTransactions = purchaseHistory.map((purchase: any) => {
-        console.log('🔍 Processing purchase:', purchase);
-
-        // Handle different data structures
-        const paymentAmount = purchase.paymentAmount || purchase.amount || 0;
-        const gtReceived = purchase.gtReceived || purchase.gtAmount || 0;
-        const currency = purchase.currency || 'SUI';
-
-        // Convert amounts based on currency
-        let displayAmount = 0;
-        let displayGT = 0;
-
-        if (currency === 'SUI') {
-          // Convert from MIST to SUI (9 decimals for SUI)
-          displayAmount = paymentAmount / 1_000_000_000;
-          // GT tokens are already in correct format or need conversion from smallest unit
-          displayGT = gtReceived > 1000000 ? gtReceived / 1_000_000 : gtReceived;
-        } else {
-          // For USDC/USDT (6 decimals)
-          displayAmount = paymentAmount / 1_000_000;
-          displayGT = gtReceived > 1000000 ? gtReceived / 1_000_000 : gtReceived;
-        }
-
-        console.log('💰 Converted amounts:', {
-          originalPayment: paymentAmount,
-          originalGT: gtReceived,
-          displayAmount,
-          displayGT,
-          currency
-        });
-
-        return {
-          id: purchase.digest,
-          type: purchase.type || 'purchase',
-          amount: displayAmount,
-          currency: currency,
-          status: 'completed',
-          description: `Purchased ${displayGT.toLocaleString()} Game Tokens`,
-          transaction_hash: purchase.digest,
-          created_at: new Date(Number(purchase.timestamp)).toISOString(),
-          source: 'blockchain',
-          gt_received: displayGT,
-        };
+      // Get transactions where user is sender
+      const sentTxResponse = await suiClient.queryTransactionBlocks({
+        filter: { FromAddress: address },
+        limit: 25,
+        order: 'descending',
       });
 
-      console.log('✅ Formatted transactions:', formattedTransactions);
-      setSuiTransactions(formattedTransactions);
+      // Get transactions where user received tokens
+      const receivedTxResponse = await suiClient.queryTransactionBlocks({
+        filter: { ToAddress: address },
+        limit: 25,
+        order: 'descending',
+      });
+
+      // Combine and deduplicate
+      const allTxDigests = new Set([
+        ...sentTxResponse.data.map(tx => tx.digest),
+        ...receivedTxResponse.data.map(tx => tx.digest),
+      ]);
+
+      console.log('📊 Found', allTxDigests.size, 'unique transactions');
+
+      // Process each transaction
+      const processedTransactions = await Promise.all(
+        Array.from(allTxDigests).map(async (digest) => {
+          try {
+            const txDetails = await suiClient.getTransactionBlock({
+              digest: digest,
+              options: {
+                showBalanceChanges: true,
+                showEffects: true,
+                showEvents: true,
+                showInput: true,
+              },
+            });
+
+            if (!txDetails.effects) return null;
+
+            const isSuccess = txDetails.effects.status.status === 'success';
+            const timestamp = txDetails.timestampMs ? Number(txDetails.timestampMs) : Date.now();
+            const events = txDetails.events || [];
+            const balanceChanges = txDetails.balanceChanges || [];
+
+            // Calculate gas used
+            let gasUsed = 0;
+            if (txDetails.effects.gasUsed) {
+              gasUsed = (
+                Number(txDetails.effects.gasUsed.computationCost) +
+                Number(txDetails.effects.gasUsed.storageCost) -
+                Number(txDetails.effects.gasUsed.storageRebate)
+              ) / 1_000_000_000;
+            }
+
+            // Check if it's a swap (look for multiple balance changes)
+            const userBalanceChanges = balanceChanges.filter(change =>
+              change.owner?.AddressOwner === address
+            );
+
+            let transactionType = 'transfer';
+            let amount = 0;
+            let currency = 'SUI';
+            let description = 'Transaction';
+
+            // Detect swap transactions
+            if (userBalanceChanges.length >= 2) {
+              const outgoingChange = userBalanceChanges.find(change => Number(change.amount) < 0);
+              const incomingChange = userBalanceChanges.find(change => Number(change.amount) > 0);
+
+              if (outgoingChange && incomingChange) {
+                transactionType = 'swap';
+                const fromCurrency = getCurrencyFromCoinType(outgoingChange.coinType);
+                const toCurrency = getCurrencyFromCoinType(incomingChange.coinType);
+                const fromAmount = formatTokenAmount(Math.abs(Number(outgoingChange.amount)).toString(), fromCurrency);
+                const toAmount = formatTokenAmount(incomingChange.amount, toCurrency);
+
+                currency = fromCurrency;
+                amount = fromAmount;
+                description = `Swapped ${fromAmount.toFixed(fromCurrency === 'SUI' ? 4 : 2)} ${fromCurrency} for ${toAmount.toFixed(toCurrency === 'SUI' ? 4 : 2)} ${toCurrency}`;
+              }
+            } else if (userBalanceChanges.length === 1) {
+              // Single balance change - deposit or withdrawal
+              const change = userBalanceChanges[0];
+              currency = getCurrencyFromCoinType(change.coinType);
+              const changeAmount = Number(change.amount);
+              amount = formatTokenAmount(Math.abs(changeAmount).toString(), currency);
+
+              if (changeAmount > 0) {
+                transactionType = 'deposit';
+                description = `Received ${amount.toFixed(currency === 'SUI' ? 4 : 2)} ${currency}`;
+              } else {
+                transactionType = 'withdrawal';
+                description = `Sent ${amount.toFixed(currency === 'SUI' ? 4 : 2)} ${currency}`;
+              }
+            }
+
+            return {
+              id: digest,
+              type: transactionType,
+              amount: amount,
+              currency: currency,
+              status: isSuccess ? 'completed' : 'failed',
+              description: description,
+              transaction_hash: digest,
+              created_at: new Date(timestamp).toISOString(),
+              source: 'blockchain',
+              gas_used: gasUsed,
+            };
+
+          } catch (error) {
+            console.error('Error processing transaction:', digest, error);
+            return null;
+          }
+        })
+      );
+
+      // Filter out null results and sort by date
+      const validTransactions = processedTransactions
+        .filter((tx): tx is NonNullable<typeof tx> => tx !== null)
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+      console.log('✅ Processed', validTransactions.length, 'valid transactions');
+      setBlockchainTransactions(validTransactions);
+
     } catch (error) {
-      console.error('❌ Error fetching Sui transactions:', error);
+      console.error('❌ Error fetching transaction history:', error);
+      setBlockchainTransactions([]);
       toast({
         title: "Error",
-        description: "Failed to fetch blockchain transaction history",
+        description: "Failed to fetch transaction history",
         variant: "destructive",
       });
-      setSuiTransactions([]); // Set empty array on error
     } finally {
       setLoadingTransactions(false);
     }
   };
 
-  // Load data when wallet is available
+  // Load transaction history when wallet is available
   useEffect(() => {
-    if (profile?.sui_wallet_data?.address && gameTokenManager) {
-      fetchSuiTransactions();
+    if (profile?.sui_wallet_data?.address && suiClient) {
+      fetchTransactionHistory();
     }
-  }, [profile?.sui_wallet_data?.address, gameTokenManager]);
+  }, [profile?.sui_wallet_data?.address, suiClient]);
 
   // Handle successful swap
-  const handleSwapSuccess = () => {
+  const handleSwapSuccess = async (swapData) => {
+    console.log('Swap completed:', swapData);
+
+    // Save to database
+    await saveTransactionToDatabase({
+      type: 'swap',
+      amount: Number(swapData.fromAmount),
+      currency: swapData.fromCurrency,
+      transaction_hash: swapData.transactionHash,
+      description: `${swapData.type === 'cetus' ? 'Cetus' : 'Direct'} Swap: ${swapData.fromAmount} ${swapData.fromCurrency} → ${swapData.toAmount} ${swapData.toCurrency}`,
+      status: 'completed',
+    });
+
+    // Refresh data
     refreshBalances();
     refreshTransactions();
-    fetchSuiTransactions();
+    fetchTransactionHistory();
+
+    toast({
+      title: "Swap Successful! 🎉",
+      description: `${swapData.fromAmount} ${swapData.fromCurrency} → ${swapData.toAmount} ${swapData.toCurrency}`,
+    });
   };
 
   // Handle refresh
   const handleRefresh = async () => {
     await refreshBalances();
-    await fetchSuiTransactions();
+    await fetchTransactionHistory();
   };
 
   const getTransactionIcon = (type: string) => {
     switch (type) {
-      case 'win':
-        return '🏆';
-      case 'deposit':
-        return '💰';
-      case 'withdrawal':
-        return '💸';
-      case 'conversion':
-        return '🔄';
-      case 'swap':
-        return '↔️';
-      case 'purchase':
-        return '🛒';
-      case 'sale':
-        return '💸';
-      case 'loss':
-        return '❌';
-      case 'transfer':
-        return '↔️';
-      default:
-        return '📝';
+      case 'deposit': return '💰';
+      case 'withdrawal': return '💸';
+      case 'swap': return '🔄';
+      case 'transfer': return '↔️';
+      case 'win': return '🏆';
+      case 'loss': return '❌';
+      default: return '📝';
     }
   };
 
@@ -214,13 +257,8 @@ const WalletPage = () => {
   };
 
   const formatAmount = (amount: number, currency: string) => {
-    // Handle NaN values
     if (isNaN(amount) || amount === null || amount === undefined) {
       return '0.00 ' + (currency || 'Unknown');
-    }
-
-    if (currency === 'GAME_TOKEN' || currency === 'GT') {
-      return `${Math.floor(amount).toLocaleString()} GT`;
     }
     return `${amount.toFixed(currency === 'SUI' ? 4 : 2)} ${currency}`;
   };
@@ -234,21 +272,18 @@ const WalletPage = () => {
   };
 
   const openExplorer = (hash) => {
-    // Try multiple explorer URLs for better compatibility
     const explorers = [
       `https://suiscan.xyz/${NETWORK}/tx/${hash}`,
       `https://suivision.xyz/txblock/${hash}?network=${NETWORK}`,
       `https://explorer.sui.io/txblock/${hash}?network=${NETWORK}`
     ];
-
-    // Open the first one (suiscan is usually more reliable)
     window.open(explorers[0], '_blank');
   };
 
-  // Combine and sort all transactions
+  // Combine all transactions
   const allTransactions = [
-    ...transactions.map(tx => ({ ...tx, source: 'platform' })),
-    ...suiTransactions
+    ...platformTransactions.map(tx => ({ ...tx, source: 'platform' })),
+    ...blockchainTransactions
   ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   if (!profile?.sui_wallet_data) {
@@ -275,29 +310,17 @@ const WalletPage = () => {
 
   return (
     <div className="space-y-8 animate-fade-in">
-      {/* Debug Info Panel (Remove in production) */}
-      <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 text-xs">
-        <div className="text-yellow-400 font-bold mb-2">🔧 Debug Info:</div>
-        <div className="text-yellow-300 space-y-1">
-          <div>GameTokenManager: {gameTokenManager ? '✅ Available' : '❌ Missing'}</div>
-          <div>GT Balance: {gameTokenBalance}</div>
-          <div>SUI Transactions: {suiTransactions.length}</div>
-          <div>All Transactions: {allTransactions.length}</div>
-        </div>
-      </div>
-
-      {/* Header with Sui branding */}
+      {/* Header */}
       <div className="bg-gradient-to-r from-blue-500/20 to-cyan-500/20 border border-blue-500/30 rounded-2xl p-6">
         <div className="flex items-center gap-4 mb-4">
-          {/* Sui Logo */}
           <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center text-2xl font-bold text-white">
             SUI
           </div>
           <div className="flex-1">
             <h1 className="font-cyber text-3xl font-bold text-blue-400 glow-text">
-              Gaming Wallet
+              Sui Wallet
             </h1>
-            <p className="text-muted-foreground">Powered by Sui Network • Decentralized Game Tokens</p>
+            <p className="text-muted-foreground">Sui Network • Cetus DEX • Multi-token Support</p>
           </div>
           <Button
             onClick={handleRefresh}
@@ -340,7 +363,7 @@ const WalletPage = () => {
       </div>
 
       {/* Balance Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* SUI Balance */}
         <div className="bg-black/40 backdrop-blur-lg border border-blue-500/30 rounded-xl p-6 text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
@@ -378,18 +401,6 @@ const WalletPage = () => {
           </div>
           <div className="text-sm text-muted-foreground font-cyber">USDT</div>
         </div>
-
-        {/* Game Tokens */}
-        <div className="bg-black/40 backdrop-blur-lg border border-accent/30 rounded-xl p-6 text-center">
-          <div className="flex items-center justify-center gap-2 mb-2">
-            <div className="text-2xl">🎮</div>
-            {walletsLoading && <Loader2 className="w-4 h-4 animate-spin text-accent" />}
-          </div>
-          <div className="text-3xl font-bold text-accent font-cyber">
-            {walletsLoading ? '---' : gameTokenBalance.toLocaleString()}
-          </div>
-          <div className="text-sm text-muted-foreground font-cyber">Game Tokens</div>
-        </div>
       </div>
 
       {/* Total Portfolio Value */}
@@ -399,25 +410,29 @@ const WalletPage = () => {
           ${walletsLoading ? '---' : getTotalBalanceInUSD().toFixed(2)} USD
         </div>
         <div className="text-sm text-muted-foreground font-cyber">Total Portfolio Value</div>
-        <div className="text-xs text-blue-400 font-cyber mt-2">Powered by Sui Network • Real-time Blockchain Data</div>
+        <div className="text-xs text-blue-400 font-cyber mt-2">Powered by Cetus Protocol • Deep Liquidity</div>
       </div>
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <button className="bg-gradient-to-r from-primary to-accent text-background font-cyber font-bold py-4 px-6 rounded-xl hover:scale-105 transition-all duration-300">
-          💸 Withdraw Funds
+        <button className="bg-gradient-to-r from-primary to-accent text-background font-cyber font-bold py-4 px-6 rounded-xl hover:scale-105 transition-all duration-300 flex items-center justify-center gap-2">
+          <Send className="w-5 h-5" />
+          <span>Send Tokens</span>
         </button>
         <button
           onClick={() => setShowDepositModal(true)}
-          className="bg-gradient-to-r from-green-500 to-emerald-500 text-background font-cyber font-bold py-4 px-6 rounded-xl hover:scale-105 transition-all duration-300"
+          className="bg-gradient-to-r from-green-500 to-emerald-500 text-background font-cyber font-bold py-4 px-6 rounded-xl hover:scale-105 transition-all duration-300 flex items-center justify-center gap-2"
         >
-          💰 Deposit
+          <DollarSign className="w-5 h-5" />
+          <span>Receive</span>
         </button>
         <button
           onClick={() => setShowSwapModal(true)}
-          className="bg-gradient-to-r from-blue-500 to-cyan-500 text-background font-cyber font-bold py-4 px-6 rounded-xl hover:scale-105 transition-all duration-300"
+          className="bg-gradient-to-r from-blue-500 to-cyan-500 text-background font-cyber font-bold py-4 px-6 rounded-xl hover:scale-105 transition-all duration-300 flex items-center justify-center gap-2"
         >
-          ↔️ Swap
+          <Zap className="w-5 h-5" />
+          <span>Cetus Swap</span>
+          <TrendingUp className="w-5 h-5" />
         </button>
       </div>
 
@@ -427,8 +442,11 @@ const WalletPage = () => {
           <div className="flex items-center justify-between">
             <h2 className="font-cyber text-xl font-bold text-primary">Transaction History</h2>
             <div className="flex items-center gap-2">
-              <div className="w-6 h-6 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-xs font-bold text-white">
-                SUI
+              <div className="flex items-center gap-1">
+                <div className="w-4 h-4 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-xs font-bold text-white">
+                  C
+                </div>
+                <span className="text-xs text-blue-400 font-cyber">Cetus</span>
               </div>
               {loadingTransactions && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
             </div>
@@ -444,7 +462,7 @@ const WalletPage = () => {
           ) : allTransactions.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <div className="text-lg mb-2">No transactions yet</div>
-              <div className="text-sm">Try making a swap to see transactions here!</div>
+              <div className="text-sm">Start trading to see your transaction history!</div>
             </div>
           ) : (
             allTransactions.map((tx) => (
@@ -457,7 +475,7 @@ const WalletPage = () => {
                         {getTransactionDescription(tx)}
                       </span>
                       {tx.source === 'blockchain' && (
-                        <div className="w-4 h-4 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-xs font-bold text-white">
+                        <div className="w-4 h-4 bg-gradient-to-r from-primary to-accent rounded-full flex items-center justify-center text-xs font-bold text-white">
                           S
                         </div>
                       )}
@@ -473,17 +491,16 @@ const WalletPage = () => {
                         View on Explorer <ExternalLink className="w-3 h-3" />
                       </button>
                     )}
-                    {tx.gt_received && !isNaN(tx.gt_received) && tx.gt_received > 0 && (
-                      <div className="text-xs text-accent font-cyber mt-1">
-                        +{Math.floor(tx.gt_received).toLocaleString()} GT received
+                    {tx.gas_used && tx.gas_used > 0 && (
+                      <div className="text-xs text-orange-400 font-cyber mt-1">
+                        Gas: {tx.gas_used.toFixed(6)} SUI
                       </div>
                     )}
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className={`font-cyber font-bold text-lg ${tx.type === 'deposit' || tx.type === 'win' || tx.type === 'purchase' ? 'text-green-400' : 'text-red-400'
-                    }`}>
-                    {tx.type === 'deposit' || tx.type === 'win' || tx.type === 'purchase' ? '+' : '-'}
+                  <div className={`font-cyber font-bold text-lg ${tx.type === 'deposit' || tx.type === 'win' ? 'text-green-400' : 'text-red-400'}`}>
+                    {tx.type === 'deposit' || tx.type === 'win' ? '+' : '-'}
                     {formatAmount(tx.amount, tx.currency)}
                   </div>
                   <div className="text-xs text-muted-foreground font-cyber uppercase">{tx.status || 'completed'}</div>
@@ -500,17 +517,17 @@ const WalletPage = () => {
         onClose={() => setShowDepositModal(false)}
       />
 
-      <SwapModal
+      {/* Cetus Swap Modal */}
+      <CetusSwapModal
         open={showSwapModal}
         onClose={() => setShowSwapModal(false)}
         currentBalances={{
           sui: suiBalance,
           usdc: usdcBalance,
           usdt: usdtBalance,
-          gameTokens: gameTokenBalance,
         }}
         onSwapSuccess={handleSwapSuccess}
-        gameTokenManager={gameTokenManager}
+        suiClient={suiClient}
       />
     </div>
   );

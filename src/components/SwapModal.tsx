@@ -17,48 +17,55 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, ArrowUpDown, AlertTriangle, ExternalLink, Info } from 'lucide-react';
+import { Loader2, ArrowUpDown, ExternalLink, AlertCircle, CheckCircle, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Ed25519Keypair } from '@mysten/sui.js/keypairs/ed25519';
+import { SuiClient } from '@mysten/sui.js/client';
+import BN from 'bn.js';
 
-interface SwapModalProps {
+// Import Cetus SDK with correct exports
+import { CetusClmmSDK, SdkOptions } from '@cetusprotocol/sui-clmm-sdk';
+import Percentage from "@cetusprotocol/sui-clmm-sdk";
+import adjustForSlippage from "@cetusprotocol/sui-clmm-sdk";
+import d from "@cetusprotocol/sui-clmm-sdk";
+
+interface CetusSwapModalProps {
   open: boolean;
   onClose: () => void;
   currentBalances: {
     sui: number;
     usdc: number;
     usdt: number;
-    gameTokens: number;
   };
-  onSwapSuccess: (swapData?: {
+  onSwapSuccess: (swapData: {
     fromAmount: string;
     fromCurrency: string;
     toAmount: string;
     toCurrency: string;
     transactionHash: string;
+    type: 'cetus';
   }) => void;
-  gameTokenManager: any;
+  suiClient: SuiClient;
 }
 
-export const SwapModal = ({ open, onClose, currentBalances, onSwapSuccess, gameTokenManager }: SwapModalProps) => {
-  const [fromCurrency, setFromCurrency] = useState<'SUI' | 'GAME_TOKEN'>('SUI');
-  const [toCurrency, setToCurrency] = useState<'SUI' | 'GAME_TOKEN'>('GAME_TOKEN');
+export const CetusSwapModal = ({
+  open,
+  onClose,
+  currentBalances,
+  onSwapSuccess,
+  suiClient
+}: CetusSwapModalProps) => {
+  const [fromCurrency, setFromCurrency] = useState<'SUI' | 'USDC' | 'USDT'>('SUI');
+  const [toCurrency, setToCurrency] = useState<'SUI' | 'USDC' | 'USDT'>('USDC');
   const [fromAmount, setFromAmount] = useState<string>('');
   const [toAmount, setToAmount] = useState<string>('');
   const [isSwapping, setIsSwapping] = useState(false);
+  const [isCalculating, setIsCalculating] = useState(false);
   const [txDigest, setTxDigest] = useState<string>('');
-  const [exchangeRate, setExchangeRate] = useState<number>(3100); // SUI to GT rate
-  const [estimatedGasFee, setEstimatedGasFee] = useState<number>(0);
-  const [reserves, setReserves] = useState<{
-    sui: number;
-    usdc: number;
-    usdt: number;
-  }>({
-    sui: 0,
-    usdc: 0,
-    usdt: 0,
-  });
-  const [availableSwapPairs, setAvailableSwapPairs] = useState<string[]>(['SUI']);
+  const [slippage, setSlippage] = useState<string>('0.5');
+  const [cetusSDK, setCetusSDK] = useState<CetusClmmSDK | null>(null);
+  const [poolInfo, setPoolInfo] = useState<any>(null);
+  const [preSwapResult, setPreSwapResult] = useState<any>(null);
 
   const { profile } = useProfile();
   const { toast } = useToast();
@@ -66,311 +73,292 @@ export const SwapModal = ({ open, onClose, currentBalances, onSwapSuccess, gameT
   // Network configuration
   const NETWORK = 'testnet';
 
+  // Token addresses for Sui testnet
+  const TOKEN_ADDRESSES = {
+    SUI: '0x2::sui::SUI',
+    USDC: '0x5d4b302506645c37ff133b98c4b50a5ae14841659738d6d733d59d0d217a93bf::coin::COIN',
+    USDT: '0xc060006111016b8a020ad5b33834984a437aaa7d3c74c18e09a95d48aceab08c::coin::COIN',
+  };
+
+  // Initialize Cetus SDK for testnet
+  useEffect(() => {
+    if (!open) return;
+
+    const initCetusSDK = async () => {
+      try {
+        console.log('🐋 Initializing Cetus SDK for testnet...');
+
+        const sdkOptions: SdkOptions = {
+          full_rpc_url: suiClient.transport.url,
+          simulation_account: {
+            address: '0x0000000000000000000000000000000000000000000000000000000000000000',
+          },
+        };
+
+        const sdk = new CetusClmmSDK(sdkOptions);
+        await sdk.initialize();
+
+        setCetusSDK(sdk);
+        console.log('✅ Cetus SDK initialized successfully for testnet');
+      } catch (error) {
+        console.error('❌ Failed to initialize Cetus SDK:', error);
+        toast({
+          title: "SDK Initialization Failed",
+          description: "Failed to connect to Cetus protocol on testnet. Please try again.",
+          variant: "destructive",
+        });
+      }
+    };
+
+    initCetusSDK();
+  }, [open, suiClient]);
+
+  // Get decimals for currency
+  const getDecimals = (currency: string): number => {
+    switch (currency) {
+      case 'SUI': return 9;
+      case 'USDC':
+      case 'USDT': return 6;
+      default: return 9;
+    }
+  };
+
+  // Find pool and calculate swap using real Cetus preSwap API
+  const calculateSwapAmount = async (amount: string, from: string, to: string) => {
+    if (!amount || !cetusSDK || isNaN(Number(amount)) || Number(amount) <= 0) {
+      setToAmount('');
+      setPoolInfo(null);
+      setPreSwapResult(null);
+      return;
+    }
+
+    if (from === to) {
+      setToAmount('');
+      setPoolInfo(null);
+      setPreSwapResult(null);
+      return;
+    }
+
+    setIsCalculating(true);
+    try {
+      console.log(`🔄 Calculating real testnet swap: ${amount} ${from} → ${to}`);
+
+      const fromTokenAddress = TOKEN_ADDRESSES[from as keyof typeof TOKEN_ADDRESSES];
+      const toTokenAddress = TOKEN_ADDRESSES[to as keyof typeof TOKEN_ADDRESSES];
+
+      // You need to provide actual pool IDs for testnet pairs
+      // These are example pool IDs - replace with real ones from Cetus testnet
+      const TESTNET_POOL_IDS: Record<string, string> = {
+        'SUI_USDC': '0x6fd4915e6d8d3e2ba6d81787046eb948ae36fdfc75dad2e24f0d4aaa2417a416',
+        'SUI_USDT': '0x53d70570db4f4d8ebc20aa1b67dc6f5d061d318d371e5de50ff64525d7dd5bca',
+        'USDC_USDT': '0x4038aea2341070550e9c1f723315624c539788d0ca9212dca7eb4b36147c0fcb',
+        'USDC_SUI': '0x6fd4915e6d8d3e2ba6d81787046eb948ae36fdfc75dad2e24f0d4aaa2417a416',
+        'USDT_SUI': '0x53d70570db4f4d8ebc20aa1b67dc6f5d061d318d371e5de50ff64525d7dd5bca',
+        'USDT_USDC': '0x4038aea2341070550e9c1f723315624c539788d0ca9212dca7eb4b36147c0fcb',
+      };
+
+      // Get pool ID for this pair
+      const pairKey = `${from}_${to}`;
+      const poolId = TESTNET_POOL_IDS[pairKey];
+
+      if (!poolId) {
+        console.log('❌ No pool ID found for this pair on testnet');
+        setToAmount('');
+        setPoolInfo(null);
+        setPreSwapResult(null);
+        toast({
+          title: "Pool Not Found",
+          description: `No pool ID configured for ${from}/${to} pair on testnet`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      console.log('📊 Using pool ID:', poolId);
+
+      // Get pool data using exact method from docs
+      const pool = await cetusSDK.Pool.getPool(poolId);
+
+      setPoolInfo(pool);
+      console.log('📊 Found testnet pool:', pool.id);
+
+      // Determine swap direction following docs exactly
+      const a2b = fromTokenAddress.toLowerCase() === pool.coin_type_a.toLowerCase();
+
+      // Convert amount to BN with proper decimals
+      const fromDecimals = getDecimals(from);
+      const toDecimals = getDecimals(to);
+      const inputAmount = new BN(Number(amount) * Math.pow(10, fromDecimals));
+
+      console.log('💰 Input amount (BN):', inputAmount.toString());
+      console.log('🔄 Swap direction (a2b):', a2b);
+
+      // Use preSwap exactly as shown in Cetus documentation
+      const res = await cetusSDK.Swap.preSwap({
+        pool,
+        current_sqrt_price: pool.current_sqrt_price,
+        coin_type_a: pool.coin_type_a,
+        coin_type_b: pool.coin_type_b,
+        decimals_a: a2b ? fromDecimals : toDecimals,
+        decimals_b: a2b ? toDecimals : fromDecimals,
+        a2b,
+        by_amount_in: true,
+        amount: inputAmount,
+      });
+
+      if (res && res.estimated_amount_out) {
+        const outputAmount = Number(res.estimated_amount_out) / Math.pow(10, toDecimals);
+
+        setToAmount(outputAmount.toFixed(toDecimals === 9 ? 6 : 2));
+        setPreSwapResult(res);
+
+        console.log('✅ PreSwap calculated output:', outputAmount);
+        console.log('📊 Full PreSwap result:', res);
+      } else {
+        setToAmount('');
+        setPreSwapResult(null);
+        console.log('❌ Failed to calculate preSwap - no estimated_amount_out');
+        toast({
+          title: "Calculation Failed",
+          description: "Unable to calculate swap rates. Pool may have insufficient liquidity.",
+          variant: "destructive",
+        });
+      }
+
+    } catch (error) {
+      console.error('❌ Error calculating swap:', error);
+      setToAmount('');
+      setPoolInfo(null);
+      setPreSwapResult(null);
+      toast({
+        title: "Calculation Error",
+        description: error.message || "Failed to calculate swap amount. Please check if pool IDs are correct.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCalculating(false);
+    }
+  };
+
+  // Handle amount change with debouncing for API calls
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (fromAmount && cetusSDK) {
+        calculateSwapAmount(fromAmount, fromCurrency, toCurrency);
+      }
+    }, 1000); // 1 second debounce for API calls
+
+    return () => clearTimeout(timer);
+  }, [fromAmount, fromCurrency, toCurrency, cetusSDK]);
+
   // Create keypair from hex private key
   const createKeyPairFromHexPrivateKey = (hexPrivateKey: string): Ed25519Keypair => {
     try {
       let cleanHex = hexPrivateKey.startsWith('0x') ? hexPrivateKey.slice(2) : hexPrivateKey;
-
       if (!/^[0-9a-fA-F]{64}$/.test(cleanHex)) {
         throw new Error(`Invalid hex private key format`);
       }
-
       const privateKeyBytes = new Uint8Array(32);
       for (let i = 0; i < 32; i++) {
         privateKeyBytes[i] = parseInt(cleanHex.substr(i * 2, 2), 16);
       }
-
       return Ed25519Keypair.fromSecretKey(privateKeyBytes);
     } catch (error) {
       throw new Error(`Failed to create keypair: ${error.message}`);
     }
   };
 
-  // Check what swap pairs are actually available
-  const checkAvailableSwapPairs = async () => {
-    if (!gameTokenManager || !profile?.sui_wallet_data?.address) return;
-
-    try {
-      const userAddress = profile.sui_wallet_data.address;
-      const available = ['SUI']; // SUI is always available
-
-      // Check if user has any USDC coins
-      try {
-        const usdcCoins = await gameTokenManager.suiClient.getCoins({
-          owner: userAddress,
-          coinType: gameTokenManager.USDC_TYPE,
-        });
-        if (usdcCoins.data.length > 0) {
-          available.push('USDC');
-        }
-      } catch (error) {
-        console.log('USDC not available:', error.message);
-      }
-
-      // Check if user has any USDT coins
-      try {
-        const usdtCoins = await gameTokenManager.suiClient.getCoins({
-          owner: userAddress,
-          coinType: gameTokenManager.USDT_TYPE,
-        });
-        if (usdtCoins.data.length > 0) {
-          available.push('USDT');
-        }
-      } catch (error) {
-        console.log('USDT not available:', error.message);
-      }
-
-      setAvailableSwapPairs(available);
-      console.log('Available swap pairs:', available);
-    } catch (error) {
-      console.error('Error checking available swap pairs:', error);
-      setAvailableSwapPairs(['SUI']); // Fallback to SUI only
-    }
-  };
-
-  // Fetch exchange rates and reserves
-  useEffect(() => {
-    const fetchData = async () => {
-      if (!gameTokenManager || !open) return;
-
-      try {
-        // Check available swap pairs
-        await checkAvailableSwapPairs();
-
-        // Get exchange rate
-        const rate = await gameTokenManager.getExchangeRate('SUI');
-        setExchangeRate(rate || 3100);
-
-        // Get reserves
-        const reserveBalances = await gameTokenManager.getReserveBalances();
-        if (reserveBalances) {
-          setReserves({
-            sui: reserveBalances.sui || 0,
-            usdc: reserveBalances.usdc || 0,
-            usdt: reserveBalances.usdt || 0,
-          });
-        }
-      } catch (error) {
-        console.error('Error fetching data:', error);
-      }
-    };
-
-    fetchData();
-  }, [open, gameTokenManager, profile?.sui_wallet_data?.address]);
-
-  // Gas estimation
-  useEffect(() => {
-    const estimateGas = () => {
-      if (!fromAmount || !profile?.sui_wallet_data) {
-        setEstimatedGasFee(0);
-        return;
-      }
-
-      // Different gas estimates based on swap type
-      if (fromCurrency === 'GAME_TOKEN') {
-        setEstimatedGasFee(0.025); // Selling GT requires more gas
-      } else {
-        setEstimatedGasFee(0.015); // Buying GT is simpler
-      }
-    };
-
-    const debounceTimer = setTimeout(estimateGas, 500);
-    return () => clearTimeout(debounceTimer);
-  }, [fromAmount, fromCurrency, profile]);
-
-  // Calculate exchange rate
-  const getExchangeRate = (from: string, to: string) => {
-    if (from === to) return 1;
-
-    if (from === 'SUI' && to === 'GAME_TOKEN') {
-      return exchangeRate; // 1 SUI = 3100 GT
-    }
-
-    if (from === 'GAME_TOKEN' && to === 'SUI') {
-      return 1 / exchangeRate; // 1 GT = 1/3100 SUI
-    }
-
-    return 1;
-  };
-
-  // Calculate to amount
-  const calculateToAmount = (amount: string, from: string, to: string) => {
-    if (!amount || isNaN(Number(amount))) return '';
-    const rate = getExchangeRate(from, to);
-    const result = Number(amount) * rate;
-    return result.toFixed(to === 'GAME_TOKEN' ? 0 : 4);
-  };
-
-  // Handle amount changes
-  const handleFromAmountChange = (value: string) => {
-    setFromAmount(value);
-    const calculated = calculateToAmount(value, fromCurrency, toCurrency);
-    setToAmount(calculated);
-  };
-
-  // Handle currency swap
-  const handleCurrencySwap = () => {
-    const tempFrom = fromCurrency;
-    setFromCurrency(toCurrency);
-    setToCurrency(tempFrom);
-    const newToAmount = calculateToAmount(fromAmount, toCurrency, tempFrom);
-    setToAmount(newToAmount);
-  };
-
-  // Get available balance
-  const getAvailableBalance = (currency: string) => {
-    switch (currency) {
-      case 'SUI': return currentBalances.sui;
-      case 'USDC': return currentBalances.usdc;
-      case 'USDT': return currentBalances.usdt;
-      case 'GAME_TOKEN': return currentBalances.gameTokens;
-      default: return 0;
-    }
-  };
-
-  // Validate swap
-  const validateSwap = () => {
-    const amount = Number(fromAmount);
-    const available = getAvailableBalance(fromCurrency);
-
-    if (!amount || amount <= 0) return 'Please enter a valid amount';
-    if (amount < 0.01 && fromCurrency !== 'GAME_TOKEN') return `Minimum swap amount is 0.01 ${fromCurrency}`;
-    if (amount < 1 && fromCurrency === 'GAME_TOKEN') return 'Minimum swap amount is 1 GT';
-
-    // Check user balance
-    if (fromCurrency === 'SUI') {
-      const totalNeeded = amount + estimatedGasFee;
-      if (totalNeeded > available) {
-        return `Insufficient SUI balance (need ${totalNeeded.toFixed(4)} SUI including gas)`;
-      }
-    } else if (amount > available) {
-      return `Insufficient ${fromCurrency} balance`;
-    }
-
-    // Check gas for non-SUI transactions
-    if (fromCurrency !== 'SUI' && currentBalances.sui < estimatedGasFee) {
-      return `Insufficient SUI for gas fees (need ${estimatedGasFee.toFixed(4)} SUI)`;
-    }
-
-    // Check if swapping same currency
-    if (fromCurrency === toCurrency) return 'Cannot swap same currency';
-
-    // Check if GT is involved (required for all swaps)
-    if (fromCurrency !== 'GAME_TOKEN' && toCurrency !== 'GAME_TOKEN') {
-      return 'All swaps must involve Game Tokens (GT)';
-    }
-
-    // Check reserves for selling GT
-    if (fromCurrency === 'GAME_TOKEN') {
-      const toAmountNum = Number(toAmount);
-      const availableReserves = reserves.sui; // Only SUI reserves matter for now
-
-      if (toAmountNum > availableReserves) {
-        return `Insufficient SUI reserves (available: ${availableReserves.toFixed(4)})`;
-      }
-    }
-
-    // Check if currency is available
-    if (fromCurrency !== 'GAME_TOKEN' && !availableSwapPairs.includes(fromCurrency)) {
-      return `${fromCurrency} not available on testnet`;
-    }
-
-    if (!gameTokenManager) return 'Game Token manager not available';
-
-    return null;
-  };
-
-  // Execute blockchain swap
-  const executeBlockchainSwap = async () => {
-    if (!profile?.sui_wallet_data || !gameTokenManager) {
-      throw new Error('No wallet connected or GameToken manager unavailable');
-    }
-
-    try {
-      const privateKey = profile.sui_wallet_data.privateKey;
-      const walletKeyPair = createKeyPairFromHexPrivateKey(privateKey);
-      const swapAmount = Number(fromAmount);
-
-      console.log('🔄 Executing swap:', {
-        from: fromCurrency,
-        to: toCurrency,
-        amount: swapAmount,
-        expectedOutput: toAmount
-      });
-
-      let result;
-
-      // Handle swap combinations (only SUI ↔ GT for now)
-      if (fromCurrency === 'SUI' && toCurrency === 'GAME_TOKEN') {
-        result = await gameTokenManager.buyGameTokensWithSui(walletKeyPair, swapAmount);
-      } else if (fromCurrency === 'GAME_TOKEN' && toCurrency === 'SUI') {
-        result = await gameTokenManager.sellGameTokensForSui(walletKeyPair, swapAmount);
-      } else {
-        throw new Error(`Swap pair ${fromCurrency} → ${toCurrency} not available on testnet`);
-      }
-
-      if (result.success) {
-        return {
-          success: true,
-          digest: result.digest,
-          events: result.events || [],
-        };
-      } else {
-        throw new Error(result.error || 'Swap failed');
-      }
-
-    } catch (error) {
-      console.error('💥 Error in executeBlockchainSwap:', error);
-      throw error;
-    }
-  };
-
-  // Execute swap
+  // Execute real Cetus swap transaction following documentation exactly
   const executeSwap = async () => {
-    const validation = validateSwap();
-    if (validation) {
-      toast({
-        title: "Invalid Swap",
-        description: validation,
-        variant: "destructive",
-      });
-      return;
+    if (!profile?.sui_wallet_data || !cetusSDK || !poolInfo || !preSwapResult) {
+      throw new Error('Missing requirements for swap');
     }
 
     setIsSwapping(true);
-    setTxDigest('');
-
     try {
-      const result = await executeBlockchainSwap();
+      console.log('🚀 Executing real Cetus swap on testnet...');
 
-      if (result.success) {
+      const privateKey = profile.sui_wallet_data.privateKey;
+      const walletKeyPair = createKeyPairFromHexPrivateKey(privateKey);
+      const userAddress = walletKeyPair.getPublicKey().toSuiAddress();
+
+      const fromTokenAddress = TOKEN_ADDRESSES[fromCurrency as keyof typeof TOKEN_ADDRESSES];
+      const a2b = fromTokenAddress.toLowerCase() === poolInfo.coin_type_a.toLowerCase();
+
+      console.log('📝 Creating swap transaction following Cetus docs...');
+      console.log('Pool ID:', poolInfo.id);
+      console.log('User address:', userAddress);
+      console.log('Swap direction (a2b):', a2b);
+
+      // Calculate slippage protection exactly as shown in Cetus documentation
+      const slippageValue = Percentage.fromDecimal(d(Number(slippage)));
+      const by_amount_in = true;
+      const to_amount = by_amount_in ? preSwapResult.estimated_amount_out : preSwapResult.estimated_amount_in;
+      const amount_limit = adjustForSlippage(to_amount, slippageValue, !by_amount_in);
+
+      console.log('💊 Slippage protection:', `${slippage}%`);
+      console.log('📊 Amount limit:', amount_limit.toString());
+
+      // Create swap payload exactly as shown in Cetus documentation
+      const swap_payload = await cetusSDK.Swap.createSwapPayload({
+        pool_id: poolInfo.id,
+        coin_type_a: poolInfo.coin_type_a,
+        coin_type_b: poolInfo.coin_type_b,
+        a2b: a2b,
+        by_amount_in,
+        amount: preSwapResult.amount.toString(),
+        amount_limit: amount_limit.toString(),
+        swap_partner: undefined, // No partner as shown in docs
+      });
+
+      console.log('✍️ Signing and executing transaction...');
+
+      // Execute transaction using fullClient as shown in Cetus documentation
+      const result = await cetusSDK.FullClient.sendTransaction(walletKeyPair, swap_payload);
+
+      console.log('📋 Transaction result:', result);
+
+      if (result.effects?.status?.status === 'success') {
+        console.log('✅ Cetus testnet swap successful:', result.digest);
         setTxDigest(result.digest);
+
         toast({
-          title: "Swap Successful! 🎉",
-          description: `Swapped ${fromAmount} ${fromCurrency} for ${toAmount} ${toCurrency}`,
+          title: "Cetus Swap Successful! 🎉",
+          description: `Swapped ${fromAmount} ${fromCurrency} for ~${toAmount} ${toCurrency}`,
         });
 
-        const swapData = {
+        onSwapSuccess({
           fromAmount,
           fromCurrency,
-          toAmount,
+          toAmount: toAmount || 'Unknown',
           toCurrency,
-          transactionHash: result.digest
-        };
+          transactionHash: result.digest,
+          type: 'cetus',
+        });
 
-        setFromAmount('');
-        setToAmount('');
-        onSwapSuccess(swapData);
-
-        setTimeout(() => onClose(), 3000);
+        setTimeout(() => onClose(), 2000);
       } else {
-        throw new Error(result.error || 'Swap failed');
+        const errorMessage = result.effects?.status?.error || 'Transaction failed';
+        throw new Error(errorMessage);
       }
+
     } catch (error) {
-      console.error('Swap error:', error);
+      console.error('❌ Cetus swap error:', error);
+      let errorMessage = 'Swap failed. Please try again.';
+
+      if (error.message.includes('Insufficient')) {
+        errorMessage = `Insufficient ${fromCurrency} balance for this swap.`;
+      } else if (error.message.includes('slippage')) {
+        errorMessage = 'Price moved too much. Try increasing slippage tolerance.';
+      } else if (error.message.includes('liquidity')) {
+        errorMessage = 'Insufficient liquidity in the pool. Try a smaller amount.';
+      } else if (error.message.includes('RPC')) {
+        errorMessage = 'Network error. Please check your connection and try again.';
+      }
+
       toast({
         title: "Swap Failed",
-        description: error.message || "Failed to execute swap. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -378,43 +366,68 @@ export const SwapModal = ({ open, onClose, currentBalances, onSwapSuccess, gameT
     }
   };
 
-  // Reset form
+  // Get available balance for currency
+  const getAvailableBalance = (currency: string) => {
+    switch (currency) {
+      case 'SUI': return currentBalances.sui;
+      case 'USDC': return currentBalances.usdc;
+      case 'USDT': return currentBalances.usdt;
+      default: return 0;
+    }
+  };
+
+  // Validate swap requirements
+  const validateSwap = () => {
+    const amount = Number(fromAmount);
+    const available = getAvailableBalance(fromCurrency);
+
+    if (!amount || amount <= 0) return 'Please enter a valid amount';
+    if (fromCurrency === toCurrency) return 'Cannot swap same currency';
+    if (!cetusSDK) return 'Cetus protocol not ready';
+    if (!poolInfo) return 'No liquidity pool found';
+    if (amount > available) return `Insufficient ${fromCurrency} balance`;
+    if (!toAmount || Number(toAmount) <= 0) return 'Invalid output amount';
+    if (isCalculating) return 'Calculating rates...';
+
+    return null;
+  };
+
+  // Handle currency swap direction
+  const handleCurrencySwap = () => {
+    const tempFrom = fromCurrency;
+    setFromCurrency(toCurrency);
+    setToCurrency(tempFrom);
+
+    // Clear amounts to trigger recalculation
+    setFromAmount('');
+    setToAmount('');
+    setPoolInfo(null);
+    setPreSwapResult(null);
+  };
+
+  // Reset form state
   const resetForm = () => {
     setFromAmount('');
     setToAmount('');
-    setFromCurrency('SUI');
-    setToCurrency('GAME_TOKEN');
     setTxDigest('');
-    setEstimatedGasFee(0);
+    setPoolInfo(null);
+    setPreSwapResult(null);
   };
 
-  // Handle close
+  // Handle modal close
   const handleClose = () => {
     resetForm();
     onClose();
   };
 
-  // Open explorer
-  const openExplorer = () => {
-    if (txDigest) {
-      window.open(`https://suivision.xyz/txblock/${txDigest}?network=${NETWORK}`, '_blank');
-    }
-  };
-
-  // Get currency icon
+  // Get currency display icon
   const getCurrencyIcon = (currency: string) => {
     switch (currency) {
       case 'SUI': return '🔵';
       case 'USDC': return '💎';
       case 'USDT': return '🟢';
-      case 'GAME_TOKEN': return '🎮';
       default: return '🪙';
     }
-  };
-
-  // Get currency display name
-  const getCurrencyDisplayName = (currency: string) => {
-    return currency === 'GAME_TOKEN' ? 'GT' : currency;
   };
 
   return (
@@ -423,153 +436,203 @@ export const SwapModal = ({ open, onClose, currentBalances, onSwapSuccess, gameT
         <DialogHeader>
           <DialogTitle className="font-gaming text-2xl text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent flex items-center gap-2">
             <ArrowUpDown className="w-7 h-7 text-primary" />
-            Token Swap
+            Cetus Swap
           </DialogTitle>
           <DialogDescription className="text-muted-foreground font-cyber">
-            SUI ↔ GT swaps • Rate: 1 SUI = {exchangeRate} GT
+            Real testnet trading with Cetus protocol • Live pools • Actual liquidity
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6 mt-6">
-          {/* Testnet Notice */}
-          <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
-            <div className="flex items-center gap-2 text-sm text-blue-400 font-cyber">
-              <Info className="w-4 h-4" />
-              <span>Testnet: Only SUI ↔ GT swaps available. USDC/USDT coming soon!</span>
+          {/* SDK Status */}
+          {!cetusSDK && (
+            <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3">
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 text-yellow-400 animate-spin" />
+                <p className="text-yellow-400 text-sm font-cyber">Connecting to Cetus testnet...</p>
+              </div>
             </div>
-          </div>
+          )}
 
+          {/* Success Message */}
           {txDigest && (
             <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-4">
               <div className="flex items-start gap-3">
-                <div className="text-green-400 text-2xl">✅</div>
+                <CheckCircle className="w-5 h-5 text-green-400 mt-0.5" />
                 <div className="flex-1">
-                  <p className="text-green-400 font-cyber font-bold mb-1">Swap Completed Successfully!</p>
-                  <p className="text-xs text-green-400/80 font-cyber mb-2">Transaction Hash: {txDigest.slice(0, 20)}...</p>
-                  <Button onClick={openExplorer} variant="outline" size="sm" className="border-green-500/50 text-green-400 hover:bg-green-500/20 font-cyber">
+                  <p className="text-green-400 font-cyber font-bold mb-1">Testnet Swap Completed!</p>
+                  <Button
+                    onClick={() => window.open(`https://suivision.xyz/txblock/${txDigest}?network=${NETWORK}`, '_blank')}
+                    variant="outline"
+                    size="sm"
+                    className="border-green-500/50 text-green-400 hover:bg-green-500/20 font-cyber"
+                  >
                     <ExternalLink className="w-3 h-3 mr-1" />
-                    View on Explorer
+                    View on Testnet Explorer
                   </Button>
                 </div>
               </div>
             </div>
           )}
 
-          <div className="space-y-4">
-            <div className="bg-black/40 border border-primary/30 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-3">
-                <Label className="font-cyber text-accent">From</Label>
-                <span className="text-xs text-muted-foreground font-cyber">
-                  Balance: {getAvailableBalance(fromCurrency).toFixed(fromCurrency === 'GAME_TOKEN' ? 0 : 4)} {getCurrencyDisplayName(fromCurrency)}
-                </span>
-              </div>
-              <div className="flex gap-3">
-                <Select value={fromCurrency} onValueChange={(value: any) => setFromCurrency(value)}>
-                  <SelectTrigger className="w-32 bg-black/40 border-primary/30">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="SUI">{getCurrencyIcon('SUI')} SUI</SelectItem>
-                    <SelectItem value="GAME_TOKEN">{getCurrencyIcon('GAME_TOKEN')} GT</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Input
-                  type="number"
-                  placeholder="0.00"
-                  value={fromAmount}
-                  onChange={(e) => handleFromAmountChange(e.target.value)}
-                  className="flex-1 font-cyber bg-black/40 border-primary/30 text-lg"
-                  step={fromCurrency === 'GAME_TOKEN' ? '1' : '0.0001'}
-                  min="0"
-                  max={getAvailableBalance(fromCurrency)}
-                  disabled={isSwapping}
-                />
-              </div>
-              <Button
-                onClick={() => handleFromAmountChange(getAvailableBalance(fromCurrency).toString())}
-                variant="ghost"
-                size="sm"
-                className="mt-2 text-xs text-primary hover:text-primary/80 font-cyber"
-                disabled={isSwapping}
-              >
-                Use Max
-              </Button>
+          {/* From Section */}
+          <div className="bg-black/40 border border-primary/30 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <Label className="font-cyber text-accent">From</Label>
+              <span className="text-xs text-muted-foreground font-cyber">
+                Balance: {getAvailableBalance(fromCurrency).toFixed(fromCurrency === 'SUI' ? 4 : 2)} {fromCurrency}
+              </span>
             </div>
-
-            <div className="flex justify-center">
-              <Button
-                onClick={handleCurrencySwap}
-                variant="outline"
-                size="icon"
-                className="rounded-full border-primary/50 hover:bg-primary/20 hover:scale-110 transition-all duration-300"
-                disabled={isSwapping}
-              >
-                <ArrowUpDown className="w-4 h-4" />
-              </Button>
+            <div className="flex gap-3">
+              <Select value={fromCurrency} onValueChange={(value: any) => setFromCurrency(value)}>
+                <SelectTrigger className="w-32 bg-black/40 border-primary/30">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="SUI">{getCurrencyIcon('SUI')} SUI</SelectItem>
+                  <SelectItem value="USDC">{getCurrencyIcon('USDC')} USDC</SelectItem>
+                  <SelectItem value="USDT">{getCurrencyIcon('USDT')} USDT</SelectItem>
+                </SelectContent>
+              </Select>
+              <Input
+                type="number"
+                placeholder="0.00"
+                value={fromAmount}
+                onChange={(e) => setFromAmount(e.target.value)}
+                className="flex-1 font-cyber bg-black/40 border-primary/30 text-lg"
+                step={fromCurrency === 'SUI' ? '0.0001' : '0.01'}
+                disabled={isSwapping || !cetusSDK}
+              />
             </div>
+            <Button
+              onClick={() => setFromAmount(getAvailableBalance(fromCurrency).toString())}
+              variant="ghost"
+              size="sm"
+              className="mt-2 text-xs text-primary hover:text-primary/80 font-cyber"
+              disabled={isSwapping || !cetusSDK}
+            >
+              Use Max
+            </Button>
+          </div>
 
-            <div className="bg-black/40 border border-accent/30 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-3">
-                <Label className="font-cyber text-accent">To</Label>
-                <span className="text-xs text-muted-foreground font-cyber">
-                  Balance: {getAvailableBalance(toCurrency).toFixed(toCurrency === 'GAME_TOKEN' ? 0 : 4)} {getCurrencyDisplayName(toCurrency)}
-                </span>
-              </div>
-              <div className="flex gap-3">
-                <Select value={toCurrency} onValueChange={(value: any) => setToCurrency(value)}>
-                  <SelectTrigger className="w-32 bg-black/40 border-accent/30">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="SUI">{getCurrencyIcon('SUI')} SUI</SelectItem>
-                    <SelectItem value="GAME_TOKEN">{getCurrencyIcon('GAME_TOKEN')} GT</SelectItem>
-                  </SelectContent>
-                </Select>
+          {/* Swap Direction Button */}
+          <div className="flex justify-center">
+            <Button
+              onClick={handleCurrencySwap}
+              variant="outline"
+              size="icon"
+              className="rounded-full border-primary/50 hover:bg-primary/20 hover:scale-110 transition-all duration-300"
+              disabled={isSwapping || isCalculating || !cetusSDK}
+            >
+              <ArrowUpDown className="w-4 h-4" />
+            </Button>
+          </div>
+
+          {/* To Section */}
+          <div className="bg-black/40 border border-accent/30 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <Label className="font-cyber text-accent">To</Label>
+              <span className="text-xs text-muted-foreground font-cyber">
+                Balance: {getAvailableBalance(toCurrency).toFixed(toCurrency === 'SUI' ? 4 : 2)} {toCurrency}
+              </span>
+            </div>
+            <div className="flex gap-3">
+              <Select value={toCurrency} onValueChange={(value: any) => setToCurrency(value)}>
+                <SelectTrigger className="w-32 bg-black/40 border-accent/30">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="SUI">{getCurrencyIcon('SUI')} SUI</SelectItem>
+                  <SelectItem value="USDC">{getCurrencyIcon('USDC')} USDC</SelectItem>
+                  <SelectItem value="USDT">{getCurrencyIcon('USDT')} USDT</SelectItem>
+                </SelectContent>
+              </Select>
+              <div className="relative flex-1">
                 <Input
                   type="number"
                   placeholder="0.00"
                   value={toAmount}
                   readOnly
-                  className="flex-1 font-cyber bg-black/20 border-accent/30 text-lg text-accent"
+                  className="flex-1 font-cyber bg-black/20 border-accent/30 text-lg text-accent pr-10"
                 />
+                {isCalculating && (
+                  <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 animate-spin text-accent" />
+                )}
               </div>
             </div>
           </div>
 
-          {fromAmount && (
-            <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
-              <div className="flex items-center gap-2 text-sm text-blue-400 font-cyber">
-                <span>Exchange Rate:</span>
-                <span className="font-bold">1 {getCurrencyDisplayName(fromCurrency)} = {getExchangeRate(fromCurrency, toCurrency).toFixed(fromCurrency === 'GAME_TOKEN' ? 8 : 0)} {getCurrencyDisplayName(toCurrency)}</span>
+          {/* Live Pool Information */}
+          {poolInfo && preSwapResult && (
+            <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-blue-400 font-cyber font-bold">Live Testnet Pool Data</h4>
+                <Button
+                  onClick={() => calculateSwapAmount(fromAmount, fromCurrency, toCurrency)}
+                  variant="ghost"
+                  size="sm"
+                  disabled={isCalculating || !cetusSDK}
+                >
+                  <RefreshCw className={`w-3 h-3 ${isCalculating ? 'animate-spin' : ''}`} />
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-sm font-cyber">
+                <div className="flex justify-between">
+                  <span className="text-blue-400">Pool:</span>
+                  <span className="text-blue-300">{poolInfo.id.slice(0, 8)}...</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-blue-400">Fee:</span>
+                  <span className="text-blue-300">{(Number(poolInfo.fee_rate || 0) / 10000).toFixed(2)}%</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-blue-400">Rate:</span>
+                  <span className="text-blue-300">1 {fromCurrency} = {(Number(toAmount) / Number(fromAmount)).toFixed(4)} {toCurrency}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-blue-400">Est. Out:</span>
+                  <span className="text-blue-300">{Number(preSwapResult.estimated_amount_out / Math.pow(10, getDecimals(toCurrency))).toFixed(4)}</span>
+                </div>
               </div>
             </div>
           )}
 
-          {fromCurrency === 'GAME_TOKEN' && toAmount && (
-            <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3">
-              <div className="flex items-center justify-between text-sm font-cyber">
-                <span className="text-yellow-400">SUI Reserve Available:</span>
-                <span className="text-yellow-300 font-bold">{reserves.sui.toFixed(4)} SUI</span>
-              </div>
+          {/* Slippage Settings */}
+          <div className="bg-black/40 border border-primary/30 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <Label className="font-cyber text-accent">Slippage Tolerance</Label>
+              <span className="text-xs text-muted-foreground font-cyber">
+                Max price movement
+              </span>
             </div>
-          )}
-
-          {fromAmount && (
-            <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-3">
-              <div className="flex items-center justify-between text-sm font-cyber">
-                <span className="text-orange-400">Estimated Gas Fee:</span>
-                <span className="text-orange-300 font-bold">{estimatedGasFee.toFixed(4)} SUI</span>
-              </div>
-            </div>
-          )}
-
-          <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-3">
-            <div className="flex items-center gap-2 text-xs text-green-400 font-cyber">
-              <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-              <span>Clean testnet implementation • Business-optimized rates • 1000 GT ≈ $1 gaming value</span>
+            <div className="flex gap-2">
+              {['0.1', '0.5', '1.0'].map((preset) => (
+                <Button
+                  key={preset}
+                  onClick={() => setSlippage(preset)}
+                  variant={slippage === preset ? "default" : "outline"}
+                  size="sm"
+                  className="font-cyber text-xs"
+                  disabled={isSwapping}
+                >
+                  {preset}%
+                </Button>
+              ))}
+              <Input
+                type="number"
+                placeholder="Custom"
+                value={slippage}
+                onChange={(e) => setSlippage(e.target.value)}
+                className="w-20 text-xs font-cyber bg-black/40 border-primary/30"
+                step="0.1"
+                min="0.1"
+                max="50"
+                disabled={isSwapping}
+              />
             </div>
           </div>
 
+          {/* Action Buttons */}
           <div className="flex gap-3">
             <Button
               onClick={handleClose}
@@ -581,23 +644,80 @@ export const SwapModal = ({ open, onClose, currentBalances, onSwapSuccess, gameT
             </Button>
             <Button
               onClick={executeSwap}
-              disabled={!fromAmount || !toAmount || isSwapping || !!validateSwap() || !!txDigest}
+              disabled={!fromAmount || !toAmount || isSwapping || isCalculating || !!validateSwap() || !!txDigest}
               className="flex-1 bg-gradient-to-r from-primary to-accent text-background font-gaming font-bold hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:hover:scale-100"
             >
               {isSwapping ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Executing...
+                  Swapping...
                 </>
               ) : txDigest ? (
                 '✅ Complete'
+              ) : isCalculating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Getting Quote...
+                </>
               ) : (
                 <>
                   <ArrowUpDown className="mr-2 h-4 w-4" />
-                  Swap Tokens
+                  Execute Testnet Swap
                 </>
               )}
             </Button>
+          </div>
+
+          {/* Validation Error */}
+          {validateSwap() && (
+            <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-400" />
+                <p className="text-red-400 text-sm font-cyber">{validateSwap()}</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer Information */}
+        <div className="space-y-3 mt-6">
+          <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-3">
+            <div className="flex items-center gap-2 text-xs text-green-400 font-cyber">
+              <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+              <span>Live Cetus Testnet • Real pools • Actual testnet liquidity</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3 text-xs text-muted-foreground font-cyber">
+            <div className="bg-black/20 rounded-lg p-2 text-center">
+              <div className="text-primary font-bold">SUI</div>
+              <div>{currentBalances.sui.toFixed(4)}</div>
+            </div>
+            <div className="bg-black/20 rounded-lg p-2 text-center">
+              <div className="text-accent font-bold">USDC</div>
+              <div>{currentBalances.usdc.toFixed(2)}</div>
+            </div>
+            <div className="bg-black/20 rounded-lg p-2 text-center">
+              <div className="text-accent font-bold">USDT</div>
+              <div>{currentBalances.usdt.toFixed(2)}</div>
+            </div>
+          </div>
+
+          <div className="flex justify-between items-center text-xs text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <span>Powered by</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => window.open('https://www.cetus.zone', '_blank')}
+                className="text-xs p-0 h-auto hover:text-primary"
+              >
+                Cetus Protocol <ExternalLink className="w-3 h-3 ml-1" />
+              </Button>
+            </div>
+            <div className="text-primary font-cyber">
+              Network: Sui Testnet
+            </div>
           </div>
         </div>
       </DialogContent>

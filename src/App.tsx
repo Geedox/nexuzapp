@@ -34,6 +34,7 @@ import { MarketPlaceItem } from "./lib/utils";
 import { useState } from "react";
 import { CartItem } from "./components/dashboard/MarketCartSidebar";
 import { useToast } from "./hooks/use-toast";
+import { WalletKitProvider } from '@mysten/wallet-kit';
 
 
 const queryClient = new QueryClient();
@@ -69,67 +70,69 @@ const App = () => {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <CommunityChatProvider>
-          <ProfileProvider>
-            <WalletProvider>
-              <TransactionProvider>
-                <LeaderboardProvider>
-                  <GameProvider>
-                    <GameRoomProvider>
-                      <TooltipProvider>
-                        <Toaster />
-                        <Sonner />
-                        <BrowserRouter>
-                          <Routes>
-                            <Route path="/" element={
-                              <ProtectedRoute requireAuth={false}>
-                                <Index />
-                              </ProtectedRoute>
-                            } />
-                            <Route path="/dashboard" element={
-                              <ProtectedRoute requireAuth={true}>
-                                <Dashboard />
-                              </ProtectedRoute>
-                            }>
-                              <Route index element={<DashboardHome />} />
-                              <Route path="games" element={<GamesPage />} />
-                              <Route path="leaderboards" element={<LeaderboardsPage />} />
-                              <Route path="wallet" element={<WalletPage />} />
-                              <Route path="community" element={<CommunityPage />} />
-                              <Route path="rooms" element={<RoomsPage />} />
-                              <Route path="creators" element={<CreatorsPage />} />
-                              <Route path="analytics" element={<AnalyticsPage />} />
-                              <Route path="settings" element={<SettingsPage />} />
-                              <Route path="support" element={<SupportPage />} />
-                              <Route path="marketplace" element={
-                                <MarketplacePage
-                                  onOpenCart={() => setIsCartOpen(true)}
-                                  onAddToCart={handleAddToCart}
-                                  cartItemsCount={cartItemsCount}
+      <WalletKitProvider>
+        <AuthProvider>
+          <CommunityChatProvider>
+            <ProfileProvider>
+              <WalletProvider>
+                <TransactionProvider>
+                  <LeaderboardProvider>
+                    <GameProvider>
+                      <GameRoomProvider>
+                        <TooltipProvider>
+                          <Toaster />
+                          <Sonner />
+                          <BrowserRouter>
+                            <Routes>
+                              <Route path="/" element={
+                                <ProtectedRoute requireAuth={false}>
+                                  <Index />
+                                </ProtectedRoute>
+                              } />
+                              <Route path="/dashboard" element={
+                                <ProtectedRoute requireAuth={true}>
+                                  <Dashboard />
+                                </ProtectedRoute>
+                              }>
+                                <Route index element={<DashboardHome />} />
+                                <Route path="games" element={<GamesPage />} />
+                                <Route path="leaderboards" element={<LeaderboardsPage />} />
+                                <Route path="wallet" element={<WalletPage />} />
+                                <Route path="community" element={<CommunityPage />} />
+                                <Route path="rooms" element={<RoomsPage />} />
+                                <Route path="creators" element={<CreatorsPage />} />
+                                <Route path="analytics" element={<AnalyticsPage />} />
+                                <Route path="settings" element={<SettingsPage />} />
+                                <Route path="support" element={<SupportPage />} />
+                                <Route path="marketplace" element={
+                                  <MarketplacePage
+                                    onOpenCart={() => setIsCartOpen(true)}
+                                    onAddToCart={handleAddToCart}
+                                    cartItemsCount={cartItemsCount}
+                                  />
+                                }
                                 />
-                              }
-                              />
-                            </Route>
-                            <Route path="/payment-callback" element={
-                              <ProtectedRoute requireAuth={true}>
-                                <PaymentCallback />
-                              </ProtectedRoute>
-                            } />
-                            <Route path="*" element={<NotFound />} />
-                            <Route path="/admin" element={<AdminLogin />} />
-                            <Route path="/admin/dashboard" element={<AdminDashboard />} />
-                          </Routes>
-                        </BrowserRouter>
-                      </TooltipProvider>
-                    </GameRoomProvider>
-                  </GameProvider>
-                </LeaderboardProvider>
-              </TransactionProvider>
-            </WalletProvider>
-          </ProfileProvider>
-        </CommunityChatProvider>
-      </AuthProvider>
+                              </Route>
+                              <Route path="/payment-callback" element={
+                                <ProtectedRoute requireAuth={true}>
+                                  <PaymentCallback />
+                                </ProtectedRoute>
+                              } />
+                              <Route path="*" element={<NotFound />} />
+                              <Route path="/admin" element={<AdminLogin />} />
+                              <Route path="/admin/dashboard" element={<AdminDashboard />} />
+                            </Routes>
+                          </BrowserRouter>
+                        </TooltipProvider>
+                      </GameRoomProvider>
+                    </GameProvider>
+                  </LeaderboardProvider>
+                </TransactionProvider>
+              </WalletProvider>
+            </ProfileProvider>
+          </CommunityChatProvider>
+        </AuthProvider>
+      </WalletKitProvider>
     </QueryClientProvider>
   );
 };

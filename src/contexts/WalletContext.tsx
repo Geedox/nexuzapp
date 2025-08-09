@@ -4,12 +4,10 @@ import { useProfile } from '@/contexts/ProfileContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { SuiClient, getFullnodeUrl } from '@mysten/sui.js/client';
-import { initGameTokenManager } from '@/integrations/smartcontracts/gameToken';
 
 interface WalletContextType {
   // Blockchain balances
   suiBalance: number;
-  gameTokenBalance: number;
   usdcBalance: number;
   usdtBalance: number;
 
@@ -20,7 +18,8 @@ interface WalletContextType {
   // Functions
   refreshBalances: () => Promise<void>;
   getTotalBalanceInUSD: () => number;
-  gameTokenManager: any;
+  suiClient: SuiClient;
+  saveTransactionToDatabase: (transactionData: any) => Promise<void>;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -38,50 +37,36 @@ const EXCHANGE_RATES = {
   SUI: 2.5, // 1 SUI = $2.5 USD (example rate)
   USDC: 1,
   USDT: 1,
-  GAME_TOKEN: 0.01, // 1 GT = $0.01 USD (example rate)
 };
 
 export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
   const [suiBalance, setSuiBalance] = useState<number>(0);
-  const [gameTokenBalance, setGameTokenBalance] = useState<number>(0);
   const [usdcBalance, setUsdcBalance] = useState<number>(0);
   const [usdtBalance, setUsdtBalance] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [refreshingBalances, setRefreshingBalances] = useState(false);
-  const [gameTokenManager, setGameTokenManager] = useState(null);
 
   const { user } = useAuth();
   const { profile } = useProfile();
   const { toast } = useToast();
 
-  // Initialize Sui client and GameToken manager
+  // Initialize Sui client
   const NETWORK = 'testnet';
   const suiClient = new SuiClient({ url: getFullnodeUrl(NETWORK) });
 
-  // CORRECTED USDC and USDT token types on Sui (these are the actual testnet addresses)
+  // Token types for Sui testnet
   const TOKEN_TYPES = {
-    // Testnet USDC - check your actual wallet on Sui explorer for the correct type
-    USDC: '0xa1ec7fc00a6f40db9693ad1415d0c193ad3906494428cf252621037bd7117e29::usdc::USDC',
-    // Testnet USDT - check your actual wallet on Sui explorer for the correct type  
-    USDT: '0x26b3bc67befc214058ca78ea9a2690298d731a2d4ab88c1474ac44fd8c5b13ee::usdt::USDT',
-    // Alternative common testnet tokens - try these if above don't work
-    USDC_ALT: '0x5d4b302506645c37ff133b98c4b50a5ae14841659738d6d733d59d0d217a93bf::coin::COIN',
+    USDC: '0x5d4b302506645c37ff133b98c4b50a5ae14841659738d6d733d59d0d217a93bf::coin::COIN',
+    USDT: '0xc060006111016b8a020ad5b33834984a437aaa7d3c74c18e09a95d48aceab08c::coin::COIN',
   };
 
-  // Initialize GameToken manager
-  useEffect(() => {
-    const manager = initGameTokenManager(suiClient, NETWORK);
-    setGameTokenManager(manager);
-  }, []);
-
-  // Create wallet record in database when wallet is first created
+  // Create wallet record in database
   const createWalletRecord = async (address: string) => {
     if (!user) return;
 
     try {
       console.log('🏦 Creating wallet record in database...');
 
-      // Create separate records for each currency type (as per your DB schema)
       const walletRecords = [
         {
           user_id: user.id,
@@ -89,8 +74,6 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
           balance: 0,
           wallet_address: address,
           is_connected: true,
-          sui_balance: 0,
-          game_tokens_balance: 0,
         },
         {
           user_id: user.id,
@@ -98,8 +81,6 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
           balance: 0,
           wallet_address: address,
           is_connected: true,
-          sui_balance: 0,
-          game_tokens_balance: 0,
         },
         {
           user_id: user.id,
@@ -107,17 +88,6 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
           balance: 0,
           wallet_address: address,
           is_connected: true,
-          sui_balance: 0,
-          game_tokens_balance: 0,
-        },
-        {
-          user_id: user.id,
-          currency: 'GAME_TOKEN',
-          balance: 0,
-          wallet_address: address,
-          is_connected: true,
-          sui_balance: 0,
-          game_tokens_balance: 0,
         }
       ];
 
@@ -129,7 +99,6 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
         });
 
       if (error) throw error;
-
       console.log('✅ Wallet records created successfully');
     } catch (error) {
       console.error('❌ Error creating wallet record:', error);
@@ -138,7 +107,7 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
 
   // Fetch blockchain balances
   const fetchBlockchainBalances = async () => {
-    if (!profile?.sui_wallet_data?.address || !gameTokenManager) return;
+    if (!profile?.sui_wallet_data?.address) return;
 
     try {
       const address = profile.sui_wallet_data.address;
@@ -152,49 +121,21 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
       setSuiBalance(suiAmount);
       console.log('💰 SUI Balance:', suiAmount);
 
-      // Get Game Token balance using our manager
-      const gtBalance = await gameTokenManager.getGameTokenBalance(address);
-      setGameTokenBalance(gtBalance);
-      console.log('🎮 Game Token Balance:', gtBalance);
-
-      // Try multiple USDC token types to find the correct one
+      // Get USDC balance
       let usdcAmount = 0;
-      const usdcTypes = [TOKEN_TYPES.USDC, TOKEN_TYPES.USDC_ALT];
-
-      for (const tokenType of usdcTypes) {
-        try {
-          console.log('🔍 Trying USDC token type:', tokenType);
-          const usdcBalanceResult = await suiClient.getBalance({
-            owner: address,
-            coinType: tokenType,
-          });
-          const balance = Number(usdcBalanceResult.totalBalance);
-          if (balance > 0) {
-            // USDC typically has 6 decimals
-            usdcAmount = balance / 1_000_000;
-            console.log('💎 Found USDC Balance:', usdcAmount, 'with type:', tokenType);
-            break;
-          }
-        } catch (error) {
-          console.log('❌ USDC type failed:', tokenType, error.message);
-        }
+      try {
+        const usdcBalanceResult = await suiClient.getBalance({
+          owner: address,
+          coinType: TOKEN_TYPES.USDC,
+        });
+        usdcAmount = Number(usdcBalanceResult.totalBalance) / 1_000_000;
+        console.log('💎 USDC Balance:', usdcAmount);
+      } catch (error) {
+        console.log('❌ USDC not found:', error.message);
       }
       setUsdcBalance(usdcAmount);
 
-      // Try to get all coin types to find what user actually has
-      try {
-        console.log('🔍 Getting all coins for debugging...');
-        const allCoins = await suiClient.getAllCoins({ owner: address });
-        console.log('📊 All coins found:', allCoins.data.map(coin => ({
-          type: coin.coinType,
-          balance: coin.balance,
-          formatted: Number(coin.balance) / 1_000_000
-        })));
-      } catch (error) {
-        console.log('Debug coin fetch failed:', error);
-      }
-
-      // Get USDT balance (try the token type)
+      // Get USDT balance
       let usdtAmount = 0;
       try {
         const usdtBalanceResult = await suiClient.getBalance({
@@ -202,15 +143,14 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
           coinType: TOKEN_TYPES.USDT,
         });
         usdtAmount = Number(usdtBalanceResult.totalBalance) / 1_000_000;
-        setUsdtBalance(usdtAmount);
         console.log('🟢 USDT Balance:', usdtAmount);
       } catch (error) {
         console.log('❌ USDT not found:', error.message);
-        setUsdtBalance(0);
       }
+      setUsdtBalance(usdtAmount);
 
       // Update database with current balances
-      await updateDatabaseBalances(suiAmount, gtBalance, usdcAmount, usdtAmount, address);
+      await updateDatabaseBalances(suiAmount, usdcAmount, usdtAmount, address);
 
     } catch (error) {
       console.error('❌ Error fetching blockchain balances:', error);
@@ -222,10 +162,9 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  // Update database with current balances (FIXED)
+  // Update database with current balances
   const updateDatabaseBalances = async (
     suiAmount: number,
-    gtAmount: number,
     usdcAmount: number,
     usdtAmount: number,
     address: string
@@ -235,7 +174,6 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       console.log('🏦 Updating database balances...');
 
-      // Update separate records for each currency (matching your DB schema)
       const updates = [
         {
           user_id: user.id,
@@ -243,8 +181,6 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
           balance: suiAmount,
           wallet_address: address,
           is_connected: true,
-          sui_balance: suiAmount,
-          game_tokens_balance: gtAmount,
           updated_at: new Date().toISOString(),
         },
         {
@@ -253,8 +189,6 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
           balance: usdcAmount,
           wallet_address: address,
           is_connected: true,
-          sui_balance: suiAmount,
-          game_tokens_balance: gtAmount,
           updated_at: new Date().toISOString(),
         },
         {
@@ -263,18 +197,6 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
           balance: usdtAmount,
           wallet_address: address,
           is_connected: true,
-          sui_balance: suiAmount,
-          game_tokens_balance: gtAmount,
-          updated_at: new Date().toISOString(),
-        },
-        {
-          user_id: user.id,
-          currency: 'GAME_TOKEN',
-          balance: gtAmount,
-          wallet_address: address,
-          is_connected: true,
-          sui_balance: suiAmount,
-          game_tokens_balance: gtAmount,
           updated_at: new Date().toISOString(),
         }
       ];
@@ -287,7 +209,6 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
         });
 
       if (error) throw error;
-
       console.log('✅ Database balances updated successfully');
     } catch (error) {
       console.error('❌ Error updating database balances:', error);
@@ -324,7 +245,6 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
         });
 
       if (error) throw error;
-
       console.log('✅ Transaction saved to database');
     } catch (error) {
       console.error('❌ Error saving transaction:', error);
@@ -333,8 +253,6 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
 
   // Refresh all balances
   const refreshBalances = async () => {
-    if (!gameTokenManager) return;
-
     setRefreshingBalances(true);
     try {
       await fetchBlockchainBalances();
@@ -348,29 +266,23 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
     return (
       (suiBalance * EXCHANGE_RATES.SUI) +
       (usdcBalance * EXCHANGE_RATES.USDC) +
-      (usdtBalance * EXCHANGE_RATES.USDT) +
-      (gameTokenBalance * EXCHANGE_RATES.GAME_TOKEN)
+      (usdtBalance * EXCHANGE_RATES.USDT)
     );
   };
 
   // Load balances when wallet is available
   useEffect(() => {
-    if (profile?.sui_wallet_data?.address && gameTokenManager) {
-      // Create wallet record if it doesn't exist
+    if (profile?.sui_wallet_data?.address) {
       createWalletRecord(profile.sui_wallet_data.address);
-
-      // Fetch current balances
       fetchBlockchainBalances().finally(() => setLoading(false));
     } else {
       setLoading(false);
     }
-  }, [profile?.sui_wallet_data?.address, gameTokenManager]);
+  }, [profile?.sui_wallet_data?.address]);
 
-  // Expose saveTransactionToDatabase for other components to use
   const value = {
     // Balances
     suiBalance,
-    gameTokenBalance,
     usdcBalance,
     usdtBalance,
 
@@ -381,9 +293,7 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
     // Functions
     refreshBalances,
     getTotalBalanceInUSD,
-    gameTokenManager,
-
-    // New function for saving transactions
+    suiClient,
     saveTransactionToDatabase,
   };
 

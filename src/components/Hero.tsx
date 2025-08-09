@@ -8,7 +8,7 @@ interface HeroProps {
 
 const Hero = ({ onGetStarted }: HeroProps) => {
   const [currentStat, setCurrentStat] = useState(0);
-  
+
   const stats = [
     { value: "$2.5M+", label: "Total Rewards Distributed" },
     { value: "85K+", label: "Active Gamers" },
@@ -26,12 +26,12 @@ const Hero = ({ onGetStarted }: HeroProps) => {
   return (
     <section className="min-h-screen flex items-center justify-center relative overflow-hidden floating-particles ">
       <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-purple-500/10 to-accent/20"></div>
-      
+
       {/* Animated background elements */}
       <div className="absolute top-20 left-10 w-32 h-32 border border-primary/20 rotate-45 animate-spin" style={{ animationDuration: '20s' }}></div>
       <div className="absolute bottom-20 right-10 w-24 h-24 border border-accent/20 rotate-12 animate-bounce"></div>
       <div className="absolute top-1/2 left-1/4 w-16 h-16 bg-primary/10 rounded-full animate-pulse"></div>
-      
+
       <div className="container mx-auto px-4 text-center relative z-10 mb-10">
         <div className="animate-slide-up">
           <div className="mt-28">
@@ -39,29 +39,29 @@ const Hero = ({ onGetStarted }: HeroProps) => {
               🚀 THE FUTURE OF GAMING IS HERE
             </div>
           </div>
-          
+
           <h1 className="font-gaming text-4xl md:text-6xl lg:text-7xl xl:text-8xl font-bold mb-6 glow-text animate-glow-pulse bg-gradient-to-r from-primary via-purple-400 to-accent bg-clip-text text-transparent">
             NEXUZ ARENA
           </h1>
-          
+
           <p className="text-2xl md:text-3xl font-cyber font-bold text-primary mb-4 animate-fade-in">
             DECENTRALIZED GAMING MULTIVERSE
           </p>
-          
+
           <p className="text-lg md:text-xl text-foreground/90 mb-8 max-w-4xl mx-auto leading-relaxed">
-            Create competitive games, host epic tournaments, and earn crypto rewards. 
+            Create competitive games, host epic tournaments, and earn crypto rewards.
             Build your gaming empire in the most advanced Web3 gaming ecosystem ever created.
           </p>
-          
+
           <div className="flex flex-col sm:flex-row gap-6 justify-center items-center mb-16">
-            <Button 
+            <Button
               size="lg"
               onClick={onGetStarted}
               className="bg-gradient-to-r from-primary to-purple-600 hover:from-primary/80 hover:to-purple-500 text-white neon-border text-xl px-8 md:px-12 py-6 font-gaming transform hover:scale-105 transition-all duration-300 hologram-effect"
             >
               🎮 ENTER THE ARENA
             </Button>
-            <Button 
+            <Button
               size="lg"
               variant="outline"
               className="border-2 border-accent text-accent hover:bg-accent/20 text-xl px-12 py-6 font-gaming transform hover:scale-105 transition-all duration-300 "
@@ -89,13 +89,13 @@ const Hero = ({ onGetStarted }: HeroProps) => {
               <h3 className="font-gaming text-lg font-bold text-primary mb-2">CREATE GAMES</h3>
               <p className="text-sm text-foreground/80">Build highscore & multiplayer games</p>
             </div>
-            
+
             <div className="bg-gradient-to-br from-accent/20 to-blue-500/20 p-6 rounded-xl border border-accent/30 hover:border-accent/60 transition-all duration-300 transform hover:scale-105 hologram-effect md:animate-float" style={{ animationDelay: '2s' }}>
               <div className="text-4xl mb-4">🏆</div>
               <h3 className="font-gaming text-lg font-bold text-accent mb-2">HOST TOURNAMENTS</h3>
               <p className="text-sm text-foreground/80">Public & private competitions</p>
             </div>
-            
+
             <div className="bg-gradient-to-br from-purple-500/20 to-pink-500/20 p-6 rounded-xl border border-purple-400/30 hover:border-purple-400/60 transition-all duration-300 transform hover:scale-105 md:animate-float" style={{ animationDelay: '4s' }}>
               <div className="text-4xl mb-4">💰</div>
               <h3 className="font-gaming text-lg font-bold text-purple-400 mb-2">EARN CRYPTO</h3>
