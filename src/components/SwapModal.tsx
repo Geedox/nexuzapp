@@ -352,8 +352,8 @@ export const CetusSwapModal = ({
       console.log("💊 Slippage protection:", `${slippage}%`);
       console.log("📊 Amount limit:", amount_limit.toString());
       // remove 0.5% charges from the swap and send to the gameroom contract
-      const amountToRemove = Number(preSwapResult.amount) * 0.005;
-
+      // const amountToRemove = Number(preSwapResult.amount) * 0.005;
+      // const amountToSend =
       // Create swap payload exactly as shown in Cetus documentation
       const swap_payload = await cetusSDK.Swap.createSwapPayload({
         pool_id: poolInfo.id,
