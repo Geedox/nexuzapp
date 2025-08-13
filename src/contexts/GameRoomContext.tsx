@@ -2,12 +2,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // @ts-nocheck
 
-import { createContext, useContext, useEffect, useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
-import { useWallet } from '@/contexts/WalletContext';
-import { useTransaction } from '@/contexts/TransactionContext';
+import { createContext, useContext, useEffect, useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { useWallet } from "@/contexts/WalletContext";
+import { useTransaction } from "@/contexts/TransactionContext";
 
 interface GameRoom {
   id: string;
@@ -16,7 +16,7 @@ interface GameRoom {
   game_instance_id: string | null;
   creator_id: string;
   entry_fee: number;
-  currency: 'USDC' | 'USDT' | 'NGN';
+  currency: "USDC" | "USDT" | "NGN";
   max_players: number;
   current_players: number;
   min_players_to_start: number;
@@ -25,7 +25,7 @@ interface GameRoom {
   is_sponsored: boolean;
   sponsor_amount: number;
   winner_split_rule: string;
-  status: 'waiting' | 'starting' | 'ongoing' | 'completed' | 'cancelled';
+  status: "waiting" | "starting" | "ongoing" | "completed" | "cancelled";
   start_time: string;
   end_time: string;
   actual_start_time: string | null;
@@ -45,7 +45,7 @@ interface GameRoomParticipant {
   user_id: string;
   wallet_id: string;
   entry_transaction_id: string | null;
-  payment_currency: 'USDC' | 'USDT' | 'NGN';
+  payment_currency: "USDC" | "USDT" | "NGN";
   payment_amount: number;
   score: number;
   final_position: number | null;
@@ -61,7 +61,7 @@ interface CreateRoomData {
   name: string;
   gameId: string;
   entryFee: number;
-  currency: 'USDC' | 'USDT' | 'NGN';
+  currency: "USDC" | "USDT" | "NGN";
   maxPlayers: number;
   isPrivate: boolean;
   winnerSplitRule: string;
@@ -84,20 +84,29 @@ interface GameRoomContextType {
   getRoomDetails: (roomId: string) => Promise<GameRoom | null>;
   getRoomParticipants: (roomId: string) => Promise<GameRoomParticipant[]>;
   updateGameScore: (roomId: string, score: number) => Promise<void>;
-  completeGame: (roomId: string, winners: { userId: string; position: number }[]) => Promise<void>;
+  completeGame: (
+    roomId: string,
+    winners: { userId: string; position: number }[]
+  ) => Promise<void>;
 }
 
-const GameRoomContext = createContext<GameRoomContextType | undefined>(undefined);
+const GameRoomContext = createContext<GameRoomContextType | undefined>(
+  undefined
+);
 
 export const useGameRoom = () => {
   const context = useContext(GameRoomContext);
   if (context === undefined) {
-    throw new Error('useGameRoom must be used within a GameRoomProvider');
+    throw new Error("useGameRoom must be used within a GameRoomProvider");
   }
   return context;
 };
 
-export const GameRoomProvider = ({ children }: { children: React.ReactNode }) => {
+export const GameRoomProvider = ({
+  children,
+}: {
+  children: React.ReactNode;
+}) => {
   const [rooms, setRooms] = useState<GameRoom[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -110,30 +119,30 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
   // Function to get prize split percentages based on winner split rule
   const getPrizeSplitPercentages = (splitRule: string) => {
     const splits = {
-      'winner_takes_all': [{ position: 1, percentage: 100 }],
-      'top_2': [
+      winner_takes_all: [{ position: 1, percentage: 100 }],
+      top_2: [
         { position: 1, percentage: 60 },
-        { position: 2, percentage: 40 }
+        { position: 2, percentage: 40 },
       ],
-      'top_3': [
+      top_3: [
         { position: 1, percentage: 50 },
         { position: 2, percentage: 30 },
-        { position: 3, percentage: 20 }
+        { position: 3, percentage: 20 },
       ],
-      'top_4': [
+      top_4: [
         { position: 1, percentage: 40 },
         { position: 2, percentage: 30 },
         { position: 3, percentage: 20 },
-        { position: 4, percentage: 10 }
+        { position: 4, percentage: 10 },
       ],
-      'top_5': [
+      top_5: [
         { position: 1, percentage: 30 },
         { position: 2, percentage: 25 },
         { position: 3, percentage: 20 },
         { position: 4, percentage: 15 },
-        { position: 5, percentage: 10 }
+        { position: 5, percentage: 10 },
       ],
-      'top_10': [
+      top_10: [
         { position: 1, percentage: 20 },
         { position: 2, percentage: 15 },
         { position: 3, percentage: 12 },
@@ -143,25 +152,27 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
         { position: 7, percentage: 7 },
         { position: 8, percentage: 7 },
         { position: 9, percentage: 7 },
-        { position: 10, percentage: 6 }
-      ]
+        { position: 10, percentage: 6 },
+      ],
     };
 
-    return splits[splitRule] || splits['winner_takes_all'];
+    return splits[splitRule] || splits["winner_takes_all"];
   };
 
   // Function to determine winners based on scores and split rule
   const determineWinners = (participants: any[], splitRule: string) => {
     // Sort participants by score in descending order
-    const sortedParticipants = [...participants].sort((a, b) => (b.score || 0) - (a.score || 0));
-    
+    const sortedParticipants = [...participants].sort(
+      (a, b) => (b.score || 0) - (a.score || 0)
+    );
+
     const winnerCounts = {
-      'winner_takes_all': 1,
-      'top_2': 2,
-      'top_3': 3,
-      'top_4': 4,
-      'top_5': 5,
-      'top_10': 10
+      winner_takes_all: 1,
+      top_2: 2,
+      top_3: 3,
+      top_4: 4,
+      top_5: 5,
+      top_10: 10,
     };
 
     const maxWinners = winnerCounts[splitRule] || 1;
@@ -172,15 +183,19 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
       .map((participant, index) => ({
         userId: participant.user_id,
         position: index + 1,
-        participantId: participant.id
+        participantId: participant.id,
       }));
   };
 
   // Updated distributePrizes function with profile updates - replace in your GameRoomContext
-  const distributePrizes = async (room: any, participants: any[], winners: any[]) => {
+  const distributePrizes = async (
+    room: any,
+    participants: any[],
+    winners: any[]
+  ) => {
     try {
       console.log(`Starting prize distribution for room ${room.id}`);
-      
+
       // Calculate platform fee (10%)
       const platformFee = room.total_prize_pool * 0.1;
       const distributablePrize = room.total_prize_pool - platformFee;
@@ -192,7 +207,7 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
         totalPrizePool: room.total_prize_pool,
         platformFee,
         distributablePrize,
-        winnersCount: winners.length
+        winnersCount: winners.length,
       });
 
       // Track users who need profile updates
@@ -200,103 +215,107 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
 
       // Update participant positions and distribute prizes
       for (const winner of winners) {
-        const split = prizeSplits.find(s => s.position === winner.position);
+        const split = prizeSplits.find((s) => s.position === winner.position);
         if (!split) continue;
 
         const earnings = distributablePrize * (split.percentage / 100);
-        
+
         // Find participant data
-        const participant = participants.find(p => p.user_id === winner.userId);
+        const participant = participants.find(
+          (p) => p.user_id === winner.userId
+        );
         if (!participant) continue;
 
-        console.log(`Processing winner - Position ${winner.position}: ${earnings} ${room.currency}`);
+        console.log(
+          `Processing winner - Position ${winner.position}: ${earnings} ${room.currency}`
+        );
 
         // Update participant with final position and earnings
         const { error: participantError } = await supabase
-          .from('game_room_participants')
+          .from("game_room_participants")
           .update({
             final_position: winner.position,
-            earnings: earnings
+            earnings: earnings,
           })
-          .eq('room_id', room.id)
-          .eq('user_id', winner.userId);
+          .eq("room_id", room.id)
+          .eq("user_id", winner.userId);
 
         if (participantError) {
-          console.error('Error updating participant:', participantError);
+          console.error("Error updating participant:", participantError);
           continue;
         }
 
         // Create winning transaction
         const { data: transaction, error: txError } = await supabase
-          .from('transactions')
+          .from("transactions")
           .insert({
             user_id: winner.userId,
             room_id: room.id,
-            type: 'win',
+            type: "win",
             amount: earnings,
             currency: room.currency,
-            status: 'completed',
-            description: `Winnings from room: ${room.name} (Position: ${winner.position})`
+            status: "completed",
+            description: `Winnings from room: ${room.name} (Position: ${winner.position})`,
           })
           .select()
           .single();
 
         if (txError) {
-          console.error('Error creating transaction:', txError);
+          console.error("Error creating transaction:", txError);
           continue;
         }
 
         // Update wallet balance
         const { data: walletData, error: walletFetchError } = await supabase
-          .from('wallets')
-          .select('balance')
-          .eq('user_id', winner.userId)
-          .eq('currency', room.currency)
+          .from("wallets")
+          .select("balance")
+          .eq("user_id", winner.userId)
+          .eq("currency", room.currency)
           .single();
 
         if (walletFetchError) {
-          console.error('Error fetching wallet:', walletFetchError);
+          console.error("Error fetching wallet:", walletFetchError);
           continue;
         }
 
         const newBalance = (walletData.balance || 0) + earnings;
 
         const { error: updateWalletError } = await supabase
-          .from('wallets')
+          .from("wallets")
           .update({
             balance: newBalance,
-            updated_at: new Date().toISOString()
+            updated_at: new Date().toISOString(),
           })
-          .eq('user_id', winner.userId)
-          .eq('currency', room.currency);
+          .eq("user_id", winner.userId)
+          .eq("currency", room.currency);
 
         if (updateWalletError) {
-          console.error('Error updating wallet balance:', updateWalletError);
+          console.error("Error updating wallet balance:", updateWalletError);
           continue;
         }
 
-        console.log(`Wallet updated: ${winner.userId} - New balance: ${newBalance} ${room.currency}`);
+        console.log(
+          `Wallet updated: ${winner.userId} - New balance: ${newBalance} ${room.currency}`
+        );
 
         // Update payout transaction id
         await supabase
-          .from('game_room_participants')
+          .from("game_room_participants")
           .update({ payout_transaction_id: transaction.id })
-          .eq('room_id', room.id)
-          .eq('user_id', winner.userId);
+          .eq("room_id", room.id)
+          .eq("user_id", winner.userId);
 
         // Try to record in winners table (optional - if table exists)
         try {
-          await supabase
-            .from('game_room_winners')
-            .insert({
-              room_id: room.id,
-              participant_id: participant.id,
-              position: winner.position,
-              prize_percentage: split.percentage,
-              prize_amount: earnings
-            });
+          await supabase.from("game_room_winners").insert({
+            room_id: room.id,
+            participant_id: participant.id,
+            position: winner.position,
+            prize_percentage: split.percentage,
+            prize_amount: earnings,
+          });
         } catch (winnersTableError) {
-          console.log('Winners table might not exist:', winnersTableError);
+          console.log("Winners table might not exist:", winnersTableError);
         }
 
         // Update game-specific leaderboard
@@ -306,74 +325,76 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
         try {
           // Update or create game-specific leaderboard entry
           const { data: existingGameEntry } = await supabase
-            .from('leaderboards')
-            .select('*')
-            .eq('user_id', winner.userId)
-            .eq('game_id', room.game_id)
-            .eq('period', 'all-time')
+            .from("leaderboards")
+            .select("*")
+            .eq("user_id", winner.userId)
+            .eq("game_id", room.game_id)
+            .eq("period", "all-time")
             .single();
 
           if (existingGameEntry) {
             await supabase
-              .from('leaderboards')
+              .from("leaderboards")
               .update({
-                total_score: Math.max(existingGameEntry.total_score || 0, currentScore),
+                total_score: Math.max(
+                  existingGameEntry.total_score || 0,
+                  currentScore
+                ),
                 games_played: (existingGameEntry.games_played || 0) + 1,
                 wins: (existingGameEntry.wins || 0) + (isFirstPlace ? 1 : 0),
-                total_earnings: (existingGameEntry.total_earnings || 0) + earnings,
-                updated_at: new Date().toISOString()
+                total_earnings:
+                  (existingGameEntry.total_earnings || 0) + earnings,
+                updated_at: new Date().toISOString(),
               })
-              .eq('id', existingGameEntry.id);
+              .eq("id", existingGameEntry.id);
           } else {
-            await supabase
-              .from('leaderboards')
-              .insert({
-                user_id: winner.userId,
-                game_id: room.game_id,
-                period: 'all-time',
-                total_score: currentScore,
-                games_played: 1,
-                wins: isFirstPlace ? 1 : 0,
-                total_earnings: earnings
-              });
+            await supabase.from("leaderboards").insert({
+              user_id: winner.userId,
+              game_id: room.game_id,
+              period: "all-time",
+              total_score: currentScore,
+              games_played: 1,
+              wins: isFirstPlace ? 1 : 0,
+              total_earnings: earnings,
+            });
           }
 
           // Update or create global leaderboard entry (game_id = NULL)
           const { data: existingGlobal } = await supabase
-            .from('leaderboards')
-            .select('*')
-            .eq('user_id', winner.userId)
-            .is('game_id', null)
-            .eq('period', 'all-time')
+            .from("leaderboards")
+            .select("*")
+            .eq("user_id", winner.userId)
+            .is("game_id", null)
+            .eq("period", "all-time")
             .single();
 
           if (existingGlobal) {
             await supabase
-              .from('leaderboards')
+              .from("leaderboards")
               .update({
                 games_played: (existingGlobal.games_played || 0) + 1,
                 wins: (existingGlobal.wins || 0) + (isFirstPlace ? 1 : 0),
                 total_earnings: (existingGlobal.total_earnings || 0) + earnings,
-                updated_at: new Date().toISOString()
+                updated_at: new Date().toISOString(),
               })
-              .eq('id', existingGlobal.id);
+              .eq("id", existingGlobal.id);
           } else {
-            await supabase
-              .from('leaderboards')
-              .insert({
-                user_id: winner.userId,
-                game_id: null,
-                period: 'all-time',
-                total_score: 0,
-                games_played: 1,
-                wins: isFirstPlace ? 1 : 0,
-                total_earnings: earnings
-              });
+            await supabase.from("leaderboards").insert({
+              user_id: winner.userId,
+              game_id: null,
+              period: "all-time",
+              total_score: 0,
+              games_played: 1,
+              wins: isFirstPlace ? 1 : 0,
+              total_earnings: earnings,
+            });
           }
 
-          console.log(`Updated leaderboards for user ${winner.userId}: position=${winner.position}, earnings=${earnings}`);
+          console.log(
+            `Updated leaderboards for user ${winner.userId}: position=${winner.position}, earnings=${earnings}`
+          );
         } catch (leaderboardError) {
-          console.error('Leaderboard update failed:', leaderboardError);
+          console.error("Leaderboard update failed:", leaderboardError);
         }
 
         // Mark user for profile update
@@ -382,7 +403,7 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
 
       // Update leaderboard for non-winners (they played a game but didn't win)
       for (const participant of participants) {
-        const isWinner = winners.some(w => w.userId === participant.user_id);
+        const isWinner = winners.some((w) => w.userId === participant.user_id);
         if (isWinner) continue; // Already handled above
 
         try {
@@ -390,142 +411,157 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
 
           // Update game-specific leaderboard for non-winner
           const { data: existingEntry } = await supabase
-            .from('leaderboards')
-            .select('*')
-            .eq('user_id', participant.user_id)
-            .eq('game_id', room.game_id)
-            .eq('period', 'all-time')
+            .from("leaderboards")
+            .select("*")
+            .eq("user_id", participant.user_id)
+            .eq("game_id", room.game_id)
+            .eq("period", "all-time")
             .single();
 
           if (existingEntry) {
             await supabase
-              .from('leaderboards')
+              .from("leaderboards")
               .update({
-                total_score: Math.max(existingEntry.total_score || 0, currentScore),
+                total_score: Math.max(
+                  existingEntry.total_score || 0,
+                  currentScore
+                ),
                 games_played: (existingEntry.games_played || 0) + 1,
-                updated_at: new Date().toISOString()
+                updated_at: new Date().toISOString(),
               })
-              .eq('id', existingEntry.id);
+              .eq("id", existingEntry.id);
           } else {
-            await supabase
-              .from('leaderboards')
-              .insert({
-                user_id: participant.user_id,
-                game_id: room.game_id,
-                period: 'all-time',
-                total_score: currentScore,
-                games_played: 1,
-                wins: 0,
-                total_earnings: 0
-              });
+            await supabase.from("leaderboards").insert({
+              user_id: participant.user_id,
+              game_id: room.game_id,
+              period: "all-time",
+              total_score: currentScore,
+              games_played: 1,
+              wins: 0,
+              total_earnings: 0,
+            });
           }
 
           // Update global leaderboard for non-winner
           const { data: existingGlobal } = await supabase
-            .from('leaderboards')
-            .select('*')
-            .eq('user_id', participant.user_id)
-            .is('game_id', null)
-            .eq('period', 'all-time')
+            .from("leaderboards")
+            .select("*")
+            .eq("user_id", participant.user_id)
+            .is("game_id", null)
+            .eq("period", "all-time")
             .single();
 
           if (existingGlobal) {
             await supabase
-              .from('leaderboards')
+              .from("leaderboards")
               .update({
                 games_played: (existingGlobal.games_played || 0) + 1,
-                updated_at: new Date().toISOString()
+                updated_at: new Date().toISOString(),
               })
-              .eq('id', existingGlobal.id);
+              .eq("id", existingGlobal.id);
           } else {
-            await supabase
-              .from('leaderboards')
-              .insert({
-                user_id: participant.user_id,
-                game_id: null,
-                period: 'all-time',
-                total_score: 0,
-                games_played: 1,
-                wins: 0,
-                total_earnings: 0
-              });
+            await supabase.from("leaderboards").insert({
+              user_id: participant.user_id,
+              game_id: null,
+              period: "all-time",
+              total_score: 0,
+              games_played: 1,
+              wins: 0,
+              total_earnings: 0,
+            });
           }
 
           // Mark user for profile update
           usersToUpdateProfile.add(participant.user_id);
         } catch (error) {
-          console.error(`Error updating leaderboard for non-winner ${participant.user_id}:`, error);
+          console.error(
+            `Error updating leaderboard for non-winner ${participant.user_id}:`,
+            error
+          );
         }
       }
 
       // Update profile stats for all affected users using the SQL function
-      console.log(`Updating profile stats for ${usersToUpdateProfile.size} users`);
+      console.log(
+        `Updating profile stats for ${usersToUpdateProfile.size} users`
+      );
       for (const userId of usersToUpdateProfile) {
         try {
-          await supabase.rpc('update_user_profile_stats', { p_user_id: userId });
+          await supabase.rpc("update_user_profile_stats", {
+            p_user_id: userId,
+          });
           console.log(`Profile stats updated for user ${userId}`);
         } catch (profileError) {
-          console.error(`Error updating profile stats for user ${userId}:`, profileError);
-          
+          console.error(
+            `Error updating profile stats for user ${userId}:`,
+            profileError
+          );
+
           // Fallback: manual profile update
           try {
             // Get aggregated stats from transactions
             const { data: userTransactions } = await supabase
-              .from('transactions')
-              .select('type, amount')
-              .eq('user_id', userId)
-              .eq('status', 'completed');
+              .from("transactions")
+              .select("type, amount")
+              .eq("user_id", userId)
+              .eq("status", "completed");
 
             if (userTransactions) {
               const totalEarnings = userTransactions
-                .filter(t => t.type === 'win')
+                .filter((t) => t.type === "win")
                 .reduce((sum, t) => sum + Number(t.amount), 0);
-              
-              const totalWins = userTransactions.filter(t => t.type === 'win').length;
-              
+
+              const totalWins = userTransactions.filter(
+                (t) => t.type === "win"
+              ).length;
+
               const { data: gameRooms } = await supabase
-                .from('game_room_participants')
-                .select('room_id')
-                .eq('user_id', userId)
-                .eq('is_active', true);
+                .from("game_room_participants")
+                .select("room_id")
+                .eq("user_id", userId)
+                .eq("is_active", true);
 
               const totalGames = gameRooms ? gameRooms.length : 0;
-              const experiencePoints = (totalGames * 100) + (totalWins * 500);
+              const experiencePoints = totalGames * 100 + totalWins * 500;
 
               await supabase
-                .from('profiles')
+                .from("profiles")
                 .update({
                   total_earnings: totalEarnings,
                   total_wins: totalWins,
                   total_games_played: totalGames,
                   experience_points: experiencePoints,
                   level: Math.max(1, Math.floor(experiencePoints / 1000)),
-                  updated_at: new Date().toISOString()
+                  updated_at: new Date().toISOString(),
                 })
-                .eq('id', userId);
+                .eq("id", userId);
 
               console.log(`Manual profile update completed for user ${userId}`);
             }
           } catch (fallbackError) {
-            console.error(`Fallback profile update also failed for user ${userId}:`, fallbackError);
+            console.error(
+              `Fallback profile update also failed for user ${userId}:`,
+              fallbackError
+            );
           }
         }
       }
 
       // Update room status to completed
       await supabase
-        .from('game_rooms')
+        .from("game_rooms")
         .update({
-          status: 'completed',
+          status: "completed",
           actual_end_time: new Date().toISOString(),
-          platform_fee_collected: platformFee
+          platform_fee_collected: platformFee,
         })
-        .eq('id', room.id);
+        .eq("id", room.id);
 
-      console.log(`Successfully completed game room ${room.id} and updated ${usersToUpdateProfile.size} user profiles`);
-
+      console.log(
+        `Successfully completed game room ${room.id} and updated ${usersToUpdateProfile.size} user profiles`
+      );
     } catch (error) {
-      console.error('Error distributing prizes:', error);
+      console.error("Error distributing prizes:", error);
       throw error;
     }
   };
@@ -537,55 +573,60 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
 
       // Get all active participants with their scores
       const { data: participants } = await supabase
-        .from('game_room_participants')
-        .select('*')
-        .eq('room_id', room.id)
-        .eq('is_active', true)
-        .order('score', { ascending: false });
+        .from("game_room_participants")
+        .select("*")
+        .eq("room_id", room.id)
+        .eq("is_active", true)
+        .order("score", { ascending: false });
 
       if (!participants || participants.length === 0) {
         // No participants - just mark as completed
         await supabase
-          .from('game_rooms')
+          .from("game_rooms")
           .update({
-            status: 'completed',
+            status: "completed",
             actual_end_time: new Date().toISOString(),
-            platform_fee_collected: 0
+            platform_fee_collected: 0,
           })
-          .eq('id', room.id);
-        
+          .eq("id", room.id);
+
         console.log(`Room ${room.id} completed with no participants`);
         return;
       }
 
       // If only one participant, they win everything (minus platform fee)
       if (participants.length === 1) {
-        const winners = [{ userId: participants[0].user_id, position: 1, participantId: participants[0].id }];
+        const winners = [
+          {
+            userId: participants[0].user_id,
+            position: 1,
+            participantId: participants[0].id,
+          },
+        ];
         await distributePrizes(room, participants, winners);
         return;
       }
 
       // Determine winners based on winner split rule and scores
       const winners = determineWinners(participants, room.winner_split_rule);
-      
+
       // Distribute prizes
       await distributePrizes(room, participants, winners);
-
     } catch (error) {
       console.error(`Error auto-completing game ${room.id}:`, error);
-      
+
       // If auto-completion fails, at least update the status
       try {
         await supabase
-          .from('game_rooms')
+          .from("game_rooms")
           .update({
-            status: 'completed',
+            status: "completed",
             actual_end_time: new Date().toISOString(),
-            platform_fee_collected: 0
+            platform_fee_collected: 0,
           })
-          .eq('id', room.id);
+          .eq("id", room.id);
       } catch (statusError) {
-        console.error('Error updating room status as fallback:', statusError);
+        console.error("Error updating room status as fallback:", statusError);
       }
     }
   };
@@ -594,26 +635,30 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
   const autoCompleteExpiredGames = async () => {
     try {
       const now = new Date().toISOString();
-      
+
       // Get rooms that have ended but are still marked as ongoing or waiting
       const { data: expiredRooms } = await supabase
-        .from('game_rooms')
-        .select(`
+        .from("game_rooms")
+        .select(
+          `
           *,
           participants:game_room_participants(*)
-        `)
-        .in('status', ['waiting', 'ongoing'])
-        .lt('end_time', now);
+        `
+        )
+        .in("status", ["waiting", "ongoing"])
+        .lt("end_time", now);
 
       if (!expiredRooms || expiredRooms.length === 0) return;
 
-      console.log(`Found ${expiredRooms.length} expired rooms to auto-complete`);
+      console.log(
+        `Found ${expiredRooms.length} expired rooms to auto-complete`
+      );
 
       for (const room of expiredRooms) {
         await autoCompleteGame(room);
       }
     } catch (error) {
-      console.error('Error auto-completing expired games:', error);
+      console.error("Error auto-completing expired games:", error);
     }
   };
 
@@ -621,12 +666,14 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
   const updateRoomStatuses = async () => {
     try {
       const now = new Date().toISOString();
-      
+
       // Get rooms that need status updates
       const { data: roomsToUpdate } = await supabase
-        .from('game_rooms')
-        .select('id, status, start_time, end_time, current_players, min_players_to_start, name')
-        .in('status', ['waiting', 'ongoing']);
+        .from("game_rooms")
+        .select(
+          "id, status, start_time, end_time, current_players, min_players_to_start, name"
+        )
+        .in("status", ["waiting", "ongoing"]);
 
       if (!roomsToUpdate) return;
 
@@ -639,16 +686,23 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
         const currentTime = new Date();
 
         // Check if room should be ongoing (only if enough players)
-        if (room.status === 'waiting' && currentTime >= startTime && room.current_players >= room.min_players_to_start) {
-          newStatus = 'ongoing';
+        if (
+          room.status === "waiting" &&
+          currentTime >= startTime &&
+          room.current_players >= room.min_players_to_start
+        ) {
+          newStatus = "ongoing";
           updates = {
-            status: 'ongoing',
-            actual_start_time: now
+            status: "ongoing",
+            actual_start_time: now,
           };
         }
-        
+
         // Check if room should be completed - AUTO COMPLETE WITH PRIZE DISTRIBUTION
-        if ((room.status === 'ongoing' || room.status === 'waiting') && currentTime >= endTime) {
+        if (
+          (room.status === "ongoing" || room.status === "waiting") &&
+          currentTime >= endTime
+        ) {
           // Auto-complete the game instead of just updating status
           await autoCompleteGame(room);
           continue; // Skip the manual status update since autoCompleteGame handles it
@@ -656,14 +710,11 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
 
         // Update if status changed (for non-completion updates)
         if (newStatus !== room.status) {
-          await supabase
-            .from('game_rooms')
-            .update(updates)
-            .eq('id', room.id);
+          await supabase.from("game_rooms").update(updates).eq("id", room.id);
         }
       }
     } catch (error) {
-      console.error('Error updating room statuses:', error);
+      console.error("Error updating room statuses:", error);
     }
   };
 
@@ -672,22 +723,24 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
     try {
       // First, update room statuses based on time
       await updateRoomStatuses();
-      
+
       const { data, error } = await supabase
-        .from('game_rooms')
-        .select(`
+        .from("game_rooms")
+        .select(
+          `
           *,
           game:games(*),
           creator:profiles(*),
           participants:game_room_participants(*)
-        `)
-        .or('is_private.eq.false,creator_id.eq.' + user?.id)
-        .order('created_at', { ascending: false });
+        `
+        )
+        .or("is_private.eq.false,creator_id.eq." + user?.id)
+        .order("created_at", { ascending: false });
 
       if (error) throw error;
       setRooms(data || []);
     } catch (error) {
-      console.error('Error fetching rooms:', error);
+      console.error("Error fetching rooms:", error);
       toast({
         title: "Error",
         description: "Failed to fetch game rooms",
@@ -704,39 +757,45 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
 
   // Create a new game room
   const createRoom = async (data: CreateRoomData): Promise<GameRoom> => {
-    if (!user) throw new Error('User not authenticated');
+    if (!user) throw new Error("User not authenticated");
 
     setCreating(true);
     try {
       // For sponsored rooms, check sponsor balance
       if (data.isSponsored) {
-        const wallet = wallets.find(w => w.currency === data.currency);
+        const wallet = wallets.find((w) => w.currency === data.currency);
         if (!wallet || (wallet.balance || 0) < (data.sponsorAmount || 0)) {
-          throw new Error(`Insufficient ${data.currency} balance for sponsorship`);
+          throw new Error(
+            `Insufficient ${data.currency} balance for sponsorship`
+          );
         }
       }
 
       // Create game instance first
       const { data: instanceData, error: instanceError } = await supabase
-        .from('game_instances')
+        .from("game_instances")
         .insert({
           game_id: data.gameId,
-          instance_data: {}
+          instance_data: {},
         })
         .select()
         .single();
 
       if (instanceError) {
-        console.error('Game instance error:', instanceError);
-        throw new Error(instanceError.message || 'Failed to create game instance');
+        console.error("Game instance error:", instanceError);
+        throw new Error(
+          instanceError.message || "Failed to create game instance"
+        );
       }
 
       // Generate room code for private rooms
-      const roomCode = data.isPrivate ? Math.random().toString(36).substring(2, 8).toUpperCase() : null;
+      const roomCode = data.isPrivate
+        ? Math.random().toString(36).substring(2, 8).toUpperCase()
+        : null;
 
       // Create the room
       const { data: roomData, error: roomError } = await supabase
-        .from('game_rooms')
+        .from("game_rooms")
         .insert({
           name: data.name,
           game_id: data.gameId,
@@ -752,125 +811,121 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
           end_time: data.endTime.toISOString(),
           is_sponsored: data.isSponsored || false,
           sponsor_amount: data.sponsorAmount || 0,
-          total_prize_pool: data.isSponsored ? (data.sponsorAmount || 0) : 0,
-          min_players_to_start: 2 // Default minimum players
+          total_prize_pool: data.isSponsored ? data.sponsorAmount || 0 : 0,
+          min_players_to_start: 2, // Default minimum players
         })
         .select()
         .single();
 
       if (roomError) {
-        console.error('Room creation error:', roomError);
-        throw new Error(roomError.message || 'Failed to create room');
+        console.error("Room creation error:", roomError);
+        throw new Error(roomError.message || "Failed to create room");
       }
 
       // Update game instance with room_id
       await supabase
-        .from('game_instances')
+        .from("game_instances")
         .update({ room_id: roomData.id })
-        .eq('id', instanceData.id);
+        .eq("id", instanceData.id);
 
       // Get the wallet for transactions
-      const wallet = wallets.find(w => w.currency === data.currency);
-      if (!wallet) throw new Error('Wallet not found');
+      const wallet = wallets.find((w) => w.currency === data.currency);
+      if (!wallet) throw new Error("Wallet not found");
 
       // Handle payment and auto-join for creator
       if (data.isSponsored && data.sponsorAmount) {
         // Create sponsor transaction
         const { data: sponsorTx } = await supabase
-          .from('transactions')
+          .from("transactions")
           .insert({
             user_id: user.id,
             room_id: roomData.id,
-            type: 'fee',
+            type: "fee",
             amount: data.sponsorAmount,
             currency: data.currency,
-            status: 'completed',
-            description: `Sponsorship for room: ${data.name}`
+            status: "completed",
+            description: `Sponsorship for room: ${data.name}`,
           })
           .select()
           .single();
 
         // Update wallet balance for sponsorship
         await supabase
-          .from('wallets')
-          .update({ 
+          .from("wallets")
+          .update({
             balance: (wallet.balance || 0) - data.sponsorAmount,
-            updated_at: new Date().toISOString()
+            updated_at: new Date().toISOString(),
           })
-          .eq('id', wallet.id);
+          .eq("id", wallet.id);
       } else if (data.entryFee > 0) {
         // For non-sponsored rooms, creator pays entry fee
         const { data: entryTx } = await supabase
-          .from('transactions')
+          .from("transactions")
           .insert({
             user_id: user.id,
             room_id: roomData.id,
-            type: 'fee',
+            type: "fee",
             amount: data.entryFee,
             currency: data.currency,
-            status: 'completed',
-            description: `Entry fee for room: ${data.name} (Creator)`
+            status: "completed",
+            description: `Entry fee for room: ${data.name} (Creator)`,
           })
           .select()
           .single();
 
         // Update wallet balance for entry fee
         await supabase
-          .from('wallets')
-          .update({ 
+          .from("wallets")
+          .update({
             balance: (wallet.balance || 0) - data.entryFee,
-            updated_at: new Date().toISOString()
+            updated_at: new Date().toISOString(),
           })
-          .eq('id', wallet.id);
+          .eq("id", wallet.id);
 
         // Auto-join creator as first participant
-        await supabase
-          .from('game_room_participants')
-          .insert({
-            room_id: roomData.id,
-            user_id: user.id,
-            wallet_id: wallet.id,
-            entry_transaction_id: entryTx.id,
-            payment_currency: data.currency,
-            payment_amount: data.entryFee,
-            is_active: true
-          });
+        await supabase.from("game_room_participants").insert({
+          room_id: roomData.id,
+          user_id: user.id,
+          wallet_id: wallet.id,
+          entry_transaction_id: entryTx.id,
+          payment_currency: data.currency,
+          payment_amount: data.entryFee,
+          is_active: true,
+        });
 
         // Update room's current_players count and prize pool
         await supabase
-          .from('game_rooms')
-          .update({ 
+          .from("game_rooms")
+          .update({
             current_players: 1,
-            total_prize_pool: data.entryFee
+            total_prize_pool: data.entryFee,
           })
-          .eq('id', roomData.id);
+          .eq("id", roomData.id);
       } else {
         // Free room (sponsored with 0 entry fee) - just join creator
-        await supabase
-          .from('game_room_participants')
-          .insert({
-            room_id: roomData.id,
-            user_id: user.id,
-            wallet_id: wallet.id,
-            entry_transaction_id: null,
-            payment_currency: data.currency,
-            payment_amount: 0,
-            is_active: true
-          });
+        await supabase.from("game_room_participants").insert({
+          room_id: roomData.id,
+          user_id: user.id,
+          wallet_id: wallet.id,
+          entry_transaction_id: null,
+          payment_currency: data.currency,
+          payment_amount: 0,
+          is_active: true,
+        });
 
         // Update room's current_players count
         await supabase
-          .from('game_rooms')
-          .update({ 
-            current_players: 1
+          .from("game_rooms")
+          .update({
+            current_players: 1,
           })
-          .eq('id', roomData.id);
+          .eq("id", roomData.id);
       }
 
       await refreshRooms();
       await refreshWallets();
       await refreshTransactions();
-      
+
       toast({
         title: "Success",
         description: "Game room created successfully",
@@ -878,7 +933,7 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
 
       return roomData;
     } catch (error: any) {
-      console.error('Error creating room:', error);
+      console.error("Error creating room:", error);
       toast({
         title: "Error",
         description: error.message || "Failed to create game room",
@@ -892,32 +947,35 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
 
   // Join a game room
   const joinRoom = async (roomId: string, roomCode?: string) => {
-    if (!user) throw new Error('User not authenticated');
+    if (!user) throw new Error("User not authenticated");
 
     setJoining(true);
     try {
       // Get room details
       const { data: room, error: roomError } = await supabase
-        .from('game_rooms')
-        .select('*')
-        .eq('id', roomId)
+        .from("game_rooms")
+        .select("*")
+        .eq("id", roomId)
         .single();
 
       if (roomError) throw roomError;
 
       // Check if room is private and verify code
       if (room.is_private && room.room_code !== roomCode) {
-        throw new Error('Invalid room code');
+        throw new Error("Invalid room code");
       }
 
       // Check if room is full
       if (room.current_players >= room.max_players) {
-        throw new Error('Room is full');
+        throw new Error("Room is full");
       }
 
       // Check if user has sufficient balance (only for non-sponsored rooms)
-      const wallet = wallets.find(w => w.currency === room.currency);
-      if (!room.is_sponsored && (!wallet || (wallet.balance || 0) < room.entry_fee)) {
+      const wallet = wallets.find((w) => w.currency === room.currency);
+      if (
+        !room.is_sponsored &&
+        (!wallet || (wallet.balance || 0) < room.entry_fee)
+      ) {
         throw new Error(`Insufficient ${room.currency} balance`);
       }
 
@@ -925,15 +983,15 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
       let transaction = null;
       if (!room.is_sponsored && room.entry_fee > 0) {
         const { data: txData, error: txError } = await supabase
-          .from('transactions')
+          .from("transactions")
           .insert({
             user_id: user.id,
             room_id: roomId,
-            type: 'fee',
+            type: "fee",
             amount: room.entry_fee,
             currency: room.currency,
-            status: 'completed',
-            description: `Entry fee for room: ${room.name}`
+            status: "completed",
+            description: `Entry fee for room: ${room.name}`,
           })
           .select()
           .single();
@@ -944,14 +1002,14 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
 
       // Join the room
       const { error: joinError } = await supabase
-        .from('game_room_participants')
+        .from("game_room_participants")
         .insert({
           room_id: roomId,
           user_id: user.id,
           wallet_id: wallet?.id || null,
           entry_transaction_id: transaction?.id || null,
           payment_currency: room.currency,
-          payment_amount: room.is_sponsored ? 0 : room.entry_fee
+          payment_amount: room.is_sponsored ? 0 : room.entry_fee,
         });
 
       if (joinError) throw joinError;
@@ -959,12 +1017,12 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
       // Update wallet balance (only for non-sponsored rooms)
       if (!room.is_sponsored && room.entry_fee > 0 && wallet) {
         await supabase
-          .from('wallets')
-          .update({ 
+          .from("wallets")
+          .update({
             balance: (wallet.balance || 0) - room.entry_fee,
-            updated_at: new Date().toISOString()
+            updated_at: new Date().toISOString(),
           })
-          .eq('id', wallet.id);
+          .eq("id", wallet.id);
       }
 
       await refreshWallets();
@@ -976,7 +1034,7 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
         description: "Joined room successfully",
       });
     } catch (error: any) {
-      console.error('Error joining room:', error);
+      console.error("Error joining room:", error);
       toast({
         title: "Error",
         description: error.message || "Failed to join room",
@@ -990,17 +1048,17 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
 
   // Leave a game room
   const leaveRoom = async (roomId: string) => {
-    if (!user) throw new Error('User not authenticated');
+    if (!user) throw new Error("User not authenticated");
 
     try {
       const { error } = await supabase
-        .from('game_room_participants')
-        .update({ 
+        .from("game_room_participants")
+        .update({
           is_active: false,
-          left_at: new Date().toISOString()
+          left_at: new Date().toISOString(),
         })
-        .eq('room_id', roomId)
-        .eq('user_id', user.id);
+        .eq("room_id", roomId)
+        .eq("user_id", user.id);
 
       if (error) throw error;
 
@@ -1011,7 +1069,7 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
         description: "Left room successfully",
       });
     } catch (error) {
-      console.error('Error leaving room:', error);
+      console.error("Error leaving room:", error);
       toast({
         title: "Error",
         description: "Failed to leave room",
@@ -1023,65 +1081,69 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
 
   // Enhanced cancel room function with proper refunds (no 10% charge)
   const cancelRoom = async (roomId: string) => {
-    if (!user) throw new Error('User not authenticated');
+    if (!user) throw new Error("User not authenticated");
 
     try {
       // Get room and participants
       const { data: room, error: roomError } = await supabase
-        .from('game_rooms')
-        .select(`
+        .from("game_rooms")
+        .select(
+          `
           *,
           participants:game_room_participants(*)
-        `)
-        .eq('id', roomId)
+        `
+        )
+        .eq("id", roomId)
         .single();
 
       if (roomError) throw roomError;
 
       if (room.creator_id !== user.id) {
-        throw new Error('Only room creator can cancel');
+        throw new Error("Only room creator can cancel");
       }
 
-      if (room.status !== 'waiting') {
-        throw new Error('Can only cancel rooms in waiting status');
+      if (room.status !== "waiting") {
+        throw new Error("Can only cancel rooms in waiting status");
       }
 
-      console.log(`Cancelling room ${roomId} and refunding ${room.participants.length} participants`);
+      console.log(
+        `Cancelling room ${roomId} and refunding ${room.participants.length} participants`
+      );
 
       // Refund all participants (NO 10% platform fee on cancellations)
       for (const participant of room.participants) {
         if (participant.payment_amount > 0) {
           // Create refund transaction
           const { data: refundTx, error: refundError } = await supabase
-            .from('transactions')
+            .from("transactions")
             .insert({
               user_id: participant.user_id,
               room_id: roomId,
-              type: 'deposit',
+              type: "deposit",
               amount: participant.payment_amount, // Full refund - no platform fee
               currency: participant.payment_currency,
-              status: 'completed',
-              description: `Full refund for cancelled room: ${room.name}`
+              status: "completed",
+              description: `Full refund for cancelled room: ${room.name}`,
             })
             .select()
             .single();
 
           if (refundError) {
-            console.error('Error creating refund transaction:', refundError);
+            console.error("Error creating refund transaction:", refundError);
             continue;
           }
 
           // Update wallet balance with full refund
           const { error: walletError } = await supabase
-            .from('wallets')
-            .update({ 
+            .from("wallets")
+            .update({
               balance: supabase.raw(`balance + ${participant.payment_amount}`),
-              updated_at: new Date().toISOString()
+              updated_at: new Date().toISOString(),
             })
-            .eq('id', participant.wallet_id);
+            .eq("id", participant.wallet_id);
 
           if (walletError) {
-            console.error('Error updating wallet for refund:', walletError);
+            console.error("Error updating wallet for refund:", walletError);
           }
         }
       }
@@ -1090,45 +1152,43 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
       if (room.is_sponsored && room.sponsor_amount > 0) {
         // Find the creator's wallet
         const { data: creatorWallet } = await supabase
-          .from('wallets')
-          .select('*')
-          .eq('user_id', room.creator_id)
-          .eq('currency', room.currency)
+          .from("wallets")
+          .select("*")
+          .eq("user_id", room.creator_id)
+          .eq("currency", room.currency)
           .single();
 
         if (creatorWallet) {
           // Create sponsor refund transaction
-          await supabase
-            .from('transactions')
-            .insert({
-              user_id: room.creator_id,
-              room_id: roomId,
-              type: 'deposit',
-              amount: room.sponsor_amount,
-              currency: room.currency,
-              status: 'completed',
-              description: `Sponsor refund for cancelled room: ${room.name}`
-            });
+          await supabase.from("transactions").insert({
+            user_id: room.creator_id,
+            room_id: roomId,
+            type: "deposit",
+            amount: room.sponsor_amount,
+            currency: room.currency,
+            status: "completed",
+            description: `Sponsor refund for cancelled room: ${room.name}`,
+          });
 
           // Update creator's wallet balance
           await supabase
-            .from('wallets')
-            .update({ 
+            .from("wallets")
+            .update({
               balance: supabase.raw(`balance + ${room.sponsor_amount}`),
-              updated_at: new Date().toISOString()
+              updated_at: new Date().toISOString(),
             })
-            .eq('id', creatorWallet.id);
+            .eq("id", creatorWallet.id);
         }
       }
 
       // Update room status to cancelled
       await supabase
-        .from('game_rooms')
-        .update({ 
-          status: 'cancelled',
-          updated_at: new Date().toISOString()
+        .from("game_rooms")
+        .update({
+          status: "cancelled",
+          updated_at: new Date().toISOString(),
         })
-        .eq('id', roomId);
+        .eq("id", roomId);
 
       await refreshRooms();
       await refreshWallets();
@@ -1139,7 +1199,7 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
         description: "Room cancelled and all participants fully refunded",
       });
     } catch (error: any) {
-      console.error('Error cancelling room:', error);
+      console.error("Error cancelling room:", error);
       toast({
         title: "Error",
         description: error.message || "Failed to cancel room",
@@ -1153,8 +1213,9 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
   const getRoomDetails = async (roomId: string): Promise<GameRoom | null> => {
     try {
       const { data, error } = await supabase
-        .from('game_rooms')
-        .select(`
+        .from("game_rooms")
+        .select(
+          `
           *,
           game:games(*),
           creator:profiles(*),
@@ -1162,75 +1223,83 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
             *,
             user:profiles(*)
           )
-        `)
-        .eq('id', roomId)
+        `
+        )
+        .eq("id", roomId)
         .single();
 
       if (error) throw error;
       return data;
     } catch (error) {
-      console.error('Error fetching room details:', error);
+      console.error("Error fetching room details:", error);
       return null;
     }
   };
 
   // Get room participants
-  const getRoomParticipants = async (roomId: string): Promise<GameRoomParticipant[]> => {
+  const getRoomParticipants = async (
+    roomId: string
+  ): Promise<GameRoomParticipant[]> => {
     try {
       const { data, error } = await supabase
-        .from('game_room_participants')
-        .select(`
+        .from("game_room_participants")
+        .select(
+          `
           *,
           user:profiles(*)
-        `)
-        .eq('room_id', roomId)
-        .eq('is_active', true)
-        .order('score', { ascending: false });
+        `
+        )
+        .eq("room_id", roomId)
+        .eq("is_active", true)
+        .order("score", { ascending: false });
 
       if (error) throw error;
       return data || [];
     } catch (error) {
-      console.error('Error fetching participants:', error);
+      console.error("Error fetching participants:", error);
       return [];
     }
   };
 
   // Update game score
   const updateGameScore = async (roomId: string, score: number) => {
-    if (!user) throw new Error('User not authenticated');
+    if (!user) throw new Error("User not authenticated");
 
     try {
       const { error } = await supabase
-        .from('game_room_participants')
+        .from("game_room_participants")
         .update({ score })
-        .eq('room_id', roomId)
-        .eq('user_id', user.id);
+        .eq("room_id", roomId)
+        .eq("user_id", user.id);
 
       if (error) throw error;
     } catch (error) {
-      console.error('Error updating score:', error);
+      console.error("Error updating score:", error);
       throw error;
     }
   };
 
   // Manual complete game function (for admin use)
-  const completeGame = async (roomId: string, winners: { userId: string; position: number }[]) => {
+  const completeGame = async (
+    roomId: string,
+    winners: { userId: string; position: number }[]
+  ) => {
     try {
       // Get room details
       const { data: room, error: roomError } = await supabase
-        .from('game_rooms')
-        .select('*')
-        .eq('id', roomId)
+        .from("game_rooms")
+        .select("*")
+        .eq("id", roomId)
         .single();
 
       if (roomError) throw roomError;
 
       // Get participants
       const { data: participants, error: participantsError } = await supabase
-        .from('game_room_participants')
-        .select('*')
-        .eq('room_id', roomId)
-        .eq('is_active', true);
+        .from("game_room_participants")
+        .select("*")
+        .eq("room_id", roomId)
+        .eq("is_active", true);
 
       if (participantsError) throw participantsError;
 
@@ -1246,7 +1315,7 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
         description: "Game completed and winnings distributed",
       });
     } catch (error) {
-      console.error('Error completing game:', error);
+      console.error("Error completing game:", error);
       toast({
         title: "Error",
         description: "Failed to complete game",
@@ -1288,25 +1357,33 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
     if (!user) return;
 
     const roomsSubscription = supabase
-      .channel('game_rooms_changes')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'game_rooms'
-      }, () => {
-        fetchRooms();
-      })
+      .channel("game_rooms_changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "game_rooms",
+        },
+        () => {
+          fetchRooms();
+        }
+      )
       .subscribe();
 
     const participantsSubscription = supabase
-      .channel('participants_changes')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'game_room_participants'
-      }, () => {
-        fetchRooms();
-      })
+      .channel("participants_changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "game_room_participants",
+        },
+        () => {
+          fetchRooms();
+        }
+      )
       .subscribe();
 
     return () => {
@@ -1331,5 +1408,9 @@ export const GameRoomProvider = ({ children }: { children: React.ReactNode }) =>
     completeGame,
   };
 
-  return <GameRoomContext.Provider value={value}>{children}</GameRoomContext.Provider>;
+  return (
+    <GameRoomContext.Provider value={value}>
+      {children}
+    </GameRoomContext.Provider>
+  );
 };
