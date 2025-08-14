@@ -1,33 +1,39 @@
-import { useState, useEffect } from 'react';
-import { useProfile } from '@/contexts/ProfileContext';
+import { useState, useEffect } from "react";
+import { useProfile } from "@/contexts/ProfileContext";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { Loader2, ArrowUpDown, ExternalLink, AlertCircle, CheckCircle, RefreshCw } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-import { Ed25519Keypair } from '@mysten/sui.js/keypairs/ed25519';
-import { SuiClient } from '@mysten/sui.js/client';
-import BN from 'bn.js';
+} from "@/components/ui/select";
+import {
+  Loader2,
+  ArrowUpDown,
+  ExternalLink,
+  AlertCircle,
+  CheckCircle,
+  RefreshCw,
+} from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { Ed25519Keypair } from "@mysten/sui.js/keypairs/ed25519";
+import { SuiClient } from "@mysten/sui.js/client";
+import BN from "bn.js";
+import { NETWORK } from "../constants";
 
 // Import Cetus SDK with correct exports
-import { CetusClmmSDK, SdkOptions } from '@cetusprotocol/sui-clmm-sdk';
-import Percentage from "@cetusprotocol/sui-clmm-sdk";
-import adjustForSlippage from "@cetusprotocol/sui-clmm-sdk";
-import d from "@cetusprotocol/sui-clmm-sdk";
+import { CetusClmmSDK, Pool } from "@cetusprotocol/sui-clmm-sdk";
+import { Percentage, adjustForSlippage, d } from "@cetusprotocol/common-sdk";
 
 interface CetusSwapModalProps {
   open: boolean;
@@ -43,9 +49,22 @@ interface CetusSwapModalProps {
     toAmount: string;
     toCurrency: string;
     transactionHash: string;
-    type: 'cetus';
+    type: "cetus";
   }) => void;
   suiClient: SuiClient;
+}
+
+interface PreSwapResult {
+  pool_address: string;
+  current_sqrt_price: number;
+  estimated_amount_in: string;
+  estimated_amount_out: number;
+  estimated_end_sqrt_price: number;
+  estimated_fee_amount: number;
+  is_exceed: boolean;
+  amount: string;
+  a2b: boolean;
+  by_amount_in: boolean;
 }
 
 export const CetusSwapModal = ({
@@ -53,31 +72,34 @@ export const CetusSwapModal = ({
   onClose,
   currentBalances,
   onSwapSuccess,
-  suiClient
+  suiClient,
 }: CetusSwapModalProps) => {
-  const [fromCurrency, setFromCurrency] = useState<'SUI' | 'USDC' | 'USDT'>('SUI');
-  const [toCurrency, setToCurrency] = useState<'SUI' | 'USDC' | 'USDT'>('USDC');
-  const [fromAmount, setFromAmount] = useState<string>('');
-  const [toAmount, setToAmount] = useState<string>('');
+  const [fromCurrency, setFromCurrency] = useState<"SUI" | "USDC" | "USDT">(
+    "SUI"
+  );
+  const [toCurrency, setToCurrency] = useState<"SUI" | "USDC" | "USDT">("USDC");
+  const [fromAmount, setFromAmount] = useState<string>("");
+  const [toAmount, setToAmount] = useState<string>("");
   const [isSwapping, setIsSwapping] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
-  const [txDigest, setTxDigest] = useState<string>('');
-  const [slippage, setSlippage] = useState<string>('0.5');
+  const [txDigest, setTxDigest] = useState<string>("");
+  const [slippage, setSlippage] = useState<string>("0.5");
   const [cetusSDK, setCetusSDK] = useState<CetusClmmSDK | null>(null);
-  const [poolInfo, setPoolInfo] = useState<any>(null);
-  const [preSwapResult, setPreSwapResult] = useState<any>(null);
+  const [poolInfo, setPoolInfo] = useState<Pool | null>(null);
+  const [preSwapResult, setPreSwapResult] = useState<PreSwapResult | null>(
+    null
+  );
 
   const { profile } = useProfile();
   const { toast } = useToast();
 
   // Network configuration
-  const NETWORK = 'testnet';
 
   // Token addresses for Sui testnet
   const TOKEN_ADDRESSES = {
-    SUI: '0x2::sui::SUI',
-    USDC: '0x5d4b302506645c37ff133b98c4b50a5ae14841659738d6d733d59d0d217a93bf::coin::COIN',
-    USDT: '0xc060006111016b8a020ad5b33834984a437aaa7d3c74c18e09a95d48aceab08c::coin::COIN',
+    SUI: "0x2::sui::SUI",
+    USDC: "0x5d4b302506645c37ff133b98c4b50a5ae14841659738d6d733d59d0d217a93bf::coin::COIN",
+    USDT: "0xc060006111016b8a020ad5b33834984a437aaa7d3c74c18e09a95d48aceab08c::coin::COIN",
   };
 
   // Initialize Cetus SDK for testnet
@@ -86,54 +108,58 @@ export const CetusSwapModal = ({
 
     const initCetusSDK = async () => {
       try {
-        console.log('🐋 Initializing Cetus SDK for testnet...');
-
-        const sdkOptions: SdkOptions = {
-          full_rpc_url: suiClient.transport.url,
-          simulation_account: {
-            address: '0x0000000000000000000000000000000000000000000000000000000000000000',
-          },
-        };
-
-        const sdk = new CetusClmmSDK(sdkOptions);
-        await sdk.initialize();
+        console.log("🐋 Initializing Cetus SDK for testnet...");
+        const sdk = CetusClmmSDK.createSDK({
+          env: NETWORK,
+          // @ts-expect-error suiClient is has less methods than in typed in SdkOptions
+          sui_client: suiClient,
+        });
 
         setCetusSDK(sdk);
-        console.log('✅ Cetus SDK initialized successfully for testnet');
+        console.log("✅ Cetus SDK initialized successfully for testnet");
       } catch (error) {
-        console.error('❌ Failed to initialize Cetus SDK:', error);
+        console.error("❌ Failed to initialize Cetus SDK:", error);
         toast({
           title: "SDK Initialization Failed",
-          description: "Failed to connect to Cetus protocol on testnet. Please try again.",
+          description:
+            "Failed to connect to Cetus protocol on testnet. Please try again.",
           variant: "destructive",
         });
       }
     };
 
     initCetusSDK();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, suiClient]);
 
   // Get decimals for currency
   const getDecimals = (currency: string): number => {
     switch (currency) {
-      case 'SUI': return 9;
-      case 'USDC':
-      case 'USDT': return 6;
-      default: return 9;
+      case "SUI":
+        return 9;
+      case "USDC":
+      case "USDT":
+        return 6;
+      default:
+        return 9;
     }
   };
 
   // Find pool and calculate swap using real Cetus preSwap API
-  const calculateSwapAmount = async (amount: string, from: string, to: string) => {
+  const calculateSwapAmount = async (
+    amount: string,
+    from: string,
+    to: string
+  ) => {
     if (!amount || !cetusSDK || isNaN(Number(amount)) || Number(amount) <= 0) {
-      setToAmount('');
+      setToAmount("");
       setPoolInfo(null);
       setPreSwapResult(null);
       return;
     }
 
     if (from === to) {
-      setToAmount('');
+      setToAmount("");
       setPoolInfo(null);
       setPreSwapResult(null);
       return;
@@ -141,20 +167,30 @@ export const CetusSwapModal = ({
 
     setIsCalculating(true);
     try {
-      console.log(`🔄 Calculating real testnet swap: ${amount} ${from} → ${to}`);
+      console.log(
+        `🔄 Calculating real testnet swap: ${amount} ${from} → ${to}`
+      );
 
-      const fromTokenAddress = TOKEN_ADDRESSES[from as keyof typeof TOKEN_ADDRESSES];
-      const toTokenAddress = TOKEN_ADDRESSES[to as keyof typeof TOKEN_ADDRESSES];
+      const fromTokenAddress =
+        TOKEN_ADDRESSES[from as keyof typeof TOKEN_ADDRESSES];
+      const toTokenAddress =
+        TOKEN_ADDRESSES[to as keyof typeof TOKEN_ADDRESSES];
 
       // You need to provide actual pool IDs for testnet pairs
       // These are example pool IDs - replace with real ones from Cetus testnet
       const TESTNET_POOL_IDS: Record<string, string> = {
-        'SUI_USDC': '0x6fd4915e6d8d3e2ba6d81787046eb948ae36fdfc75dad2e24f0d4aaa2417a416',
-        'SUI_USDT': '0x53d70570db4f4d8ebc20aa1b67dc6f5d061d318d371e5de50ff64525d7dd5bca',
-        'USDC_USDT': '0x4038aea2341070550e9c1f723315624c539788d0ca9212dca7eb4b36147c0fcb',
-        'USDC_SUI': '0x6fd4915e6d8d3e2ba6d81787046eb948ae36fdfc75dad2e24f0d4aaa2417a416',
-        'USDT_SUI': '0x53d70570db4f4d8ebc20aa1b67dc6f5d061d318d371e5de50ff64525d7dd5bca',
-        'USDT_USDC': '0x4038aea2341070550e9c1f723315624c539788d0ca9212dca7eb4b36147c0fcb',
+        SUI_USDC:
+          "0x6fd4915e6d8d3e2ba6d81787046eb948ae36fdfc75dad2e24f0d4aaa2417a416",
+        SUI_USDT:
+          "0x53d70570db4f4d8ebc20aa1b67dc6f5d061d318d371e5de50ff64525d7dd5bca",
+        USDC_USDT:
+          "0x4038aea2341070550e9c1f723315624c539788d0ca9212dca7eb4b36147c0fcb",
+        USDC_SUI:
+          "0x6fd4915e6d8d3e2ba6d81787046eb948ae36fdfc75dad2e24f0d4aaa2417a416",
+        USDT_SUI:
+          "0x53d70570db4f4d8ebc20aa1b67dc6f5d061d318d371e5de50ff64525d7dd5bca",
+        USDT_USDC:
+          "0x4038aea2341070550e9c1f723315624c539788d0ca9212dca7eb4b36147c0fcb",
       };
 
       // Get pool ID for this pair
@@ -162,8 +198,8 @@ export const CetusSwapModal = ({
       const poolId = TESTNET_POOL_IDS[pairKey];
 
       if (!poolId) {
-        console.log('❌ No pool ID found for this pair on testnet');
-        setToAmount('');
+        console.log("❌ No pool ID found for this pair on testnet");
+        setToAmount("");
         setPoolInfo(null);
         setPreSwapResult(null);
         toast({
@@ -174,24 +210,25 @@ export const CetusSwapModal = ({
         return;
       }
 
-      console.log('📊 Using pool ID:', poolId);
+      console.log("📊 Using pool ID:", poolId);
 
       // Get pool data using exact method from docs
       const pool = await cetusSDK.Pool.getPool(poolId);
 
       setPoolInfo(pool);
-      console.log('📊 Found testnet pool:', pool.id);
+      console.log("📊 Found testnet pool:", pool.id);
 
       // Determine swap direction following docs exactly
-      const a2b = fromTokenAddress.toLowerCase() === pool.coin_type_a.toLowerCase();
+      const a2b =
+        fromTokenAddress.toLowerCase() === pool.coin_type_a.toLowerCase();
 
       // Convert amount to BN with proper decimals
       const fromDecimals = getDecimals(from);
       const toDecimals = getDecimals(to);
       const inputAmount = new BN(Number(amount) * Math.pow(10, fromDecimals));
 
-      console.log('💰 Input amount (BN):', inputAmount.toString());
-      console.log('🔄 Swap direction (a2b):', a2b);
+      console.log("💰 Input amount (BN):", inputAmount.toString());
+      console.log("🔄 Swap direction (a2b):", a2b);
 
       // Use preSwap exactly as shown in Cetus documentation
       const res = await cetusSDK.Swap.preSwap({
@@ -207,32 +244,35 @@ export const CetusSwapModal = ({
       });
 
       if (res && res.estimated_amount_out) {
-        const outputAmount = Number(res.estimated_amount_out) / Math.pow(10, toDecimals);
+        const outputAmount =
+          Number(res.estimated_amount_out) / Math.pow(10, toDecimals);
 
         setToAmount(outputAmount.toFixed(toDecimals === 9 ? 6 : 2));
         setPreSwapResult(res);
 
-        console.log('✅ PreSwap calculated output:', outputAmount);
-        console.log('📊 Full PreSwap result:', res);
+        console.log("✅ PreSwap calculated output:", outputAmount);
+        console.log("📊 Full PreSwap result:", res);
       } else {
-        setToAmount('');
+        setToAmount("");
         setPreSwapResult(null);
-        console.log('❌ Failed to calculate preSwap - no estimated_amount_out');
+        console.log("❌ Failed to calculate preSwap - no estimated_amount_out");
         toast({
           title: "Calculation Failed",
-          description: "Unable to calculate swap rates. Pool may have insufficient liquidity.",
+          description:
+            "Unable to calculate swap rates. Pool may have insufficient liquidity.",
           variant: "destructive",
         });
       }
-
     } catch (error) {
-      console.error('❌ Error calculating swap:', error);
-      setToAmount('');
+      console.error("❌ Error calculating swap:", error);
+      setToAmount("");
       setPoolInfo(null);
       setPreSwapResult(null);
       toast({
         title: "Calculation Error",
-        description: error.message || "Failed to calculate swap amount. Please check if pool IDs are correct.",
+        description:
+          error.message ||
+          "Failed to calculate swap amount. Please check if pool IDs are correct.",
         variant: "destructive",
       });
     } finally {
@@ -249,12 +289,17 @@ export const CetusSwapModal = ({
     }, 1000); // 1 second debounce for API calls
 
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fromAmount, fromCurrency, toCurrency, cetusSDK]);
 
   // Create keypair from hex private key
-  const createKeyPairFromHexPrivateKey = (hexPrivateKey: string): Ed25519Keypair => {
+  const createKeyPairFromHexPrivateKey = (
+    hexPrivateKey: string
+  ): Ed25519Keypair => {
     try {
-      let cleanHex = hexPrivateKey.startsWith('0x') ? hexPrivateKey.slice(2) : hexPrivateKey;
+      const cleanHex = hexPrivateKey.startsWith("0x")
+        ? hexPrivateKey.slice(2)
+        : hexPrivateKey;
       if (!/^[0-9a-fA-F]{64}$/.test(cleanHex)) {
         throw new Error(`Invalid hex private key format`);
       }
@@ -268,37 +313,47 @@ export const CetusSwapModal = ({
     }
   };
 
-  // Execute real Cetus swap transaction following documentation exactly
+  // Execute the swap transaction
   const executeSwap = async () => {
     if (!profile?.sui_wallet_data || !cetusSDK || !poolInfo || !preSwapResult) {
-      throw new Error('Missing requirements for swap');
+      throw new Error("Missing requirements for swap");
     }
 
     setIsSwapping(true);
     try {
-      console.log('🚀 Executing real Cetus swap on testnet...');
+      console.log("🚀 Executing real Cetus swap on testnet...");
 
       const privateKey = profile.sui_wallet_data.privateKey;
       const walletKeyPair = createKeyPairFromHexPrivateKey(privateKey);
       const userAddress = walletKeyPair.getPublicKey().toSuiAddress();
 
-      const fromTokenAddress = TOKEN_ADDRESSES[fromCurrency as keyof typeof TOKEN_ADDRESSES];
-      const a2b = fromTokenAddress.toLowerCase() === poolInfo.coin_type_a.toLowerCase();
+      const fromTokenAddress =
+        TOKEN_ADDRESSES[fromCurrency as keyof typeof TOKEN_ADDRESSES];
+      const a2b =
+        fromTokenAddress.toLowerCase() === poolInfo.coin_type_a.toLowerCase();
 
-      console.log('📝 Creating swap transaction following Cetus docs...');
-      console.log('Pool ID:', poolInfo.id);
-      console.log('User address:', userAddress);
-      console.log('Swap direction (a2b):', a2b);
+      console.log("📝 Creating swap transaction following Cetus docs...");
+      console.log("Pool ID:", poolInfo.id);
+      console.log("User address:", userAddress);
+      console.log("Swap direction (a2b):", a2b);
 
       // Calculate slippage protection exactly as shown in Cetus documentation
       const slippageValue = Percentage.fromDecimal(d(Number(slippage)));
       const by_amount_in = true;
-      const to_amount = by_amount_in ? preSwapResult.estimated_amount_out : preSwapResult.estimated_amount_in;
-      const amount_limit = adjustForSlippage(to_amount, slippageValue, !by_amount_in);
+      const to_amount = by_amount_in
+        ? preSwapResult.estimated_amount_out
+        : preSwapResult.estimated_amount_in;
+      const amount_limit = adjustForSlippage(
+        to_amount,
+        slippageValue,
+        !by_amount_in
+      );
 
-      console.log('💊 Slippage protection:', `${slippage}%`);
-      console.log('📊 Amount limit:', amount_limit.toString());
-
+      console.log("💊 Slippage protection:", `${slippage}%`);
+      console.log("📊 Amount limit:", amount_limit.toString());
+      // remove 0.5% charges from the swap and send to the gameroom contract
+      // const amountToRemove = Number(preSwapResult.amount) * 0.005;
+      // const amountToSend =
       // Create swap payload exactly as shown in Cetus documentation
       const swap_payload = await cetusSDK.Swap.createSwapPayload({
         pool_id: poolInfo.id,
@@ -311,15 +366,18 @@ export const CetusSwapModal = ({
         swap_partner: undefined, // No partner as shown in docs
       });
 
-      console.log('✍️ Signing and executing transaction...');
+      console.log("✍️ Signing and executing transaction...");
 
       // Execute transaction using fullClient as shown in Cetus documentation
-      const result = await cetusSDK.FullClient.sendTransaction(walletKeyPair, swap_payload);
+      const result = await cetusSDK.FullClient.sendTransaction(
+        walletKeyPair as Ed25519Keypair | any,
+        swap_payload
+      );
 
-      console.log('📋 Transaction result:', result);
+      console.log("📋 Transaction result:", result);
 
-      if (result.effects?.status?.status === 'success') {
-        console.log('✅ Cetus testnet swap successful:', result.digest);
+      if (result.effects?.status?.status === "success") {
+        console.log("✅ Cetus testnet swap successful:", result.digest);
         setTxDigest(result.digest);
 
         toast({
@@ -330,30 +388,33 @@ export const CetusSwapModal = ({
         onSwapSuccess({
           fromAmount,
           fromCurrency,
-          toAmount: toAmount || 'Unknown',
+          toAmount: toAmount || "Unknown",
           toCurrency,
           transactionHash: result.digest,
-          type: 'cetus',
+          type: "cetus",
         });
 
         setTimeout(() => onClose(), 2000);
       } else {
-        const errorMessage = result.effects?.status?.error || 'Transaction failed';
+        const errorMessage =
+          result.effects?.status?.error || "Transaction failed";
         throw new Error(errorMessage);
       }
-
     } catch (error) {
-      console.error('❌ Cetus swap error:', error);
-      let errorMessage = 'Swap failed. Please try again.';
+      console.error("❌ Cetus swap error:", error);
+      let errorMessage = "Swap failed. Please try again.";
 
-      if (error.message.includes('Insufficient')) {
+      if (error.message.includes("Insufficient")) {
         errorMessage = `Insufficient ${fromCurrency} balance for this swap.`;
-      } else if (error.message.includes('slippage')) {
-        errorMessage = 'Price moved too much. Try increasing slippage tolerance.';
-      } else if (error.message.includes('liquidity')) {
-        errorMessage = 'Insufficient liquidity in the pool. Try a smaller amount.';
-      } else if (error.message.includes('RPC')) {
-        errorMessage = 'Network error. Please check your connection and try again.';
+      } else if (error.message.includes("slippage")) {
+        errorMessage =
+          "Price moved too much. Try increasing slippage tolerance.";
+      } else if (error.message.includes("liquidity")) {
+        errorMessage =
+          "Insufficient liquidity in the pool. Try a smaller amount.";
+      } else if (error.message.includes("RPC")) {
+        errorMessage =
+          "Network error. Please check your connection and try again.";
       }
 
       toast({
@@ -369,10 +430,14 @@ export const CetusSwapModal = ({
   // Get available balance for currency
   const getAvailableBalance = (currency: string) => {
     switch (currency) {
-      case 'SUI': return currentBalances.sui;
-      case 'USDC': return currentBalances.usdc;
-      case 'USDT': return currentBalances.usdt;
-      default: return 0;
+      case "SUI":
+        return currentBalances.sui;
+      case "USDC":
+        return currentBalances.usdc;
+      case "USDT":
+        return currentBalances.usdt;
+      default:
+        return 0;
     }
   };
 
@@ -381,13 +446,13 @@ export const CetusSwapModal = ({
     const amount = Number(fromAmount);
     const available = getAvailableBalance(fromCurrency);
 
-    if (!amount || amount <= 0) return 'Please enter a valid amount';
-    if (fromCurrency === toCurrency) return 'Cannot swap same currency';
-    if (!cetusSDK) return 'Cetus protocol not ready';
-    if (!poolInfo) return 'No liquidity pool found';
+    if (!amount || amount <= 0) return "Please enter a valid amount";
+    if (fromCurrency === toCurrency) return "Cannot swap same currency";
+    if (!cetusSDK) return "Cetus protocol not ready";
+    if (!poolInfo) return "No liquidity pool found";
     if (amount > available) return `Insufficient ${fromCurrency} balance`;
-    if (!toAmount || Number(toAmount) <= 0) return 'Invalid output amount';
-    if (isCalculating) return 'Calculating rates...';
+    if (!toAmount || Number(toAmount) <= 0) return "Invalid output amount";
+    if (isCalculating) return "Calculating rates...";
 
     return null;
   };
@@ -399,17 +464,17 @@ export const CetusSwapModal = ({
     setToCurrency(tempFrom);
 
     // Clear amounts to trigger recalculation
-    setFromAmount('');
-    setToAmount('');
+    setFromAmount("");
+    setToAmount("");
     setPoolInfo(null);
     setPreSwapResult(null);
   };
 
   // Reset form state
   const resetForm = () => {
-    setFromAmount('');
-    setToAmount('');
-    setTxDigest('');
+    setFromAmount("");
+    setToAmount("");
+    setTxDigest("");
     setPoolInfo(null);
     setPreSwapResult(null);
   };
@@ -423,11 +488,19 @@ export const CetusSwapModal = ({
   // Get currency display icon
   const getCurrencyIcon = (currency: string) => {
     switch (currency) {
-      case 'SUI': return '🔵';
-      case 'USDC': return '💎';
-      case 'USDT': return '🟢';
-      default: return '🪙';
+      case "SUI":
+        return "🔵";
+      case "USDC":
+        return "💎";
+      case "USDT":
+        return "🟢";
+      default:
+        return "🪙";
     }
+  };
+
+  const filterdCurrencies = (currency: string) => {
+    return ["SUI", "USDC", "USDT"].filter((curr) => curr !== currency);
   };
 
   return (
@@ -439,7 +512,8 @@ export const CetusSwapModal = ({
             Cetus Swap
           </DialogTitle>
           <DialogDescription className="text-muted-foreground font-cyber">
-            Real testnet trading with Cetus protocol • Live pools • Actual liquidity
+            Real testnet trading with Cetus protocol • Live pools • Actual
+            liquidity
           </DialogDescription>
         </DialogHeader>
 
@@ -449,7 +523,9 @@ export const CetusSwapModal = ({
             <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3">
               <div className="flex items-center gap-2">
                 <Loader2 className="w-4 h-4 text-yellow-400 animate-spin" />
-                <p className="text-yellow-400 text-sm font-cyber">Connecting to Cetus testnet...</p>
+                <p className="text-yellow-400 text-sm font-cyber">
+                  Connecting to Cetus testnet...
+                </p>
               </div>
             </div>
           )}
@@ -460,9 +536,16 @@ export const CetusSwapModal = ({
               <div className="flex items-start gap-3">
                 <CheckCircle className="w-5 h-5 text-green-400 mt-0.5" />
                 <div className="flex-1">
-                  <p className="text-green-400 font-cyber font-bold mb-1">Testnet Swap Completed!</p>
+                  <p className="text-green-400 font-cyber font-bold mb-1">
+                    Testnet Swap Completed!
+                  </p>
                   <Button
-                    onClick={() => window.open(`https://suivision.xyz/txblock/${txDigest}?network=${NETWORK}`, '_blank')}
+                    onClick={() =>
+                      window.open(
+                        `https://suivision.xyz/txblock/${txDigest}?network=${NETWORK}`,
+                        "_blank"
+                      )
+                    }
                     variant="outline"
                     size="sm"
                     className="border-green-500/50 text-green-400 hover:bg-green-500/20 font-cyber"
@@ -480,18 +563,27 @@ export const CetusSwapModal = ({
             <div className="flex items-center justify-between mb-3">
               <Label className="font-cyber text-accent">From</Label>
               <span className="text-xs text-muted-foreground font-cyber">
-                Balance: {getAvailableBalance(fromCurrency).toFixed(fromCurrency === 'SUI' ? 4 : 2)} {fromCurrency}
+                Balance:{" "}
+                {getAvailableBalance(fromCurrency).toFixed(
+                  fromCurrency === "SUI" ? 4 : 2
+                )}{" "}
+                {fromCurrency}
               </span>
             </div>
             <div className="flex gap-3">
-              <Select value={fromCurrency} onValueChange={(value: any) => setFromCurrency(value)}>
+              <Select
+                value={fromCurrency}
+                onValueChange={(value: any) => setFromCurrency(value)}
+              >
                 <SelectTrigger className="w-32 bg-black/40 border-primary/30">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="SUI">{getCurrencyIcon('SUI')} SUI</SelectItem>
-                  <SelectItem value="USDC">{getCurrencyIcon('USDC')} USDC</SelectItem>
-                  <SelectItem value="USDT">{getCurrencyIcon('USDT')} USDT</SelectItem>
+                  {filterdCurrencies(toCurrency).map((currency) => (
+                    <SelectItem key={currency} value={currency}>
+                      {getCurrencyIcon(currency)} {currency}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <Input
@@ -500,12 +592,14 @@ export const CetusSwapModal = ({
                 value={fromAmount}
                 onChange={(e) => setFromAmount(e.target.value)}
                 className="flex-1 font-cyber bg-black/40 border-primary/30 text-lg"
-                step={fromCurrency === 'SUI' ? '0.0001' : '0.01'}
+                step={fromCurrency === "SUI" ? "0.0001" : "0.01"}
                 disabled={isSwapping || !cetusSDK}
               />
             </div>
             <Button
-              onClick={() => setFromAmount(getAvailableBalance(fromCurrency).toString())}
+              onClick={() =>
+                setFromAmount(getAvailableBalance(fromCurrency).toString())
+              }
               variant="ghost"
               size="sm"
               className="mt-2 text-xs text-primary hover:text-primary/80 font-cyber"
@@ -533,18 +627,27 @@ export const CetusSwapModal = ({
             <div className="flex items-center justify-between mb-3">
               <Label className="font-cyber text-accent">To</Label>
               <span className="text-xs text-muted-foreground font-cyber">
-                Balance: {getAvailableBalance(toCurrency).toFixed(toCurrency === 'SUI' ? 4 : 2)} {toCurrency}
+                Balance:{" "}
+                {getAvailableBalance(toCurrency).toFixed(
+                  toCurrency === "SUI" ? 4 : 2
+                )}{" "}
+                {toCurrency}
               </span>
             </div>
             <div className="flex gap-3">
-              <Select value={toCurrency} onValueChange={(value: any) => setToCurrency(value)}>
+              <Select
+                value={toCurrency}
+                onValueChange={(value: any) => setToCurrency(value)}
+              >
                 <SelectTrigger className="w-32 bg-black/40 border-accent/30">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="SUI">{getCurrencyIcon('SUI')} SUI</SelectItem>
-                  <SelectItem value="USDC">{getCurrencyIcon('USDC')} USDC</SelectItem>
-                  <SelectItem value="USDT">{getCurrencyIcon('USDT')} USDT</SelectItem>
+                  {filterdCurrencies(fromCurrency).map((currency) => (
+                    <SelectItem key={currency} value={currency}>
+                      {getCurrencyIcon(currency)} {currency}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <div className="relative flex-1">
@@ -566,32 +669,51 @@ export const CetusSwapModal = ({
           {poolInfo && preSwapResult && (
             <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
               <div className="flex items-center justify-between mb-2">
-                <h4 className="text-blue-400 font-cyber font-bold">Live Testnet Pool Data</h4>
+                <h4 className="text-blue-400 font-cyber font-bold">
+                  Live Testnet Pool Data
+                </h4>
                 <Button
-                  onClick={() => calculateSwapAmount(fromAmount, fromCurrency, toCurrency)}
+                  onClick={() =>
+                    calculateSwapAmount(fromAmount, fromCurrency, toCurrency)
+                  }
                   variant="ghost"
                   size="sm"
                   disabled={isCalculating || !cetusSDK}
                 >
-                  <RefreshCw className={`w-3 h-3 ${isCalculating ? 'animate-spin' : ''}`} />
+                  <RefreshCw
+                    className={`w-3 h-3 ${isCalculating ? "animate-spin" : ""}`}
+                  />
                 </Button>
               </div>
               <div className="grid grid-cols-2 gap-3 text-sm font-cyber">
                 <div className="flex justify-between">
                   <span className="text-blue-400">Pool:</span>
-                  <span className="text-blue-300">{poolInfo.id.slice(0, 8)}...</span>
+                  <span className="text-blue-300">
+                    {poolInfo.id.slice(0, 8)}...
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-blue-400">Fee:</span>
-                  <span className="text-blue-300">{(Number(poolInfo.fee_rate || 0) / 10000).toFixed(2)}%</span>
+                  <span className="text-blue-300">
+                    {(Number(poolInfo.fee_rate || 0) / 10000).toFixed(2)}%
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-blue-400">Rate:</span>
-                  <span className="text-blue-300">1 {fromCurrency} = {(Number(toAmount) / Number(fromAmount)).toFixed(4)} {toCurrency}</span>
+                  <span className="text-blue-300">
+                    1 {fromCurrency} ={" "}
+                    {(Number(toAmount) / Number(fromAmount)).toFixed(4)}{" "}
+                    {toCurrency}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-blue-400">Est. Out:</span>
-                  <span className="text-blue-300">{Number(preSwapResult.estimated_amount_out / Math.pow(10, getDecimals(toCurrency))).toFixed(4)}</span>
+                  <span className="text-blue-300">
+                    {Number(
+                      preSwapResult.estimated_amount_out /
+                        Math.pow(10, getDecimals(toCurrency))
+                    ).toFixed(4)}
+                  </span>
                 </div>
               </div>
             </div>
@@ -600,13 +722,15 @@ export const CetusSwapModal = ({
           {/* Slippage Settings */}
           <div className="bg-black/40 border border-primary/30 rounded-lg p-4">
             <div className="flex items-center justify-between mb-3">
-              <Label className="font-cyber text-accent">Slippage Tolerance</Label>
+              <Label className="font-cyber text-accent">
+                Slippage Tolerance
+              </Label>
               <span className="text-xs text-muted-foreground font-cyber">
                 Max price movement
               </span>
             </div>
             <div className="flex gap-2">
-              {['0.1', '0.5', '1.0'].map((preset) => (
+              {["0.1", "0.5", "1.0"].map((preset) => (
                 <Button
                   key={preset}
                   onClick={() => setSlippage(preset)}
@@ -640,11 +764,18 @@ export const CetusSwapModal = ({
               className="flex-1 border-primary/50 text-primary hover:bg-primary/10 font-cyber"
               disabled={isSwapping}
             >
-              {txDigest ? 'Close' : 'Cancel'}
+              {txDigest ? "Close" : "Cancel"}
             </Button>
             <Button
               onClick={executeSwap}
-              disabled={!fromAmount || !toAmount || isSwapping || isCalculating || !!validateSwap() || !!txDigest}
+              disabled={
+                !fromAmount ||
+                !toAmount ||
+                isSwapping ||
+                isCalculating ||
+                !!validateSwap() ||
+                !!txDigest
+              }
               className="flex-1 bg-gradient-to-r from-primary to-accent text-background font-gaming font-bold hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:hover:scale-100"
             >
               {isSwapping ? (
@@ -653,7 +784,7 @@ export const CetusSwapModal = ({
                   Swapping...
                 </>
               ) : txDigest ? (
-                '✅ Complete'
+                "✅ Complete"
               ) : isCalculating ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -662,7 +793,7 @@ export const CetusSwapModal = ({
               ) : (
                 <>
                   <ArrowUpDown className="mr-2 h-4 w-4" />
-                  Execute Testnet Swap
+                  Swap
                 </>
               )}
             </Button>
@@ -673,7 +804,9 @@ export const CetusSwapModal = ({
             <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
               <div className="flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 text-red-400" />
-                <p className="text-red-400 text-sm font-cyber">{validateSwap()}</p>
+                <p className="text-red-400 text-sm font-cyber">
+                  {validateSwap()}
+                </p>
               </div>
             </div>
           )}
@@ -684,7 +817,9 @@ export const CetusSwapModal = ({
           <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-3">
             <div className="flex items-center gap-2 text-xs text-green-400 font-cyber">
               <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-              <span>Live Cetus Testnet • Real pools • Actual testnet liquidity</span>
+              <span>
+                Live Cetus Testnet • Real pools • Actual testnet liquidity
+              </span>
             </div>
           </div>
 
@@ -709,15 +844,13 @@ export const CetusSwapModal = ({
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => window.open('https://www.cetus.zone', '_blank')}
+                onClick={() => window.open("https://www.cetus.zone", "_blank")}
                 className="text-xs p-0 h-auto hover:text-primary"
               >
                 Cetus Protocol <ExternalLink className="w-3 h-3 ml-1" />
               </Button>
             </div>
-            <div className="text-primary font-cyber">
-              Network: Sui Testnet
-            </div>
+            <div className="text-primary font-cyber">Network: Sui Testnet</div>
           </div>
         </div>
       </DialogContent>

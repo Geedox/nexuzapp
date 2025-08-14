@@ -4,6 +4,7 @@ import { useProfile } from '@/contexts/ProfileContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { SuiClient, getFullnodeUrl } from '@mysten/sui.js/client';
+import { NETWORK } from '@/constants';
 
 interface WalletContextType {
   // Blockchain balances
@@ -50,8 +51,6 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
   const { profile } = useProfile();
   const { toast } = useToast();
 
-  // Initialize Sui client
-  const NETWORK = 'testnet';
   const suiClient = new SuiClient({ url: getFullnodeUrl(NETWORK) });
 
   // Token types for Sui testnet
@@ -278,6 +277,7 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
     } else {
       setLoading(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.sui_wallet_data?.address]);
 
   const value = {

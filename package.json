@@ -8,9 +8,11 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "pull": "supabase db pull"
   },
   "dependencies": {
+    "@cetusprotocol/common-sdk": "^1.1.6",
     "@cetusprotocol/sui-clmm-sdk": "^1.1.3",
     "@hookform/resolvers": "^3.9.0",
     "@lifi/widget": "^3.24.3",
