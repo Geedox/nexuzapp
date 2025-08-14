@@ -54,7 +54,7 @@ const WinnerCelebrationModal = ({ isOpen, onClose, winner }) => {
   const downloadWinnerCard = () => {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    
+
     if (!ctx) return;
 
     canvas.width = 1200;
@@ -79,7 +79,7 @@ const WinnerCelebrationModal = ({ isOpen, onClose, winner }) => {
       gradient.addColorStop(0.5, '#4169e1');
       gradient.addColorStop(1, '#191970');
     }
-    
+
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, 1200, 800);
 
@@ -190,13 +190,13 @@ const WinnerCelebrationModal = ({ isOpen, onClose, winner }) => {
 
       {/* Main Modal */}
       <div className="relative max-w-2xl font-cyber w-full mx-4 bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-xl border-4 border-yellow-400 rounded-3xl overflow-hidden">
-        
+
         {/* Glow Effect */}
         <div className={`absolute font-cyber inset-0 bg-gradient-to-r ${getPositionColor(winner.position)} opacity-20 rounded-3xl blur-2xl`}></div>
-        
+
         {/* Content */}
         <div className="relative font-cyber z-10 p-6 text-center space-y-4">
-          
+
           {/* Animated Trophy */}
           <div className={`text-6xl mb-6 font-cyber ${animationStep >= 1 ? 'animate-bounce' : 'opacity-0 scale-0'} transition-all duration-1000`}>
             {winner.position === 1 ? '🏆' : winner.position === 2 ? '🥈' : winner.position === 3 ? '🥉' : '🏅'}
@@ -255,7 +255,7 @@ const WinnerCelebrationModal = ({ isOpen, onClose, winner }) => {
               <Share2 className="w-6 h-6" />
               Share Victory
             </button>
-            
+
             <button
               onClick={downloadWinnerCard}
               className="flex items-center justify-center gap-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white px-8 py-4 rounded-2xl font-bold text-lg hover:scale-105 transition-all shadow-2xl hover:shadow-purple-500/50"
@@ -312,18 +312,18 @@ const RoomsPage = () => {
   const [games, setGames] = useState([]);
   const [loadingStats, setLoadingStats] = useState(true);
   const [userWins, setUserWins] = useState({}); // Track user wins per room
-  
+
   // Winner celebration state
   const [showCelebration, setShowCelebration] = useState(false);
   const [winnerData, setWinnerData] = useState(null);
-  
+
   const [roomStats, setRoomStats] = useState({
     totalRooms: 0,
     activeRooms: 0,
     totalPrizePool: 0,
     totalPlayers: 0
   });
-  
+
   const [formData, setFormData] = useState({
     name: '',
     gameId: '',
@@ -365,10 +365,10 @@ const RoomsPage = () => {
     fetchGames();
   }, []);
 
-  // Fetch user wins for completed rooms
+  // Fetch user wins for completed rooms - Fixed to handle undefined rooms
   useEffect(() => {
     const fetchUserWins = async () => {
-      if (!user) return;
+      if (!user || !rooms || !Array.isArray(rooms)) return;
 
       try {
         const completedRoomIds = rooms
@@ -395,14 +395,14 @@ const RoomsPage = () => {
       }
     };
 
-    if (rooms.length > 0) {
+    if (rooms && rooms.length > 0) {
       fetchUserWins();
     }
   }, [rooms, user]);
 
-  // Calculate room statistics
+  // Calculate room statistics - Fixed to handle undefined rooms
   useEffect(() => {
-    if (rooms.length > 0) {
+    if (rooms && Array.isArray(rooms) && rooms.length > 0) {
       const stats = rooms.reduce((acc, room) => {
         acc.totalRooms++;
         if (room.status === 'waiting' || room.status === 'ongoing') {
@@ -422,14 +422,14 @@ const RoomsPage = () => {
     setLoadingStats(false);
   }, [rooms]);
 
-  // Set default wallet when wallets load
+  // Set default wallet when wallets load - Fixed to handle undefined wallets
   useEffect(() => {
-    if (wallets.length > 0 && !selectedWallet) {
+    if (wallets && Array.isArray(wallets) && wallets.length > 0 && !selectedWallet) {
       const defaultWallet = wallets.find(w => (w.balance || 0) > 0) || wallets[0];
       setSelectedWallet(defaultWallet);
       setFormData(prev => ({ ...prev, currency: defaultWallet.currency }));
     }
-  }, [wallets]);
+  }, [wallets, selectedWallet]);
 
   // Function to show win celebration for a specific room
   const showWinCelebration = (room) => {
@@ -507,7 +507,7 @@ const RoomsPage = () => {
         ...formData,
         currency: selectedWallet.currency,
       });
-      
+
       setShowCreateModal(false);
       // Reset form
       setFormData({
@@ -537,7 +537,7 @@ const RoomsPage = () => {
           description: "Room created! You've been automatically joined.",
         });
       }
-      
+
       // Navigate to the room details
       setTimeout(() => {
         setSelectedRoomId(room.id);
@@ -613,15 +613,15 @@ const RoomsPage = () => {
       }
       return 'View Results';
     }
-    
+
     if (room.current_players >= room.max_players && !isUserInRoom(room)) {
       return 'Room Full';
     }
-    
+
     if (isUserInRoom(room)) {
       return 'Enter Room';
     }
-    
+
     return 'Join Room';
   };
 
@@ -629,11 +629,11 @@ const RoomsPage = () => {
     if (room.status === 'completed' && userWonInRoom(room)) {
       return 'bg-gradient-to-r from-yellow-500 to-amber-500 text-background hover:scale-105 cyber-button';
     }
-    
+
     if (isUserInRoom(room) || canJoinRoom(room) || room.status === 'completed') {
       return 'bg-gradient-to-r from-primary to-accent text-background hover:scale-105 cyber-button';
     }
-    
+
     return 'bg-gray-600 text-gray-400 cursor-not-allowed';
   };
 
@@ -661,15 +661,18 @@ const RoomsPage = () => {
   // If a room is selected, show its details
   if (selectedRoomId) {
     return (
-      <GameRoomDetails 
-        roomId={selectedRoomId} 
+      <GameRoomDetails
+        roomId={selectedRoomId}
         onBack={() => {
           setSelectedRoomId(null);
           refreshRooms();
-        }} 
+        }}
       />
     );
   }
+
+  // Handle undefined or empty rooms array
+  const safeRooms = rooms && Array.isArray(rooms) ? rooms : [];
 
   return (
     <>
@@ -682,7 +685,7 @@ const RoomsPage = () => {
         </div>
 
         {/* Room Statistics */}
-        {!loadingStats && rooms.length > 0 && (
+        {!loadingStats && safeRooms.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30 rounded-xl p-4">
               <p className="text-sm font-cyber text-purple-400 mb-1">Total Rooms</p>
@@ -706,7 +709,7 @@ const RoomsPage = () => {
         )}
 
         <div className="flex gap-4 mb-6">
-          <button 
+          <button
             onClick={() => setShowCreateModal(true)}
             disabled={creating}
             className="bg-gradient-to-r from-primary to-accent text-background font-cyber font-bold py-3 px-6 rounded-xl hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-primary/50 disabled:opacity-50 disabled:hover:scale-100"
@@ -720,7 +723,7 @@ const RoomsPage = () => {
               '🎮 Create New Room'
             )}
           </button>
-          <button 
+          <button
             onClick={refreshRooms}
             className="bg-gradient-to-r from-green-500 to-emerald-500 text-background font-cyber font-bold py-3 px-6 rounded-xl hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-green-500/50"
           >
@@ -729,23 +732,22 @@ const RoomsPage = () => {
         </div>
 
         {/* Empty State */}
-        {rooms.length === 0 ? (
+        {safeRooms.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20">
             <div className="text-6xl mb-4">🎮</div>
             <h3 className="font-cyber text-2xl font-bold text-primary mb-2">No Rooms Available</h3>
             <p className="text-muted-foreground text-center max-w-md">
-              Be the first to create a game room and start playing! 
+              Be the first to create a game room and start playing!
               Click the "Create New Room" button to get started.
             </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {rooms.map((room) => (
+            {safeRooms.map((room) => (
               <div
                 key={room.id}
-                className={`relative bg-gradient-to-br from-card to-secondary/20 border rounded-xl p-6 hover:border-primary/40 transition-all duration-300 hover:scale-105 group cyber-border ${
-                  userWonInRoom(room) ? 'border-yellow-500/50 shadow-lg shadow-yellow-500/20' : 'border-primary/20'
-                }`}
+                className={`relative bg-gradient-to-br from-card to-secondary/20 border rounded-xl p-6 hover:border-primary/40 transition-all duration-300 hover:scale-105 group cyber-border ${userWonInRoom(room) ? 'border-yellow-500/50 shadow-lg shadow-yellow-500/20' : 'border-primary/20'
+                  }`}
               >
                 {/* Winner Badge */}
                 {userWonInRoom(room) && (
@@ -760,7 +762,7 @@ const RoomsPage = () => {
                     {room.status.toUpperCase()}
                   </div>
                 </div>
-                
+
                 <div className="space-y-2 mb-4">
                   <div className="flex justify-between">
                     <span className="text-sm text-muted-foreground font-cyber">Game:</span>
@@ -794,7 +796,7 @@ const RoomsPage = () => {
                     <span className="text-sm text-muted-foreground font-cyber">Start:</span>
                     <span className="text-xs font-cyber text-foreground">{formatDateTime(room.start_time)}</span>
                   </div>
-                  
+
                   {/* Show win details for completed rooms where user won */}
                   {userWonInRoom(room) && (
                     <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-2 mt-2">
@@ -820,8 +822,8 @@ const RoomsPage = () => {
                     </div>
                   )}
                 </div>
-                
-                <button 
+
+                <button
                   onClick={() => handleRoomAction(room)}
                   disabled={joining || (!isUserInRoom(room) && !canJoinRoom(room) && room.status !== 'completed')}
                   className={`w-full font-cyber font-bold py-2 rounded-lg transition-all duration-300 ${getActionButtonClass(room)}`}
@@ -854,17 +856,17 @@ const RoomsPage = () => {
                     <input
                       type="text"
                       value={formData.name}
-                      onChange={(e) => setFormData({...formData, name: e.target.value})}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                       placeholder="Epic Battle Arena"
                     />
                   </div>
-                  
+
                   <div>
                     <label className="text-sm font-cyber text-primary mb-1 block">Select Game</label>
                     <select
                       value={formData.gameId}
-                      onChange={(e) => setFormData({...formData, gameId: e.target.value})}
+                      onChange={(e) => setFormData({ ...formData, gameId: e.target.value })}
                       className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
                     >
                       <option value="">Choose a game...</option>
@@ -879,21 +881,21 @@ const RoomsPage = () => {
                     <select
                       value={selectedWallet?.id || ''}
                       onChange={(e) => {
-                        const wallet = wallets.find(w => w.id === e.target.value);
+                        const wallet = wallets && Array.isArray(wallets) ? wallets.find(w => w.id === e.target.value) : null;
                         setSelectedWallet(wallet);
-                        if (wallet) setFormData({...formData, currency: wallet.currency});
+                        if (wallet) setFormData({ ...formData, currency: wallet.currency });
                       }}
                       className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
                     >
                       <option value="">Select wallet...</option>
-                      {wallets.map(wallet => (
+                      {wallets && Array.isArray(wallets) && wallets.map(wallet => (
                         <option key={wallet.id} value={wallet.id}>
                           {wallet.currency} - Balance: {wallet.balance || 0}
                         </option>
                       ))}
                     </select>
                   </div>
-                  
+
                   <div>
                     <label className="text-sm font-cyber text-primary mb-1 block">
                       {formData.isSponsored ? 'Sponsor Amount' : 'Entry Fee'}
@@ -904,9 +906,9 @@ const RoomsPage = () => {
                       onChange={(e) => {
                         const value = parseFloat(e.target.value) || 0;
                         if (formData.isSponsored) {
-                          setFormData({...formData, sponsorAmount: value});
+                          setFormData({ ...formData, sponsorAmount: value });
                         } else {
-                          setFormData({...formData, entryFee: value});
+                          setFormData({ ...formData, entryFee: value });
                         }
                       }}
                       className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
@@ -932,18 +934,18 @@ const RoomsPage = () => {
                       value={formData.startTime.toISOString().slice(0, 16)}
                       onChange={(e) => {
                         const newStartTime = new Date(e.target.value);
-                        
+
                         // Calculate the minimum end time (start time + 10 minutes)
                         const minEndTime = new Date(newStartTime.getTime() + 10 * 60 * 1000);
-                        
+
                         // If current end time is before the new minimum, adjust it
                         let newEndTime = formData.endTime;
                         if (formData.endTime <= newStartTime) {
                           newEndTime = new Date(newStartTime.getTime() + 60 * 60 * 1000); // Default to 1 hour
                         }
-                        
+
                         setFormData({
-                          ...formData, 
+                          ...formData,
                           startTime: newStartTime,
                           endTime: newEndTime
                         });
@@ -963,18 +965,18 @@ const RoomsPage = () => {
                     <input
                       type="number"
                       value={formData.maxPlayers}
-                      onChange={(e) => setFormData({...formData, maxPlayers: parseInt(e.target.value) || 2})}
+                      onChange={(e) => setFormData({ ...formData, maxPlayers: parseInt(e.target.value) || 2 })}
                       className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
                       min="2"
                       max="100"
                     />
                   </div>
-                  
+
                   <div>
                     <label className="text-sm font-cyber text-primary mb-1 block">Winner Split Rule</label>
                     <select
                       value={formData.winnerSplitRule}
-                      onChange={(e) => setFormData({...formData, winnerSplitRule: e.target.value})}
+                      onChange={(e) => setFormData({ ...formData, winnerSplitRule: e.target.value })}
                       className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
                     >
                       {winnerRules.map(rule => (
@@ -990,7 +992,7 @@ const RoomsPage = () => {
                       value={formData.endTime.toISOString().slice(0, 16)}
                       onChange={(e) => {
                         const newEndTime = new Date(e.target.value);
-                        
+
                         // Validate that end time is after start time
                         if (newEndTime <= formData.startTime) {
                           toast({
@@ -1000,7 +1002,7 @@ const RoomsPage = () => {
                           });
                           return;
                         }
-                        
+
                         // Check minimum duration (10 minutes)
                         const minDuration = 10 * 60 * 1000; // 10 minutes in milliseconds
                         if (newEndTime.getTime() - formData.startTime.getTime() < minDuration) {
@@ -1011,8 +1013,8 @@ const RoomsPage = () => {
                           });
                           return;
                         }
-                        
-                        setFormData({...formData, endTime: newEndTime});
+
+                        setFormData({ ...formData, endTime: newEndTime });
                       }}
                       className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
                     />
@@ -1031,7 +1033,7 @@ const RoomsPage = () => {
                       <input
                         type="checkbox"
                         checked={formData.isPrivate}
-                        onChange={(e) => setFormData({...formData, isPrivate: e.target.checked})}
+                        onChange={(e) => setFormData({ ...formData, isPrivate: e.target.checked })}
                         className="w-5 h-5 rounded border-primary/30 text-primary focus:ring-primary"
                       />
                       <span className="text-sm font-cyber text-foreground group-hover:text-primary transition-colors">
@@ -1043,7 +1045,7 @@ const RoomsPage = () => {
                       <input
                         type="checkbox"
                         checked={formData.isSponsored}
-                        onChange={(e) => setFormData({...formData, isSponsored: e.target.checked, entryFee: 0})}
+                        onChange={(e) => setFormData({ ...formData, isSponsored: e.target.checked, entryFee: 0 })}
                         className="w-5 h-5 rounded border-primary/30 text-primary focus:ring-primary"
                       />
                       <span className="text-sm font-cyber text-foreground group-hover:text-primary transition-colors">
@@ -1053,7 +1055,7 @@ const RoomsPage = () => {
                   </div>
                 </div>
               </div>
-              
+
               <div className="flex gap-3 mt-8">
                 <button
                   onClick={handleCreateRoom}
@@ -1093,14 +1095,14 @@ const RoomsPage = () => {
                   <p className="text-sm font-cyber text-muted-foreground">Room Name</p>
                   <p className="font-cyber text-lg text-foreground">{selectedRoom.name}</p>
                 </div>
-                
+
                 <div className="bg-secondary/30 rounded-lg p-4 border border-primary/20">
                   <p className="text-sm font-cyber text-muted-foreground">Entry Fee</p>
                   <p className="font-cyber text-lg text-accent">
                     {selectedRoom.is_sponsored ? 'FREE (Sponsored)' : formatCurrency(selectedRoom.entry_fee, selectedRoom.currency)}
                   </p>
                 </div>
-                
+
                 {selectedRoom.is_private && (
                   <div>
                     <label className="text-sm font-cyber text-primary mb-2 block">Room Code</label>
@@ -1114,7 +1116,7 @@ const RoomsPage = () => {
                     />
                   </div>
                 )}
-                
+
                 <div className="flex gap-3 mt-6">
                   <button
                     onClick={handleJoinRoom}
