@@ -53,8 +53,8 @@ const CreatorsPage = () => {
               </div>
               <h3 className="font-cyber text-lg font-bold text-primary">{creator.name}</h3>
               <div className={`inline-block px-3 py-1 rounded-full text-xs font-bold font-cyber mt-2 ${creator.status === 'VERIFIED' ? 'bg-blue-500/20 text-blue-400' :
-                  creator.status === 'RISING' ? 'bg-yellow-500/20 text-yellow-400' :
-                    'bg-green-500/20 text-green-400'
+                creator.status === 'RISING' ? 'bg-yellow-500/20 text-yellow-400' :
+                  'bg-green-500/20 text-green-400'
                 }`}>
                 {creator.status}
               </div>
