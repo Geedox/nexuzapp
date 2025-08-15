@@ -11,6 +11,7 @@ import { ChatRoom, Friend } from '@/integrations/supabase/types';
 import ChatInterface from '../community/ChatInterface';
 import FriendRequests from '../community/FriendRequest';
 import { CreateChatRoomModal } from '../community/CreateChatRoomModal';
+import Banner from '@/components/Banner';
 
 interface CommunityPageProps {
   supabase?: any;
@@ -125,12 +126,7 @@ const CommunityPage = ({ supabase }: CommunityPageProps) => {
 
   return (
     <div className="space-y-8 animate-fade-in">
-      <div className="bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/30 rounded-2xl p-6">
-        <h1 className="font-cyber text-3xl font-bold text-purple-400 mb-2 glow-text">
-          👥 Gaming Community
-        </h1>
-        <p className="text-muted-foreground">Connect with fellow gamers and build your network</p>
-      </div>
+      <Banner pathname='community'/>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

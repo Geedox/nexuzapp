@@ -6,6 +6,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import GameRoomDetails from '@/components/gameroom/GameRoomDetails';
 import { Download, Share2, Trophy, Star, Sparkles, Crown, Medal, Award } from 'lucide-react';
+import Banner from '@/components/Banner';
 
 // Winner Celebration Modal Component
 const WinnerCelebrationModal = ({ isOpen, onClose, winner }) => {
@@ -677,12 +678,7 @@ const RoomsPage = () => {
   return (
     <>
       <div className="space-y-8 animate-fade-in">
-        <div className="bg-gradient-to-r from-blue-500/20 to-cyan-500/20 border border-blue-500/30 rounded-2xl p-6">
-          <h1 className="font-cyber text-3xl font-bold text-blue-400 mb-2 glow-text">
-            🏠 Game Rooms
-          </h1>
-          <p className="text-muted-foreground">Join existing rooms or create your own gaming session</p>
-        </div>
+        <Banner pathname='rooms'/>
 
         {/* Room Statistics */}
         {!loadingStats && safeRooms.length > 0 && (

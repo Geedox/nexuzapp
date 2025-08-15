@@ -1,3 +1,4 @@
+import Banner from "@/components/Banner";
 
 const AnalyticsPage = () => {
   const analyticsData = [
@@ -16,12 +17,7 @@ const AnalyticsPage = () => {
 
   return (
     <div className="space-y-8 animate-fade-in">
-      <div className="bg-gradient-to-r from-orange-500/20 to-red-500/20 border border-orange-500/30 rounded-2xl p-6">
-        <h1 className="font-cyber text-3xl font-bold text-orange-400 mb-2 glow-text">
-          📊 Gaming Analytics
-        </h1>
-        <p className="text-muted-foreground">Track your performance and gaming statistics</p>
-      </div>
+      <Banner pathname="analytics"/>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {analyticsData.map((stat, index) => (

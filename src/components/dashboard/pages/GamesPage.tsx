@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useGame } from '@/contexts/GameContext';
 import { useLeaderboard } from '@/contexts/LeaderboardContext';
 import { supabase } from '@/integrations/supabase/client';
+import Banner from '@/components/Banner';
 
 
 const GamesPage = () => {
@@ -215,7 +216,7 @@ const GamesPage = () => {
               </p>
             </div>
 
-            {/* Game Stats */}
+            Game Stats
             <div className="mb-6 flex gap-4">
               <div className="bg-secondary/20 p-4 rounded-lg flex-1">
                 <div className="text-sm text-muted-foreground mb-1">Status</div>
@@ -333,14 +334,7 @@ const GamesPage = () => {
     <>
       <div className="space-y-8 animate-fade-in">
         {/* Page Header */}
-        <div className="bg-gradient-to-r from-primary/20 to-accent/20 border border-primary/30 rounded-2xl p-6">
-          <h1 className="font-cyber text-3xl font-bold text-primary mb-2 glow-text">
-            🎮 Game Arena
-          </h1>
-          <p className="text-muted-foreground">
-            Discover and join the most exciting blockchain games
-          </p>
-        </div>
+        <Banner pathname='/games' />
 
         {/* Games Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

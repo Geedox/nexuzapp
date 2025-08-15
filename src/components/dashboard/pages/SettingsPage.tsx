@@ -1,13 +1,9 @@
+import Banner from "@/components/Banner";
 
 const SettingsPage = () => {
   return (
     <div className="space-y-8 animate-fade-in">
-      <div className="bg-gradient-to-r from-gray-500/20 to-slate-500/20 border border-gray-500/30 rounded-2xl p-6">
-        <h1 className="font-cyber text-3xl font-bold text-gray-400 mb-2 glow-text">
-          ⚙️ Settings
-        </h1>
-        <p className="text-muted-foreground">Customize your gaming experience and account preferences</p>
-      </div>
+      <Banner pathname="settings"/>
 
       {/* Profile Settings */}
       <div className="bg-black/40 backdrop-blur-lg border border-primary/30 rounded-2xl p-6">

@@ -1,3 +1,4 @@
+import Banner from "@/components/Banner";
 
 const CreatorsPage = () => {
   const creators = [
@@ -11,12 +12,7 @@ const CreatorsPage = () => {
 
   return (
     <div className="space-y-8 animate-fade-in">
-      <div className="bg-gradient-to-r from-pink-500/20 to-purple-500/20 border border-pink-500/30 rounded-2xl p-6">
-        <h1 className="font-cyber text-3xl font-bold text-pink-400 mb-2 glow-text">
-          🎨 Game Creators
-        </h1>
-        <p className="text-muted-foreground">Discover talented creators and their amazing games</p>
-      </div>
+      <Banner pathname="creators" />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <div className="bg-black/40 backdrop-blur-lg border border-primary/30 rounded-xl p-6 text-center">
@@ -56,15 +52,14 @@ const CreatorsPage = () => {
                 {creator.avatar}
               </div>
               <h3 className="font-cyber text-lg font-bold text-primary">{creator.name}</h3>
-              <div className={`inline-block px-3 py-1 rounded-full text-xs font-bold font-cyber mt-2 ${
-                creator.status === 'VERIFIED' ? 'bg-blue-500/20 text-blue-400' :
-                creator.status === 'RISING' ? 'bg-yellow-500/20 text-yellow-400' :
-                'bg-green-500/20 text-green-400'
-              }`}>
+              <div className={`inline-block px-3 py-1 rounded-full text-xs font-bold font-cyber mt-2 ${creator.status === 'VERIFIED' ? 'bg-blue-500/20 text-blue-400' :
+                  creator.status === 'RISING' ? 'bg-yellow-500/20 text-yellow-400' :
+                    'bg-green-500/20 text-green-400'
+                }`}>
                 {creator.status}
               </div>
             </div>
-            
+
             <div className="space-y-2">
               <div className="flex justify-between">
                 <span className="text-sm text-muted-foreground font-cyber">Followers:</span>
@@ -79,7 +74,7 @@ const CreatorsPage = () => {
                 <span className="text-sm font-cyber text-accent font-bold">{creator.revenue}</span>
               </div>
             </div>
-            
+
             <div className="flex gap-2 mt-4">
               <button className="flex-1 bg-gradient-to-r from-primary to-accent text-background font-cyber font-bold py-2 rounded-lg hover:scale-105 transition-all duration-300">
                 Follow
