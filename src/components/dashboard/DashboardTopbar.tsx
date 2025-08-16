@@ -107,9 +107,8 @@ const DashboardTopbar = () => {
       className={`border-b border-primary/20 bg-card/50 backdrop-blur-lg p-2 sm:p-4 fixed top-0 left-0 right-0 z-40 transition-all shadow-lg`}
     >
       <div
-        className={`${
-          sidebarOpen ? "md:pl-64 transition-all" : ""
-        } flex items-center justify-between`}
+        className={`${sidebarOpen ? "md:pl-64 transition-all" : ""
+          } flex items-center justify-between`}
       >
         <div className="flex items-center space-x-2 sm:space-x-4">
           <SidebarTrigger
@@ -132,7 +131,7 @@ const DashboardTopbar = () => {
           </div>
 
           {/* Create Room Button */}
-          <Button className="bg-gradient-to-r from-primary to-accent hover:scale-105 transition-all duration-300 neon-border font-cyber text-xs sm:text-sm px-2 sm:px-4 py-1 sm:py-2">
+          <Button variant="neumorphic" className="bg-gradient-to-r from-primary to-accent hover:scale-105 transition-all duration-300 font-cyber text-xs sm:text-sm px-2 sm:px-4 py-1 sm:py-2">
             <Plus className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-2" />
             <span className="hidden sm:inline">Create Room</span>
           </Button>
@@ -143,7 +142,7 @@ const DashboardTopbar = () => {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
-                    variant="outline"
+                    variant="neumorphic"
                     className="border-green-500/50 text-green-400 font-cyber text-xs sm:text-sm px-2 sm:px-4 py-1 sm:py-2 hover:bg-green-500/20"
                   >
                     <Wallet className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-1" />
@@ -252,9 +251,8 @@ const DashboardTopbar = () => {
 
                       return (
                         <div
-                          className={`w-6 h-6 sm:w-8 sm:h-8 bg-gradient-to-r ${
-                            avatarColors?.color || "from-primary to-accent"
-                          } rounded-full flex items-center justify-center text-lg sm:text-xl`}
+                          className={`w-6 h-6 sm:w-8 sm:h-8 bg-gradient-to-r ${avatarColors?.color || "from-primary to-accent"
+                            } rounded-full flex items-center justify-center text-lg sm:text-xl`}
                         >
                           {decodeURIComponent(emoji)}
                         </div>
@@ -301,9 +299,8 @@ const DashboardTopbar = () => {
 
                         return (
                           <div
-                            className={`w-10 h-10 bg-gradient-to-r ${
-                              avatarColors?.color || "from-primary to-accent"
-                            } rounded-lg flex items-center justify-center text-2xl flex-shrink-0`}
+                            className={`w-10 h-10 bg-gradient-to-r ${avatarColors?.color || "from-primary to-accent"
+                              } rounded-lg flex items-center justify-center text-2xl flex-shrink-0`}
                           >
                             {decodeURIComponent(emoji)}
                           </div>
