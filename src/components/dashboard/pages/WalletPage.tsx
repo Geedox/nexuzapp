@@ -520,7 +520,7 @@ const WalletPage = () => {
           className="bg-gradient-to-r from-blue-500 to-cyan-500 text-background font-cyber font-bold py-4 px-6 rounded-xl hover:scale-105 transition-all duration-300 flex items-center justify-center gap-2"
         >
           <Zap className="w-5 h-5" />
-          <span>Cetus Swap</span>
+          <span>Swap</span>
           <TrendingUp className="w-5 h-5" />
         </button>
       </div>
