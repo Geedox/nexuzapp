@@ -1,10 +1,10 @@
-import { createContext, useContext, useEffect, useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { useProfile } from '@/contexts/ProfileContext';
-import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
-import { SuiClient, getFullnodeUrl } from '@mysten/sui.js/client';
-import { NETWORK } from '@/constants';
+import { createContext, useContext, useEffect, useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { useProfile } from "@/contexts/ProfileContext";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { SuiClient, getFullnodeUrl } from "@mysten/sui.js/client";
+import { NETWORK, COIN_TYPES } from "@/constants";
 
 interface WalletContextType {
   // Blockchain balances
@@ -28,7 +28,7 @@ const WalletContext = createContext<WalletContextType | undefined>(undefined);
 export const useWallet = () => {
   const context = useContext(WalletContext);
   if (context === undefined) {
-    throw new Error('useWallet must be used within a WalletProvider');
+    throw new Error("useWallet must be used within a WalletProvider");
   }
   return context;
 };
@@ -54,53 +54,48 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
   const suiClient = new SuiClient({ url: getFullnodeUrl(NETWORK) });
 
   // Token types for Sui testnet
-  const TOKEN_TYPES = {
-    USDC: '0x5d4b302506645c37ff133b98c4b50a5ae14841659738d6d733d59d0d217a93bf::coin::COIN',
-    USDT: '0xc060006111016b8a020ad5b33834984a437aaa7d3c74c18e09a95d48aceab08c::coin::COIN',
-  };
+  const TOKEN_TYPES = COIN_TYPES;
 
   // Create wallet record in database
   const createWalletRecord = async (address: string) => {
     if (!user) return;
 
     try {
-      console.log('🏦 Creating wallet record in database...');
+      console.log("🏦 Creating wallet record in database...");
 
       const walletRecords = [
         {
           user_id: user.id,
-          currency: 'SUI',
+          currency: "SUI",
           balance: 0,
           wallet_address: address,
           is_connected: true,
         },
         {
           user_id: user.id,
-          currency: 'USDC',
+          currency: "USDC",
           balance: 0,
           wallet_address: address,
           is_connected: true,
         },
         {
           user_id: user.id,
-          currency: 'USDT',
+          currency: "USDT",
           balance: 0,
           wallet_address: address,
           is_connected: true,
-        }
+        },
       ];
 
-      const { error } = await supabase
-        .from('wallets')
-        .upsert(walletRecords, {
-          onConflict: 'user_id,currency',
-          ignoreDuplicates: false
-        });
+      const { error } = await supabase.from("wallets").upsert(walletRecords, {
+        onConflict: "user_id,currency",
+        ignoreDuplicates: false,
+      });
 
       if (error) throw error;
-      console.log('✅ Wallet records created successfully');
+      console.log("✅ Wallet records created successfully");
     } catch (error) {
-      console.error('❌ Error creating wallet record:', error);
+      console.error("❌ Error creating wallet record:", error);
     }
   };
 
@@ -110,7 +105,7 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
 
     try {
       const address = profile.sui_wallet_data.address;
-      console.log('🔍 Fetching balances for address:', address);
+      console.log("🔍 Fetching balances for address:", address);
 
       // Get SUI balance
       const suiBalanceResult = await suiClient.getBalance({
@@ -118,7 +113,7 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
       });
       const suiAmount = Number(suiBalanceResult.totalBalance) / 1_000_000_000;
       setSuiBalance(suiAmount);
-      console.log('💰 SUI Balance:', suiAmount);
+      console.log("💰 SUI Balance:", suiAmount);
 
       // Get USDC balance
       let usdcAmount = 0;
@@ -128,9 +123,9 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
           coinType: TOKEN_TYPES.USDC,
         });
         usdcAmount = Number(usdcBalanceResult.totalBalance) / 1_000_000;
-        console.log('💎 USDC Balance:', usdcAmount);
+        console.log("💎 USDC Balance:", usdcAmount);
       } catch (error) {
-        console.log('❌ USDC not found:', error.message);
+        console.log("❌ USDC not found:", error.message);
       }
       setUsdcBalance(usdcAmount);
 
@@ -142,17 +137,16 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
           coinType: TOKEN_TYPES.USDT,
         });
         usdtAmount = Number(usdtBalanceResult.totalBalance) / 1_000_000;
-        console.log('🟢 USDT Balance:', usdtAmount);
+        console.log("🟢 USDT Balance:", usdtAmount);
       } catch (error) {
-        console.log('❌ USDT not found:', error.message);
+        console.log("❌ USDT not found:", error.message);
       }
       setUsdtBalance(usdtAmount);
 
       // Update database with current balances
       await updateDatabaseBalances(suiAmount, usdcAmount, usdtAmount, address);
-
     } catch (error) {
-      console.error('❌ Error fetching blockchain balances:', error);
+      console.error("❌ Error fetching blockchain balances:", error);
       toast({
         title: "Error",
         description: "Failed to fetch wallet balances",
@@ -171,12 +165,12 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
     if (!user) return;
 
     try {
-      console.log('🏦 Updating database balances...');
+      console.log("🏦 Updating database balances...");
 
       const updates = [
         {
           user_id: user.id,
-          currency: 'SUI',
+          currency: "SUI",
           balance: suiAmount,
           wallet_address: address,
           is_connected: true,
@@ -184,7 +178,7 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
         },
         {
           user_id: user.id,
-          currency: 'USDC',
+          currency: "USDC",
           balance: usdcAmount,
           wallet_address: address,
           is_connected: true,
@@ -192,61 +186,57 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
         },
         {
           user_id: user.id,
-          currency: 'USDT',
+          currency: "USDT",
           balance: usdtAmount,
           wallet_address: address,
           is_connected: true,
           updated_at: new Date().toISOString(),
-        }
+        },
       ];
 
-      const { error } = await supabase
-        .from('wallets')
-        .upsert(updates, {
-          onConflict: 'user_id,currency',
-          ignoreDuplicates: false
-        });
+      const { error } = await supabase.from("wallets").upsert(updates, {
+        onConflict: "user_id,currency",
+        ignoreDuplicates: false,
+      });
 
       if (error) throw error;
-      console.log('✅ Database balances updated successfully');
+      console.log("✅ Database balances updated successfully");
     } catch (error) {
-      console.error('❌ Error updating database balances:', error);
+      console.error("❌ Error updating database balances:", error);
     }
   };
 
   // Save transaction to database
-  const saveTransactionToDatabase = async (
-    transactionData: {
-      type: string;
-      amount: number;
-      currency: string;
-      transaction_hash?: string;
-      description?: string;
-      status?: string;
-    }
-  ) => {
+  const saveTransactionToDatabase = async (transactionData: {
+    type: string;
+    amount: number;
+    currency: string;
+    transaction_hash?: string;
+    description?: string;
+    status?: string;
+  }) => {
     if (!user) return;
 
     try {
-      console.log('💾 Saving transaction to database:', transactionData);
+      console.log("💾 Saving transaction to database:", transactionData);
 
-      const { error } = await supabase
-        .from('transactions')
-        .insert({
-          user_id: user.id,
-          type: transactionData.type,
-          amount: transactionData.amount,
-          currency: transactionData.currency,
-          transaction_hash: transactionData.transaction_hash,
-          description: transactionData.description || `${transactionData.type} ${transactionData.currency}`,
-          status: transactionData.status || 'completed',
-          created_at: new Date().toISOString(),
-        });
+      const { error } = await supabase.from("transactions").insert({
+        user_id: user.id,
+        type: transactionData.type,
+        amount: transactionData.amount,
+        currency: transactionData.currency,
+        transaction_hash: transactionData.transaction_hash,
+        description:
+          transactionData.description ||
+          `${transactionData.type} ${transactionData.currency}`,
+        status: transactionData.status || "completed",
+        created_at: new Date().toISOString(),
+      });
 
       if (error) throw error;
-      console.log('✅ Transaction saved to database');
+      console.log("✅ Transaction saved to database");
     } catch (error) {
-      console.error('❌ Error saving transaction:', error);
+      console.error("❌ Error saving transaction:", error);
     }
   };
 
@@ -263,9 +253,9 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
   // Get total balance in USD
   const getTotalBalanceInUSD = (): number => {
     return (
-      (suiBalance * EXCHANGE_RATES.SUI) +
-      (usdcBalance * EXCHANGE_RATES.USDC) +
-      (usdtBalance * EXCHANGE_RATES.USDT)
+      suiBalance * EXCHANGE_RATES.SUI +
+      usdcBalance * EXCHANGE_RATES.USDC +
+      usdtBalance * EXCHANGE_RATES.USDT
     );
   };
 
@@ -277,7 +267,7 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
     } else {
       setLoading(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.sui_wallet_data?.address]);
 
   const value = {
@@ -297,5 +287,7 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
     saveTransactionToDatabase,
   };
 
-  return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
+  return (
+    <WalletContext.Provider value={value}>{children}</WalletContext.Provider>
+  );
 };
