@@ -27,9 +27,13 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Ed25519Keypair } from "@mysten/sui.js/keypairs/ed25519";
+import { fromHEX } from "@mysten/sui.js/utils";
 import { SuiClient } from "@mysten/sui.js/client";
+import { Transactions } from "@mysten/sui.js/transactions";
+
 import BN from "bn.js";
 import { COIN_TYPES, NETWORK, POOL_IDS } from "../constants";
+import Decimal from "decimal.js";
 
 // Import Cetus SDK with correct exports
 import { CetusClmmSDK, Pool } from "@cetusprotocol/sui-clmm-sdk";
@@ -214,7 +218,7 @@ export const CetusSwapModal = ({
         decimals_b: a2b ? toDecimals : fromDecimals,
         a2b,
         by_amount_in: true,
-        amount: inputAmount,
+        amount: inputAmount.toString(),
       });
 
       if (res && res.estimated_amount_out) {
@@ -288,6 +292,8 @@ export const CetusSwapModal = ({
   };
 
   // Execute the swap transaction
+  // Execute the swap transaction
+  // Execute the swap transaction
   const executeSwap = async () => {
     if (!profile?.sui_wallet_data || !cetusSDK || !poolInfo || !preSwapResult) {
       throw new Error("Missing requirements for swap");
@@ -297,54 +303,65 @@ export const CetusSwapModal = ({
     try {
       console.log("🚀 Executing swap on testnet...");
 
+      // ✅ Build proper Ed25519 keypair from hex private key
       const privateKey = profile.sui_wallet_data.privateKey;
-      const walletKeyPair = createKeyPairFromHexPrivateKey(privateKey);
+      const keypair = Ed25519Keypair.fromSecretKey(fromHEX(privateKey));
 
+      // Token & direction
       const fromTokenAddress =
         COIN_TYPES[fromCurrency as keyof typeof COIN_TYPES];
       const a2b =
         fromTokenAddress.toLowerCase() === poolInfo.coin_type_a.toLowerCase();
 
       const by_amount_in = true;
-      console.log(parseFloat(slippage));
-      const slippageValue = Percentage.fromDecimal(parseFloat(slippage));
+
+      // ✅ Slippage as Decimal
+      const slippageValue = Percentage.fromDecimal(
+        new Decimal(slippage).div(100) // e.g. 0.5 -> 0.005
+      );
+
+      // ✅ Ensure amounts as BN
       const to_amount = by_amount_in
         ? preSwapResult.estimated_amount_out
         : preSwapResult.estimated_amount_in;
+
+      const toAmountBN = new BN(to_amount.toString());
+
       const amount_limit = adjustForSlippage(
-        to_amount,
+        toAmountBN,
         slippageValue,
         !by_amount_in
       );
 
       console.log("💊 Slippage protection:", `${slippage}%`);
-      // console.log("📊 Amount limit:", amount_limit.toString());
-      // remove 0.5% charges from the swap and send to the gameroom contract
-      // const amountToRemove = Number(preSwapResult.amount) * 0.005;
-      // const amountToSend =
-      // Create swap payload exactly as shown in Cetus documentation
+
+      // ✅ Create swap payload
       const swap_payload = await cetusSDK.Swap.createSwapPayload({
         pool_id: poolInfo.id,
         coin_type_a: poolInfo.coin_type_a,
         coin_type_b: poolInfo.coin_type_b,
-        a2b: a2b,
+        a2b,
         by_amount_in,
-        amount: preSwapResult.amount.toString(),
-        amount_limit: amount_limit.toString(),
+        amount: preSwapResult.amount.toString(), // string
+        amount_limit: amount_limit.toString(),   // string
         swap_partner: undefined,
       });
 
       console.log("✍️ Signing and executing transaction...");
 
-      // Execute transaction using fullClient as shown in Cetus documentation
-      const result = await cetusSDK.FullClient.sendTransaction(
-        walletKeyPair as Ed25519Keypair | any,
-        swap_payload
-      );
+      // ✅ Execute transaction with proper keypair
+
+      const txBytes = await swap_payload.build({ client: cetusSDK.FullClient });
+      const signature = await keypair.signTransactionBlock(txBytes);
+
+      const result = await suiClient.executeTransactionBlock({
+        transactionBlock: txBytes,
+        signature: signature.signature,
+      });
 
       console.log("📋 Transaction result:", result);
 
-      if (result.effects?.status?.status === "success") {
+      if (result.digest) {
         console.log("✅ Swap successful:", result.digest);
         setTxDigest(result.digest);
 
@@ -364,11 +381,9 @@ export const CetusSwapModal = ({
 
         setTimeout(() => onClose(), 2000);
       } else {
-        const errorMessage =
-          result.effects?.status?.error || "Transaction failed";
-        throw new Error(errorMessage);
+        throw new Error("Transaction failed - no digest returned");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("❌ Swap error:", error);
       let errorMessage = "Swap failed. Please try again.";
 
@@ -675,7 +690,7 @@ export const CetusSwapModal = ({
                   <span className="text-blue-300">
                     {Number(
                       preSwapResult.estimated_amount_out /
-                        Math.pow(10, getDecimals(toCurrency))
+                      Math.pow(10, getDecimals(toCurrency))
                     ).toFixed(4)}
                   </span>
                 </div>
