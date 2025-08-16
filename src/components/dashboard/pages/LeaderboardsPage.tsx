@@ -1,17 +1,18 @@
+import Banner from '@/components/Banner';
 import { useLeaderboard } from '@/contexts/LeaderboardContext';
 import React, { useState, useEffect, useRef } from 'react';
 
 const LeaderboardsPage = () => {
   const [activeTab, setActiveTab] = useState('global');
-  const { 
-    leaderboards, 
-    globalLeaderboard, 
-    fetchLeaderboard, 
-    fetchGlobalLeaderboard, 
+  const {
+    leaderboards,
+    globalLeaderboard,
+    fetchLeaderboard,
+    fetchGlobalLeaderboard,
     subscribeToLeaderboard,
     subscribeToGlobalLeaderboard,
     refreshAllLeaderboards,
-    isLoading 
+    isLoading
   } = useLeaderboard();
 
   // Use ref to track cleanup functions
@@ -116,7 +117,7 @@ const LeaderboardsPage = () => {
         <div className="text-center py-12">
           <p className="text-muted-foreground text-lg mb-2">No scores yet!</p>
           <p className="text-sm text-muted-foreground">Be the first to set a high score</p>
-          <button 
+          <button
             onClick={handleRefresh}
             className="mt-4 px-4 py-2 bg-primary/20 text-primary rounded-lg font-cyber hover:bg-primary/30 transition-colors"
           >
@@ -131,24 +132,22 @@ const LeaderboardsPage = () => {
         {players.map((player, index) => {
           const badge = getBadge(player);
           const isGlobal = activeTab === 'global';
-          
+
           return (
-            <div 
+            <div
               key={player.id || player.user_id}
-              className={`flex items-center justify-between p-4 rounded-lg border transition-all duration-300 hover:scale-[1.02] ${
-                player.rank === 1 
-                  ? 'bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border-yellow-500/50' 
-                  : player.rank === 2 
-                  ? 'bg-gradient-to-r from-gray-400/20 to-gray-500/20 border-gray-400/50'
-                  : player.rank === 3
-                  ? 'bg-gradient-to-r from-amber-600/20 to-amber-700/20 border-amber-600/50'
-                  : 'bg-secondary/20 border-primary/20 hover:border-primary/40'
-              }`}
+              className={`flex items-center justify-between p-4 rounded-lg border transition-all duration-300 hover:scale-[1.02] ${player.rank === 1
+                  ? 'bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border-yellow-500/50'
+                  : player.rank === 2
+                    ? 'bg-gradient-to-r from-gray-400/20 to-gray-500/20 border-gray-400/50'
+                    : player.rank === 3
+                      ? 'bg-gradient-to-r from-amber-600/20 to-amber-700/20 border-amber-600/50'
+                      : 'bg-secondary/20 border-primary/20 hover:border-primary/40'
+                }`}
             >
               <div className="flex items-center space-x-4">
-                <div className={`text-2xl font-bold font-cyber w-12 text-center ${
-                  player.rank <= 3 ? 'text-accent glow-text' : 'text-muted-foreground'
-                }`}>
+                <div className={`text-2xl font-bold font-cyber w-12 text-center ${player.rank <= 3 ? 'text-accent glow-text' : 'text-muted-foreground'
+                  }`}>
                   #{player.rank}
                 </div>
                 <div className="text-3xl">{getAvatar(player.rank)}</div>
@@ -163,7 +162,7 @@ const LeaderboardsPage = () => {
                       </div>
                     )}
                     <span className="text-xs text-muted-foreground font-cyber">
-                      {isGlobal 
+                      {isGlobal
                         ? `${player.total_wins || player.wins || 0} wins • ${player.total_games || player.games_played || 0} games`
                         : `${player.games_played || 0} games played`
                       }
@@ -178,14 +177,14 @@ const LeaderboardsPage = () => {
               </div>
               <div className="text-right">
                 <div className="font-cyber text-xl font-bold text-primary">
-                  {isGlobal 
+                  {isGlobal
                     ? `${player.total_wins || player.wins || 0} wins`
                     : `${(player.total_score || 0).toLocaleString()} pts`
                   }
                 </div>
                 <div className="text-xs text-muted-foreground font-cyber">
-                  {isGlobal 
-                    ? `${(player.total_score || 0).toLocaleString()} total score` 
+                  {isGlobal
+                    ? `${(player.total_score || 0).toLocaleString()} total score`
                     : 'High Score'
                   }
                 </div>
@@ -214,21 +213,10 @@ const LeaderboardsPage = () => {
 
   return (
     <div className="space-y-8 animate-fade-in">
-      <div className="bg-gradient-to-r from-accent/20 to-primary/20 border border-accent/30 rounded-2xl p-6">
-        <h1 className="font-cyber text-3xl font-bold text-accent mb-2 glow-text">
-          🏆 Leaderboards
-        </h1>
-        <p className="text-muted-foreground">
-          See where you rank among the best players worldwide
-        </p>
-        <button 
-          onClick={refreshAllLeaderboards}
-          className="mt-4 px-4 py-2 bg-accent/20 text-accent rounded-lg font-cyber hover:bg-accent/30 transition-colors"
-          disabled={isLoading}
-        >
-          {isLoading ? '🔄 Refreshing...' : '🔄 Refresh All'}
-        </button>
-      </div>
+      <Banner
+        pathname="/leaderboards"
+        onRefreshLeaderboards={refreshAllLeaderboards}
+      />
 
       {/* Tab Navigation */}
       <div className="flex flex-wrap gap-2 mb-6">
@@ -236,11 +224,10 @@ const LeaderboardsPage = () => {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`font-cyber font-bold py-3 px-6 rounded-xl transition-all duration-300 hover:scale-105 ${
-              activeTab === tab.id
+            className={`font-cyber font-bold py-3 px-6 rounded-xl transition-all duration-300 hover:scale-105 ${activeTab === tab.id
                 ? 'bg-gradient-to-r from-primary to-accent text-background'
                 : 'bg-secondary/20 text-muted-foreground hover:text-foreground border border-primary/20'
-            }`}
+              }`}
           >
             {tab.icon} {tab.name}
           </button>
@@ -255,13 +242,13 @@ const LeaderboardsPage = () => {
               {getTabTitle()}
             </h2>
             <p className="text-sm text-muted-foreground mt-1">
-              {activeTab === 'global' 
+              {activeTab === 'global'
                 ? 'Ranked by total wins across all games'
                 : 'Ranked by highest score achieved'
               }
             </p>
           </div>
-          <button 
+          <button
             onClick={handleRefresh}
             className="px-3 py-2 bg-primary/20 text-primary rounded-lg font-cyber hover:bg-primary/30 transition-colors text-sm"
             disabled={isLoading}
@@ -269,7 +256,7 @@ const LeaderboardsPage = () => {
             {isLoading ? '⏳' : '🔄'}
           </button>
         </div>
-        
+
         <div className="p-6">
           {renderLeaderboard(getCurrentLeaderboard())}
         </div>

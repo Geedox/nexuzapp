@@ -1,20 +1,12 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { useGameRoom } from "@/contexts/GameRoomContext";
-import { useAuth } from "@/contexts/AuthContext";
-import { useWallet } from "@/contexts/WalletContext";
-import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
-import GameRoomDetails from "@/components/gameroom/GameRoomDetails";
-import {
-  Download,
-  Share2,
-  Trophy,
-  Star,
-  Sparkles,
-  Crown,
-  Medal,
-  Award,
-} from "lucide-react";
+import React, { useState, useEffect, useCallback } from 'react';
+import { useGameRoom } from '@/contexts/GameRoomContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { useWallet } from '@/contexts/WalletContext';
+import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+import GameRoomDetails from '@/components/gameroom/GameRoomDetails';
+import { Download, Share2, Trophy, Star, Sparkles, Crown, Medal, Award } from 'lucide-react';
+import Banner from '@/components/Banner';
 
 // Winner Celebration Modal Component
 const WinnerCelebrationModal = ({ isOpen, onClose, winner }) => {
@@ -824,7 +816,7 @@ const RoomsPage = () => {
             Join existing rooms or create your own gaming session
           </p>
         </div>
-
+        <Banner pathname='rooms'/>
         {/* Room Statistics */}
         {!loadingStats && safeRooms.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
