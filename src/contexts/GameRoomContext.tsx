@@ -16,7 +16,7 @@ interface GameRoom {
   game_instance_id: string | null;
   creator_id: string;
   entry_fee: number;
-  currency: "USDC" | "USDT" | "NGN";
+  currency: "USDC" | "USDT" | "SUI";
   max_players: number;
   current_players: number;
   min_players_to_start: number;
