@@ -3,6 +3,8 @@ import { useGame } from '@/contexts/GameContext';
 import { useLeaderboard } from '@/contexts/LeaderboardContext';
 import { supabase } from '@/integrations/supabase/client';
 import Banner from '@/components/Banner';
+import { GameCategories } from '@/components/GameCategories';
+import { GamesSection } from '@/components/Game-section';
 
 
 const GamesPage = () => {
@@ -13,9 +15,28 @@ const GamesPage = () => {
   const [isLoadingGame, setIsLoadingGame] = useState(false);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [activeUsers, setActiveUsers] = useState({});
+  const [activeCategory, setActiveCategory] = useState("popular")
 
   const { initializeGame, handleGameMessage, playerRank, endGameSession } = useGame();
   const { fetchLeaderboard, subscribeToLeaderboard, getTopPlayers } = useLeaderboard();
+
+  const getCategoryTitle = (category: string) => {
+    const titles: Record<string, string> = {
+      popular: "Popular Games",
+      new: "New Releases",
+      crypto: "Crypto Games",
+      action: "Action Games",
+      arcade: "Arcade Games",
+      adventure: "Adventure Games",
+      "role-playing": "Role-Playing Games",
+      simulation: "Simulation Games",
+      strategy: "Strategy Games",
+      sports: "Sports Games",
+      puzzle: "Puzzle Games",
+      fighting: "Fighting Games",
+    }
+    return titles[category] || "Games"
+  }
 
   // Game data with UUID IDs matching the database
   const games = [
@@ -335,67 +356,12 @@ const GamesPage = () => {
       <div className="space-y-8 animate-fade-in">
         {/* Page Header */}
         <Banner pathname='/games' />
+        <GameCategories  />
 
         {/* Games Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {games.map((game) => (
-            <div
-              key={game.id}
-              className="bg-gradient-to-br from-card to-secondary/20 border border-primary/20 rounded-xl p-6 hover:border-primary/40 transition-all duration-300 hover:scale-105 group"
-            >
-              {/* Game Icon */}
-              <div className="text-6xl mb-4 text-center group-hover:scale-110 transition-transform">
-                {game.image}
-              </div>
+        <GamesSection title={getCategoryTitle(activeCategory)} category={activeCategory} />
 
-              {/* Game Name */}
-              <h3 className="font-cyber text-lg font-bold text-primary mb-2">
-                {game.name}
-              </h3>
-
-              {/* Game Info */}
-              <div className="flex justify-between items-center mb-4">
-                <span className="text-sm text-muted-foreground font-cyber">
-                  {activeUsers[game.id] || 0} active users
-                </span>
-                <div className={`px-2 py-1 rounded-full text-xs font-bold font-cyber ${game.status === 'LIVE' ? 'bg-green-500/20 text-green-400' :
-                  game.status === 'STARTING' ? 'bg-yellow-500/20 text-yellow-400' :
-                    'bg-gray-500/20 text-gray-400'
-                  }`}>
-                  {game.status}
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handlePlayGame(game)}
-                  className="flex-1 bg-gradient-to-r from-primary to-accent text-background font-cyber font-bold py-2 rounded-lg hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 relative"
-                  disabled={!game.gameUrl || isLoadingGame}
-                >
-                  {isLoadingGame && selectedGame?.id === game.id ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <span className="animate-spin">⚡</span> Loading...
-                    </span>
-                  ) : (
-                    game.gameUrl ? 'Play' : 'Coming Soon'
-                  )}
-                </button>
-                <button
-                  onClick={() => handleShowDetails(game)}
-                  className="px-4 bg-secondary/50 text-primary font-cyber font-bold py-2 rounded-lg hover:bg-secondary/70 transition-all duration-300 relative"
-                  disabled={isLoadingDetails && detailsGame?.id === game.id}
-                >
-                  {isLoadingDetails && detailsGame?.id === game.id ? (
-                    <span className="animate-spin">⚡</span>
-                  ) : (
-                    'Details'
-                  )}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+        <GamesSection title={"Recently Played"} category={activeCategory} />
       </div>
 
       {/* Modals */}

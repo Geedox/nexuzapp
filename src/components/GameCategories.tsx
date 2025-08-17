@@ -30,7 +30,7 @@ export function GameCategories({ onCategoryChange }: CategoryNavProps) {
         <div className="bg-card border-b border-border ">
             {/* <h2 className="font-cyber text-lg font-bold text-primary mb-2">Categories</h2> */}
             <div className="md:max-w-3xl xl:mx-auto">
-                <div className="flex flex-wrap justify-center md:flex-nowrap items-center gap-1 overflow-x-auto overflow-clip py-4 gaming-scrollbar">
+                <div className="flex flex-wrap justify-center md:justify-start md:flex-nowrap items-center gap-1 overflow-x-auto overflow-clip py-4 gaming-scrollbar">
                     {categories.map((category) => (
                         <button
                             key={category.id}
