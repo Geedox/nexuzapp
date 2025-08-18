@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useGameRoom } from "@/contexts/GameRoomContext";
+import { CreateRoomData, useGameRoom } from "@/contexts/GameRoomContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { useWallet } from "@/contexts/WalletContext";
+import { useProfile } from "@/contexts/ProfileContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import GameRoomDetails from "@/components/gameroom/GameRoomDetails";
@@ -16,6 +16,7 @@ import {
   Award,
 } from "lucide-react";
 import Banner from "@/components/Banner";
+import { useWallet } from "@/contexts/WalletContext";
 
 // Winner Celebration Modal Component
 const WinnerCelebrationModal = ({ isOpen, onClose, winner }) => {
@@ -112,10 +113,10 @@ const WinnerCelebrationModal = ({ isOpen, onClose, winner }) => {
       winner.position === 1
         ? "🏆"
         : winner.position === 2
-        ? "🥈"
-        : winner.position === 3
-        ? "🥉"
-        : "🏅",
+          ? "🥈"
+          : winner.position === 3
+            ? "🥉"
+            : "🏅",
       600,
       200
     );
@@ -143,8 +144,7 @@ const WinnerCelebrationModal = ({ isOpen, onClose, winner }) => {
     ctx.font = "32px Arial";
     ctx.fillText(`${winner.gameName} - ${winner.roomName}`, 600, 540);
     ctx.fillText(
-      `Score: ${winner.score.toLocaleString()} | ${
-        winner.totalParticipants
+      `Score: ${winner.score.toLocaleString()} | ${winner.totalParticipants
       } Players`,
       600,
       580
@@ -156,21 +156,17 @@ const WinnerCelebrationModal = ({ isOpen, onClose, winner }) => {
 
     // Download
     const link = document.createElement("a");
-    link.download = `winner-${winner.playerName}-${
-      winner.position
-    }-${Date.now()}.png`;
+    link.download = `winner-${winner.playerName}-${winner.position
+      }-${Date.now()}.png`;
     link.href = canvas.toDataURL();
     link.click();
   };
 
   const shareWin = async () => {
-    const shareText = `🏆 I just won ${getPositionText(winner.position)} in ${
-      winner.gameName
-    }!\n\n💰 Prize: ${winner.earnings} ${
-      winner.currency
-    }\n📊 Score: ${winner.score.toLocaleString()}\n👥 Beat ${
-      winner.totalParticipants - 1
-    } other players!\n\n${getCelebrationMessage(winner.position)}`;
+    const shareText = `🏆 I just won ${getPositionText(winner.position)} in ${winner.gameName
+      }!\n\n💰 Prize: ${winner.earnings} ${winner.currency
+      }\n📊 Score: ${winner.score.toLocaleString()}\n👥 Beat ${winner.totalParticipants - 1
+      } other players!\n\n${getCelebrationMessage(winner.position)}`;
 
     if (navigator.share) {
       try {
@@ -255,24 +251,22 @@ const WinnerCelebrationModal = ({ isOpen, onClose, winner }) => {
         <div className="relative font-cyber z-10 p-6 text-center space-y-4">
           {/* Animated Trophy */}
           <div
-            className={`text-6xl mb-6 font-cyber ${
-              animationStep >= 1 ? "animate-bounce" : "opacity-0 scale-0"
-            } transition-all duration-1000`}
+            className={`text-6xl mb-6 font-cyber ${animationStep >= 1 ? "animate-bounce" : "opacity-0 scale-0"
+              } transition-all duration-1000`}
           >
             {winner.position === 1
               ? "🏆"
               : winner.position === 2
-              ? "🥈"
-              : winner.position === 3
-              ? "🥉"
-              : "🏅"}
+                ? "🥈"
+                : winner.position === 3
+                  ? "🥉"
+                  : "🏅"}
           </div>
 
           {/* Position Badge */}
           <div
-            className={`${
-              animationStep >= 1 ? "scale-100 opacity-100" : "scale-0 opacity-0"
-            } transition-all font-cyber duration-700`}
+            className={`${animationStep >= 1 ? "scale-100 opacity-100" : "scale-0 opacity-0"
+              } transition-all font-cyber duration-700`}
           >
             <div
               className={`inline-block px-12 py-4 bg-gradient-to-r ${getPositionColor(
@@ -287,11 +281,10 @@ const WinnerCelebrationModal = ({ isOpen, onClose, winner }) => {
 
           {/* Main Congratulations */}
           <div
-            className={`${
-              animationStep >= 2
-                ? "opacity-100 translate-y-0"
-                : "opacity-0 translate-y-10"
-            } transition-all duration-700`}
+            className={`${animationStep >= 2
+              ? "opacity-100 translate-y-0"
+              : "opacity-0 translate-y-10"
+              } transition-all duration-700`}
           >
             <h1 className="text-5xl md:text-6xl font-cyber font-bold bg-gradient-to-r from-white via-yellow-200 to-white bg-clip-text text-transparent mb-4 drop-shadow-2xl">
               CONGRATULATIONS!
@@ -303,11 +296,10 @@ const WinnerCelebrationModal = ({ isOpen, onClose, winner }) => {
 
           {/* Player Info */}
           <div
-            className={`${
-              animationStep >= 2
-                ? "opacity-100 translate-y-0"
-                : "opacity-0 translate-y-10"
-            } font-cyber transition-all duration-700 delay-300`}
+            className={`${animationStep >= 2
+              ? "opacity-100 translate-y-0"
+              : "opacity-0 translate-y-10"
+              } font-cyber transition-all duration-700 delay-300`}
           >
             <h2 className="text-4xl font-bold text-white mb-3 drop-shadow-lg">
               {winner.playerName}
@@ -324,9 +316,8 @@ const WinnerCelebrationModal = ({ isOpen, onClose, winner }) => {
 
           {/* Prize Amount */}
           <div
-            className={`${
-              animationStep >= 3 ? "opacity-100 scale-100" : "opacity-0 scale-0"
-            } font-cyber transition-all duration-1000`}
+            className={`${animationStep >= 3 ? "opacity-100 scale-100" : "opacity-0 scale-0"
+              } font-cyber transition-all duration-1000`}
           >
             <div className="bg-gradient-to-r from-green-500/30 to-emerald-500/30 border-2 border-green-400/50 rounded-3xl p-8 mb-8 backdrop-blur-sm">
               <p className="text-green-300 text-2xl mb-3 font-semibold">
@@ -415,14 +406,13 @@ const RoomsPage = () => {
     refreshRooms,
   } = useGameRoom();
   const { user } = useAuth();
-  const { wallets } = useWallet();
+  const { profile } = useProfile();
   const { toast } = useToast();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [selectedRoomId, setSelectedRoomId] = useState(null);
   const [roomCode, setRoomCode] = useState("");
-  const [selectedWallet, setSelectedWallet] = useState(null);
   const [games, setGames] = useState([]);
   const [loadingStats, setLoadingStats] = useState(true);
   const [userWins, setUserWins] = useState({}); // Track user wins per room
@@ -431,6 +421,8 @@ const RoomsPage = () => {
   const [showCelebration, setShowCelebration] = useState(false);
   const [winnerData, setWinnerData] = useState(null);
 
+  const { suiBalance, usdcBalance, usdtBalance } = useWallet();
+
   const [roomStats, setRoomStats] = useState({
     totalRooms: 0,
     activeRooms: 0,
@@ -438,7 +430,7 @@ const RoomsPage = () => {
     totalPlayers: 0,
   });
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<CreateRoomData>({
     name: "",
     gameId: "",
     entryFee: 0,
@@ -539,21 +531,6 @@ const RoomsPage = () => {
     setLoadingStats(false);
   }, [rooms]);
 
-  // Set default wallet when wallets load - Fixed to handle undefined wallets
-  useEffect(() => {
-    if (
-      wallets &&
-      Array.isArray(wallets) &&
-      wallets.length > 0 &&
-      !selectedWallet
-    ) {
-      const defaultWallet =
-        wallets.find((w) => (w.balance || 0) > 0) || wallets[0];
-      setSelectedWallet(defaultWallet);
-      setFormData((prev) => ({ ...prev, currency: defaultWallet.currency }));
-    }
-  }, [wallets, selectedWallet]);
-
   // Function to show win celebration for a specific room
   const showWinCelebration = (room) => {
     const win = userWins[room.id];
@@ -585,15 +562,6 @@ const RoomsPage = () => {
       return;
     }
 
-    if (!selectedWallet) {
-      toast({
-        title: "Error",
-        description: "Please select a wallet",
-        variant: "destructive",
-      });
-      return;
-    }
-
     // Validate times
     if (formData.endTime <= formData.startTime) {
       toast({
@@ -603,10 +571,11 @@ const RoomsPage = () => {
       });
       return;
     }
+    const balance = formData.currency === "USDC" ? usdcBalance : formData.currency === "USDT" ? usdtBalance : suiBalance;
 
     // Check wallet balance for both sponsored rooms and entry fee
     if (formData.isSponsored) {
-      if ((selectedWallet.balance || 0) < formData.sponsorAmount) {
+      if ((balance) < formData.sponsorAmount) {
         toast({
           title: "Error",
           description: "Insufficient balance for sponsorship amount",
@@ -615,7 +584,7 @@ const RoomsPage = () => {
         return;
       }
     } else {
-      if ((selectedWallet.balance || 0) < formData.entryFee) {
+      if ((balance) < formData.entryFee) {
         toast({
           title: "Error",
           description: "Insufficient balance for entry fee",
@@ -627,8 +596,7 @@ const RoomsPage = () => {
 
     try {
       const room = await createRoom({
-        ...formData,
-        currency: selectedWallet.currency,
+        ...formData
       });
 
       setShowCreateModal(false);
@@ -637,7 +605,7 @@ const RoomsPage = () => {
         name: "",
         gameId: "",
         entryFee: 0,
-        currency: selectedWallet.currency,
+        currency: formData.currency,
         maxPlayers: 10,
         isPrivate: false,
         winnerSplitRule: "winner_takes_all",
@@ -904,11 +872,10 @@ const RoomsPage = () => {
             {safeRooms.map((room) => (
               <div
                 key={room.id}
-                className={`relative bg-gradient-to-br from-card to-secondary/20 border rounded-xl p-6 hover:border-primary/40 transition-all duration-300 hover:scale-105 group cyber-border ${
-                  userWonInRoom(room)
-                    ? "border-yellow-500/50 shadow-lg shadow-yellow-500/20"
-                    : "border-primary/20"
-                }`}
+                className={`relative bg-gradient-to-br from-card to-secondary/20 border rounded-xl p-6 hover:border-primary/40 transition-all duration-300 hover:scale-105 group cyber-border ${userWonInRoom(room)
+                  ? "border-yellow-500/50 shadow-lg shadow-yellow-500/20"
+                  : "border-primary/20"
+                  }`}
               >
                 {/* Winner Badge */}
                 {userWonInRoom(room) && (
@@ -1097,33 +1064,14 @@ const RoomsPage = () => {
 
                   <div>
                     <label className="text-sm font-cyber text-primary mb-1 block">
-                      Select Wallet
+                      Wallet
                     </label>
-                    <select
-                      value={selectedWallet?.id || ""}
-                      onChange={(e) => {
-                        const wallet =
-                          wallets && Array.isArray(wallets)
-                            ? wallets.find((w) => w.id === e.target.value)
-                            : null;
-                        setSelectedWallet(wallet);
-                        if (wallet)
-                          setFormData({
-                            ...formData,
-                            currency: wallet.currency,
-                          });
-                      }}
+                    <input
+                      type="text"
+                      disabled
+                      value={profile?.sui_wallet_data?.address || ""}
                       className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
-                    >
-                      <option value="">Select wallet...</option>
-                      {wallets &&
-                        Array.isArray(wallets) &&
-                        wallets.map((wallet) => (
-                          <option key={wallet.id} value={wallet.id}>
-                            {wallet.currency} - Balance: {wallet.balance || 0}
-                          </option>
-                        ))}
-                    </select>
+                    />
                   </div>
 
                   <div>
@@ -1152,13 +1100,13 @@ const RoomsPage = () => {
                     {!formData.isSponsored && formData.entryFee > 0 && (
                       <p className="text-xs font-cyber text-yellow-400 mt-1">
                         You'll pay {formData.entryFee}{" "}
-                        {selectedWallet?.currency || ""} to join your own room
+                        {formData.currency || ""} to join your own room
                       </p>
                     )}
                     {formData.isSponsored && formData.sponsorAmount > 0 && (
                       <p className="text-xs font-cyber text-yellow-400 mt-1">
                         You'll pay {formData.sponsorAmount}{" "}
-                        {selectedWallet?.currency || ""} to sponsor this room
+                        {formData.currency || ""} to sponsor this room
                       </p>
                     )}
                   </div>
@@ -1293,7 +1241,7 @@ const RoomsPage = () => {
                           {Math.round(
                             (formData.endTime.getTime() -
                               formData.startTime.getTime()) /
-                              (1000 * 60)
+                            (1000 * 60)
                           )}{" "}
                           minutes
                         </p>
@@ -1391,9 +1339,9 @@ const RoomsPage = () => {
                     {selectedRoom.is_sponsored
                       ? "FREE (Sponsored)"
                       : formatCurrency(
-                          selectedRoom.entry_fee,
-                          selectedRoom.currency
-                        )}
+                        selectedRoom.entry_fee,
+                        selectedRoom.currency
+                      )}
                   </p>
                 </div>
 
@@ -1410,7 +1358,7 @@ const RoomsPage = () => {
                       }
                       className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-3 font-cyber text-foreground text-center text-xl tracking-wider focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                       placeholder="ENTER CODE"
-                      maxLength="8"
+                      maxLength={8}
                     />
                   </div>
                 )}
@@ -1449,7 +1397,7 @@ const RoomsPage = () => {
           </div>
         )}
 
-        <style jsx>{`
+        <style>{`
           .cyber-border {
             position: relative;
             overflow: hidden;
