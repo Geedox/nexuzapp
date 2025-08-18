@@ -24,7 +24,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
 
     const now = new Date();
     const endTime = new Date(room.end_time);
-    
+
     // If current time has passed end time and room is still ongoing/waiting
     if (now >= endTime && (room.status === 'ongoing' || room.status === 'waiting')) {
       console.log('Room should auto-complete, refreshing data...');
@@ -43,10 +43,10 @@ const GameRoomDetails = ({ roomId, onBack }) => {
         getRoomDetails(roomId),
         getRoomParticipants(roomId)
       ]);
-      
+
       if (roomData) {
         setRoom(roomData);
-        
+
         // If room is completed, determine winners for display
         if (roomData.status === 'completed') {
           const activeParticipants = participantsData || [];
@@ -82,7 +82,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
     } else if (event.data.type === 'SUBMIT_SCORE') {
       try {
         const score = event.data.score;
-        
+
         const { error } = await supabase
           .from('game_room_participants')
           .update({ score })
@@ -92,29 +92,29 @@ const GameRoomDetails = ({ roomId, onBack }) => {
         if (error) {
           throw error;
         }
-        
+
         event.source.postMessage({
           type: 'SCORE_SUBMITTED',
           success: true,
           isNewHighScore: true,
           message: 'Score submitted successfully!'
         }, '*');
-        
+
         toast({
           title: "Score Updated!",
           description: `Your score: ${score} points`,
         });
-        
+
         await loadRoomData(false);
       } catch (error) {
         console.error('Error updating score:', error);
-        
+
         event.source.postMessage({
           type: 'SCORE_SUBMITTED',
           success: false,
           error: 'Failed to submit score'
         }, '*');
-        
+
         toast({
           title: "Error",
           description: "Failed to update score",
@@ -139,12 +139,12 @@ const GameRoomDetails = ({ roomId, onBack }) => {
 
   useEffect(() => {
     loadRoomData();
-    
+
     // Update current time every second for accurate countdown
     const timer = setInterval(() => {
       setCurrentTime(new Date());
     }, 1000);
-    
+
     return () => clearInterval(timer);
   }, [loadRoomData]);
 
@@ -155,7 +155,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
     const autoCompleteCheckInterval = setInterval(() => {
       checkForAutoCompletion();
     }, 10000); // Check every 10 seconds
-    
+
     return () => clearInterval(autoCompleteCheckInterval);
   }, [checkForAutoCompletion]);
 
@@ -193,16 +193,16 @@ const GameRoomDetails = ({ roomId, onBack }) => {
   // Determine actual room status based on time
   const getActualStatus = useCallback(() => {
     if (!room) return 'waiting';
-    
+
     const now = currentTime;
     const startTime = new Date(room.start_time);
     const endTime = new Date(room.end_time);
-    
+
     // If room was manually cancelled or completed
     if (room.status === 'cancelled' || room.status === 'completed') {
       return room.status;
     }
-    
+
     // Check time-based status
     if (now < startTime) {
       return 'waiting';
@@ -211,7 +211,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
     } else if (now >= endTime) {
       return 'completed';
     }
-    
+
     return room.status;
   }, [room, currentTime]);
 
@@ -221,7 +221,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
       setIsLoadingGame(true);
       await new Promise(resolve => setTimeout(resolve, 500));
       setShowGamePlayer(true);
-      
+
       toast({
         title: "Game Loaded",
         description: "Game is ready to play!",
@@ -287,14 +287,14 @@ const GameRoomDetails = ({ roomId, onBack }) => {
 
   const getTimeRemaining = (startTime) => {
     const start = new Date(startTime);
-    const diff = start - currentTime;
-    
+    const diff = start.getTime() - currentTime.getTime();
+
     if (diff <= 0) return 'Game can start now!';
-    
+
     const hours = Math.floor(diff / (1000 * 60 * 60));
     const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
     const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-    
+
     if (hours > 0) return `Starts in ${hours}h ${minutes}m`;
     if (minutes > 0) return `Starts in ${minutes}m ${seconds}s`;
     return `Starts in ${seconds}s`;
@@ -354,7 +354,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <button 
+        <button
           onClick={onBack}
           className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors"
         >
@@ -459,17 +459,16 @@ const GameRoomDetails = ({ roomId, onBack }) => {
           <h2 className="font-cyber text-xl font-bold text-primary mb-4">🏆 Winners</h2>
           <div className="space-y-3">
             {winners.map((winner, index) => (
-              <div 
+              <div
                 key={winner.id}
-                className={`flex items-center justify-between rounded-lg p-4 border ${
-                  winner.final_position === 1 
-                    ? 'bg-gradient-to-r from-yellow-500/20 to-amber-500/20 border-yellow-500/30' 
-                    : winner.final_position === 2 
-                    ? 'bg-gradient-to-r from-gray-300/20 to-gray-400/20 border-gray-400/30'
-                    : winner.final_position === 3
-                    ? 'bg-gradient-to-r from-amber-600/20 to-orange-600/20 border-amber-600/30'
-                    : 'bg-secondary/30 border-primary/20'
-                }`}
+                className={`flex items-center justify-between rounded-lg p-4 border ${winner.final_position === 1
+                    ? 'bg-gradient-to-r from-yellow-500/20 to-amber-500/20 border-yellow-500/30'
+                    : winner.final_position === 2
+                      ? 'bg-gradient-to-r from-gray-300/20 to-gray-400/20 border-gray-400/30'
+                      : winner.final_position === 3
+                        ? 'bg-gradient-to-r from-amber-600/20 to-orange-600/20 border-amber-600/30'
+                        : 'bg-secondary/30 border-primary/20'
+                  }`}
               >
                 <div className="flex items-center gap-4">
                   <div className="text-2xl">
@@ -514,7 +513,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
             participants
               .sort((a, b) => (b.score || 0) - (a.score || 0)) // Sort by score descending
               .map((participant, index) => (
-                <div 
+                <div
                   key={participant.id}
                   className="flex items-center justify-between bg-secondary/30 rounded-lg p-3 border border-primary/20"
                 >
@@ -556,7 +555,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
       <div className="flex gap-4">
         {/* Play Game Button - Shows when conditions are met */}
         {canPlayGame && (
-          <button 
+          <button
             onClick={handlePlayGame}
             disabled={isLoadingGame}
             className="flex-1 bg-gradient-to-r from-primary to-accent text-background font-cyber font-bold py-3 rounded-xl hover:scale-105 transition-all cyber-button shadow-lg hover:shadow-primary/50 disabled:opacity-50 disabled:hover:scale-100"
@@ -601,7 +600,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
 
         {/* Leave Room - Only before game starts */}
         {actualStatus === 'waiting' && isParticipant && !isCreator && !hasReachedStartTime && (
-          <button 
+          <button
             onClick={() => setShowLeaveConfirm(true)}
             className="flex-1 bg-gradient-to-r from-red-500 to-red-600 text-white font-cyber font-bold py-3 rounded-xl hover:scale-105 transition-all shadow-lg hover:shadow-red-500/50"
           >
@@ -611,7 +610,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
 
         {/* Cancel Room - Only before start time */}
         {canCancelRoom && (
-          <button 
+          <button
             onClick={() => setShowCancelConfirm(true)}
             className="flex-1 bg-gradient-to-r from-red-500 to-red-600 text-white font-cyber font-bold py-3 rounded-xl hover:scale-105 transition-all shadow-lg hover:shadow-red-500/50"
           >
@@ -688,7 +687,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
                 <h3 className="font-cyber text-xl text-primary">{room.game.name}</h3>
                 <span className="text-sm text-muted-foreground">Room: {roomId.slice(0, 8)}...</span>
               </div>
-              <button 
+              <button
                 onClick={() => setShowGamePlayer(false)}
                 className="text-muted-foreground hover:text-primary transition-colors text-2xl font-bold"
               >
@@ -707,7 +706,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
         </div>
       )}
 
-      <style jsx>{`
+      <style>{`
         .cyber-border {
           position: relative;
           overflow: hidden;

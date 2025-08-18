@@ -1,7 +1,3 @@
-/* eslint-disable @typescript-eslint/ban-ts-comment */
-/* eslint-disable @typescript-eslint/no-explicit-any */
-// @ts-nocheck
-
 import { createContext, useContext, useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -117,7 +113,7 @@ export const GameRoomProvider = ({
   const [joining, setJoining] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
-  const { suiClient, refreshBalances } = useWallet();
+  const { suiClient, refreshBalances, usdcBalance, usdtBalance, suiBalance } = useWallet();
   const { profile } = useProfile();
 
   const onChainGameRoom = useMemo(() => {
@@ -865,7 +861,7 @@ export const GameRoomProvider = ({
             roomCode: roomCode || "",
             isSponsored: !!data.isSponsored,
             sponsorAmount: data.sponsorAmount || 0,
-            winnerSplitRule: data.winnerSplitRule,
+            winnerSplitRule: data.winnerSplitRule as "winner_takes_all" | "top_2" | "top_3" | "top_4" | "top_5" | "top_10" | "equal",
             startTimeMs: data.startTime.getTime(),
             endTimeMs: data.endTime.getTime(),
           });
@@ -1016,10 +1012,11 @@ export const GameRoomProvider = ({
       }
 
       // Check if user has sufficient balance (only for non-sponsored rooms)
-      const wallet = wallets.find((w) => w.currency === room.currency);
       if (
         !room.is_sponsored &&
-        (!wallet || (wallet.balance || 0) < room.entry_fee)
+        ((room.currency === "USDC" && usdcBalance < room.entry_fee) ||
+          (room.currency === "USDT" && usdtBalance < room.entry_fee) ||
+          (room.currency === "SUI" && suiBalance < room.entry_fee))
       ) {
         throw new Error(`Insufficient ${room.currency} balance`);
       }
@@ -1067,24 +1064,13 @@ export const GameRoomProvider = ({
         .insert({
           room_id: roomId,
           user_id: user.id,
-          wallet_id: wallet?.id || null,
+          wallet_id: null,
           entry_transaction_id: transaction?.id || null,
           payment_currency: room.currency,
           payment_amount: room.is_sponsored ? 0 : room.entry_fee,
         });
 
       if (joinError) throw joinError;
-
-      // Update wallet balance (only for non-sponsored rooms)
-      if (!room.is_sponsored && room.entry_fee > 0 && wallet) {
-        await supabase
-          .from("wallets")
-          .update({
-            balance: (wallet.balance || 0) - room.entry_fee,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", wallet.id);
-      }
 
       await refreshBalances();
       await refreshTransactions();
@@ -1227,53 +1213,21 @@ export const GameRoomProvider = ({
             console.error("Error creating refund transaction:", refundError);
             continue;
           }
-
-          // Update wallet balance with full refund
-          const { error: walletError } = await supabase
-            .from("wallets")
-            .update({
-              balance: supabase.raw(`balance + ${participant.payment_amount}`),
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", participant.wallet_id);
-
-          if (walletError) {
-            console.error("Error updating wallet for refund:", walletError);
-          }
         }
       }
 
       // If the room was sponsored, refund the sponsor amount too
       if (room.is_sponsored && room.sponsor_amount > 0) {
-        // Find the creator's wallet
-        const { data: creatorWallet } = await supabase
-          .from("wallets")
-          .select("*")
-          .eq("user_id", room.creator_id)
-          .eq("currency", room.currency)
-          .single();
-
-        if (creatorWallet) {
-          // Create sponsor refund transaction
-          await supabase.from("transactions").insert({
-            user_id: room.creator_id,
-            room_id: roomId,
-            type: "deposit",
-            amount: room.sponsor_amount,
-            currency: room.currency,
-            status: "completed",
-            description: `Sponsor refund for cancelled room: ${room.name}`,
-          });
-
-          // Update creator's wallet balance
-          await supabase
-            .from("wallets")
-            .update({
-              balance: supabase.raw(`balance + ${room.sponsor_amount}`),
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", creatorWallet.id);
-        }
+        // Create sponsor refund transaction
+        await supabase.from("transactions").insert({
+          user_id: room.creator_id,
+          room_id: roomId,
+          type: "deposit",
+          amount: room.sponsor_amount,
+          currency: room.currency,
+          status: "completed",
+          description: `Sponsor refund for cancelled room: ${room.name}`,
+        });
       }
 
       // Update room status to cancelled
@@ -1429,7 +1383,7 @@ export const GameRoomProvider = ({
       await distributePrizes(room, participants, winners);
 
       await refreshRooms();
-      await refreshWallets();
+      await refreshBalances();
       await refreshTransactions();
 
       toast({
