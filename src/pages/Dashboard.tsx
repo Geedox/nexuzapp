@@ -97,16 +97,18 @@ const Dashboard = () => {
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/20 to-background text-foreground">
       <SidebarProvider>
         <div className="flex min-h-screen w-full">
-          <DashboardSidebar
-            activeSection={activeSection}
-            setActiveSection={(section) => {
-              if (section === 'home') {
-                navigate("dashboard")
-              } else {
-                navigate(`/dashboard/${section}`);
-              }
-            }}
-          />
+          <ScrollArea className='gaming-scrollbar'>
+            <DashboardSidebar
+              activeSection={activeSection}
+              setActiveSection={(section) => {
+                if (section === 'home') {
+                  navigate("dashboard")
+                } else {
+                  navigate(`/dashboard/${section}`);
+                }
+              }}
+            />
+          </ScrollArea>
 
           <div className="flex-1 flex flex-col min-w-0">
             <DashboardTopbar />
