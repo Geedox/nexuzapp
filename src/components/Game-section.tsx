@@ -91,15 +91,6 @@ export function GamesSection({ title, category }: GamesSectionProps) {
     const sidebar = useSidebar()
 
     console.log(sidebar)
-    const scroll = (direction: "left" | "right") => {
-        if (scrollRef.current) {
-            const scrollAmount = 320
-            scrollRef.current.scrollBy({
-                left: direction === "left" ? -scrollAmount : scrollAmount,
-                behavior: "smooth",
-            })
-        }
-    }
 
     const filteredGames =
         category && category !== "popular"
@@ -108,39 +99,20 @@ export function GamesSection({ title, category }: GamesSectionProps) {
 
     return (
         <section className="py-1 md:py-11">
-            <div className={`${sidebar.open ? "md:max-w-[53rem]" : "md:max-w-[43rem] xl:max-w-[70rem]"} transition-all duration-300 max-w-[22rem]`}>
-                <div className="flex items-center justify-between mb-6">
+            <div className={`transition-all duration-300 `}>
+                <div className="flex items-center mb-6">
                     <div>
                         <h2 className="text-xl md:text-2xl font-bold text-foreground mb-2">{title}</h2>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                        <Button
-                            variant="outline"
-                            size="icon"
-                            onClick={() => scroll("left")}
-                            className="border-border hover:bg-muted"
-                        >
-                            <ChevronLeft className="h-4 w-4" />
-                        </Button>
-                        <Button
-                            variant="outline"
-                            size="icon"
-                            onClick={() => scroll("right")}
-                            className="border-border hover:bg-muted"
-                        >
-                            <ChevronRight className="h-4 w-4" />
-                        </Button>
-                    </div>
                 </div>
 
                 <div
-                    ref={scrollRef}
-                    className="flex gap-4 overflow-x-auto scrollbar-hide pb-4"
-                    style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+                    className={`flex flex-wrap items-center md:items-start justify-center md:justify-normal md:grid grid-cols-2 ${sidebar.open ? "md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6": "md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7"} gap-2 pb-2 transition-all duration-300 `}
+
                 >
                     {filteredGames.map((game) => (
-                        <div key={game.id} className="flex-shrink-0 w-40">
+                        <div key={game.id} className="flex-shrink-0 w-36 md:w-40">
                             <GameCard
                                 name={game.name}
                                 image={game.image}

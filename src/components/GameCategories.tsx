@@ -3,12 +3,9 @@ import { useState } from "react"
 const categories = [
     { id: "popular", name: "Popular", icon: "🔥" },
     { id: "new", name: "New", icon: "✨" },
-    { id: "crypto", name: "Crypto Games", icon: "💎" },
     { id: "action", name: "Action", icon: "⚔️" },
     { id: "adventure", name: "Adventure", icon: "🗺️" },
-    { id: "role-playing", name: "Role-Playing", icon: "🎭" },
     { id: "simulation", name: "Simulation", icon: "🌍" },
-    { id: "strategy", name: "Strategy", icon: "♟️" },
     { id: "sports", name: "Sports", icon: "⚽" },
     { id: "puzzle", name: "Puzzle", icon: "🧩" },
     { id: "fighting", name: "Fighting", icon: "🥊" },
@@ -27,15 +24,15 @@ export function GameCategories({ onCategoryChange }: CategoryNavProps) {
     }
 
     return (
-        <div className="bg-card border-b border-border ">
+        <div className="w-full bg-card border-b border-border ">
             {/* <h2 className="font-cyber text-lg font-bold text-primary mb-2">Categories</h2> */}
-            <div className="md:max-w-3xl xl:mx-auto">
-                <div className="flex flex-wrap justify-center md:justify-start md:flex-nowrap items-center gap-1 overflow-x-auto overflow-clip py-4 gaming-scrollbar">
+            <div className="w-full overflow-hidden">
+                <div className="grid grid-cols-4 md:flex flex-wrap items-center gap-1 overflow-x-auto py-4 gaming-scrollbar px-4">
                     {categories.map((category) => (
                         <button
                             key={category.id}
                             onClick={() => handleCategoryClick(category.id)}
-                            className={`flex flex-col items-center gap-2 px-4 py-3 rounded-lg transition-all duration-200 whitespace-nowrap min-w-fit ${activeCategory === category.id
+                            className={`flex flex-col items-center gap-2 px-4 py-3 rounded-lg transition-all duration-200 whitespace-nowrap flex-shrink-0 ${activeCategory === category.id
                                     ? "bg-accent text-accent-foreground"
                                     : "text-muted-foreground hover:text-foreground hover:bg-muted"
                                 }`}

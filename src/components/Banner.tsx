@@ -99,7 +99,7 @@ export default function Banner({ pathname, onRefreshLeaderboards, isLoading = fa
     ) || defaultBanner;
 
     return (
-        <div className={`flex ${pathname === "/games" ? "" : ""} md:max-w-4xl mx-auto justify-between items-center ${bannerData.containerClass}`}>
+        <div className={`flex justify-between items-center ${bannerData.containerClass}`}>
             <div className="flex-1">
                 <h1 className={bannerData.titleClass}>
                     {bannerData.title}
