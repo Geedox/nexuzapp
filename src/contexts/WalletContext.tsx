@@ -4,6 +4,7 @@ import { useProfile } from "@/contexts/ProfileContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { SuiClient, getFullnodeUrl } from "@mysten/sui.js/client";
+import type { Database } from "@/integrations/supabase/types";
 import { NETWORK, COIN_TYPES } from "@/constants";
 
 interface WalletContextType {
@@ -63,7 +64,7 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       console.log("🏦 Creating wallet record in database...");
 
-      const walletRecords = [
+      const walletRecords: { user_id: string; currency: any; balance: number; wallet_address: string; is_connected: boolean }[] = [
         {
           user_id: user.id,
           currency: "SUI",
@@ -142,9 +143,6 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
         console.log("❌ USDT not found:", error.message);
       }
       setUsdtBalance(usdtAmount);
-
-      // Update database with current balances
-      await updateDatabaseBalances(suiAmount, usdcAmount, usdtAmount, address);
     } catch (error) {
       console.error("❌ Error fetching blockchain balances:", error);
       toast({
@@ -155,83 +153,36 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  // Update database with current balances
-  const updateDatabaseBalances = async (
-    suiAmount: number,
-    usdcAmount: number,
-    usdtAmount: number,
-    address: string
-  ) => {
-    if (!user) return;
-
-    try {
-      console.log("🏦 Updating database balances...");
-
-      const updates = [
-        {
-          user_id: user.id,
-          currency: "SUI",
-          balance: suiAmount,
-          wallet_address: address,
-          is_connected: true,
-          updated_at: new Date().toISOString(),
-        },
-        {
-          user_id: user.id,
-          currency: "USDC",
-          balance: usdcAmount,
-          wallet_address: address,
-          is_connected: true,
-          updated_at: new Date().toISOString(),
-        },
-        {
-          user_id: user.id,
-          currency: "USDT",
-          balance: usdtAmount,
-          wallet_address: address,
-          is_connected: true,
-          updated_at: new Date().toISOString(),
-        },
-      ];
-
-      const { error } = await supabase.from("wallets").upsert(updates, {
-        onConflict: "user_id,currency",
-        ignoreDuplicates: false,
-      });
-
-      if (error) throw error;
-      console.log("✅ Database balances updated successfully");
-    } catch (error) {
-      console.error("❌ Error updating database balances:", error);
-    }
-  };
-
   // Save transaction to database
   const saveTransactionToDatabase = async (transactionData: {
-    type: string;
+    type: Database["public"]["Enums"]["transaction_type"];
     amount: number;
-    currency: string;
+    currency: Database["public"]["Enums"]["currency_type"];
     transaction_hash?: string;
     description?: string;
     status?: string;
+    room_id?: string | null;
   }) => {
     if (!user) return;
 
     try {
       console.log("💾 Saving transaction to database:", transactionData);
 
-      const { error } = await supabase.from("transactions").insert({
-        user_id: user.id,
-        type: transactionData.type,
-        amount: transactionData.amount,
-        currency: transactionData.currency,
-        transaction_hash: transactionData.transaction_hash,
-        description:
-          transactionData.description ||
-          `${transactionData.type} ${transactionData.currency}`,
-        status: transactionData.status || "completed",
-        created_at: new Date().toISOString(),
-      });
+      const { error } = await supabase.from("transactions").insert([
+        {
+          user_id: user.id,
+          type: transactionData.type,
+          amount: transactionData.amount,
+          currency: transactionData.currency,
+          transaction_hash: transactionData.transaction_hash,
+          description:
+            transactionData.description ||
+            `${transactionData.type} ${transactionData.currency}`,
+          status: transactionData.status || "completed",
+          room_id: transactionData.room_id ?? null,
+          created_at: new Date().toISOString(),
+        },
+      ]);
 
       if (error) throw error;
       console.log("✅ Transaction saved to database");

@@ -55,7 +55,7 @@ export const CreateChatRoomModal = ({ open, onClose, supabase }: CreateChatRoomM
           .order('name');
 
         if (error) throw error;
-        setGames(data || []);
+        setGames(data as Game[] || []);
       } catch (error) {
         console.error('Error loading games:', error);
       } finally {
@@ -70,7 +70,7 @@ export const CreateChatRoomModal = ({ open, onClose, supabase }: CreateChatRoomM
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!name.trim()) {
       toast({
         title: "Invalid Input",
@@ -180,13 +180,12 @@ export const CreateChatRoomModal = ({ open, onClose, supabase }: CreateChatRoomM
                 <button
                   key={avatar.id}
                   type="button"
-                  onClick={() => setSelectedAvatar(avatar)}
+                  onClick={() => setSelectedAvatar(avatar as typeof selectedAvatar)}
                   disabled={processing}
-                  className={`p-3 rounded-xl border-2 transition-all duration-300 ${
-                    selectedAvatar.id === avatar.id
+                  className={`p-3 rounded-xl border-2 transition-all duration-300 ${selectedAvatar.id === avatar.id
                       ? 'border-primary bg-primary/20 scale-105'
                       : 'border-secondary/30 bg-black/40 hover:border-primary/50 hover:scale-105'
-                  }`}
+                    }`}
                 >
                   <div className="text-center">
                     <div className="text-2xl mb-1">{avatar.emoji}</div>
@@ -222,11 +221,10 @@ export const CreateChatRoomModal = ({ open, onClose, supabase }: CreateChatRoomM
                   type="button"
                   onClick={() => setSelectedGame(null)}
                   disabled={processing}
-                  className={`w-full p-3 rounded-lg border transition-all duration-300 ${
-                    !selectedGame
+                  className={`w-full p-3 rounded-lg border transition-all duration-300 ${!selectedGame
                       ? 'border-primary bg-primary/20'
                       : 'border-secondary/30 bg-black/40 hover:border-primary/50'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 bg-gray-600 rounded-lg flex items-center justify-center">
@@ -238,7 +236,7 @@ export const CreateChatRoomModal = ({ open, onClose, supabase }: CreateChatRoomM
                     </div>
                   </div>
                 </button>
-                
+
                 <div className="max-h-40 overflow-y-auto space-y-2">
                   {games.map((game) => (
                     <button
@@ -246,17 +244,16 @@ export const CreateChatRoomModal = ({ open, onClose, supabase }: CreateChatRoomM
                       type="button"
                       onClick={() => setSelectedGame(game)}
                       disabled={processing}
-                      className={`w-full p-3 rounded-lg border transition-all duration-300 ${
-                        selectedGame?.id === game.id
+                      className={`w-full p-3 rounded-lg border transition-all duration-300 ${selectedGame?.id === game.id
                           ? 'border-primary bg-primary/20'
                           : 'border-secondary/30 bg-black/40 hover:border-primary/50'
-                      }`}
+                        }`}
                     >
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
                           {game.image_url ? (
-                            <img 
-                              src={game.image_url} 
+                            <img
+                              src={game.image_url}
                               alt={game.name}
                               className="w-full h-full object-cover rounded-lg"
                             />
@@ -291,7 +288,7 @@ export const CreateChatRoomModal = ({ open, onClose, supabase }: CreateChatRoomM
                     {isPrivate ? 'Private Room' : 'Public Room'}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {isPrivate 
+                    {isPrivate
                       ? 'Only invited members can join'
                       : 'Anyone can discover and join'
                     }
