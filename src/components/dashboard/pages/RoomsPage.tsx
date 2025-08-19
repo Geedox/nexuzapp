@@ -1178,7 +1178,7 @@ const RoomsPage = () => {
                       onChange={(e) =>
                         setFormData({
                           ...formData,
-                          winnerSplitRule: e.target.value,
+                          winnerSplitRule: e.target.value as "winner_takes_all" | "top_2" | "top_3" | "top_4" | "top_5" | "top_6" | "top_7" | "top_8" | "top_9" | "top_10",
                         })
                       }
                       className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"

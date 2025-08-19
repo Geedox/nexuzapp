@@ -22,6 +22,32 @@ export class GameRoom {
         return `${this.packageId}::${this.moduleName}::${func}` as `${string}::${string}::${string}`;
     }
 
+    private async dryRunTransaction(txb: TransactionBlock, sender: string, bufferMultiplier: number = 1.2) {
+        // Provisional budget to allow the dry run to work
+        txb.setGasBudget(50_000_000);
+        // Ensure sender is set for building
+        txb.setSender(sender);
+        const resp = await this.client.dryRunTransactionBlock({
+            transactionBlock: await txb.build({ client: this.client }),
+        });
+        try {
+            const gasUsed = resp?.effects?.gasUsed;
+            if (gasUsed) {
+                const computation = BigInt(gasUsed.computationCost ?? 0);
+                const storageCost = BigInt(gasUsed.storageCost ?? 0);
+                const nonRefundable = BigInt(gasUsed.nonRefundableStorageFee ?? 0);
+                let estimate = computation + storageCost + nonRefundable;
+                if (estimate < 1_000_000n) estimate = 1_000_000n;
+                const numerator = BigInt(Math.round(bufferMultiplier * 100));
+                const buffered = (estimate * numerator) / 100n;
+                txb.setGasBudget(Number(buffered));
+            }
+        } catch {
+            // ignore, keep provisional budget
+        }
+        return resp;
+    }
+
     private toU64SmallestUnits(amount: number, decimals: number) {
         if (amount <= 0) return 0;
         const smallest = Math.floor(amount * Math.pow(10, decimals));
@@ -60,8 +86,6 @@ export class GameRoom {
 
         const txb = new TransactionBlock();
         const userAddress = walletKeyPair.getPublicKey().toSuiAddress();
-        txb.setGasBudget(100_000_000);
-
         const usdcDecimals = 6;
         const entryFeeSmallest = this.toU64SmallestUnits(entryFee, usdcDecimals);
         const sponsorAmountSmallest = this.toU64SmallestUnits(sponsorAmount, usdcDecimals);
@@ -86,7 +110,6 @@ export class GameRoom {
             txb.mergeCoins(usdcPrimary, rest);
         }
         const [paymentCoin] = txb.splitCoins(usdcPrimary, [requiredPayment]);
-
         // Call create_room_with_usdc, capture (room_id, change)
         const createResult = txb.moveCall({
             target: this.getTarget("create_room_with_usdc"),
@@ -111,8 +134,9 @@ export class GameRoom {
 
         const [, changeCoin] = createResult;
         // Return change to sender
+        console.log("userAddress in createGameRoom => ", userAddress);
         txb.transferObjects([changeCoin], txb.pure(userAddress));
-
+        await this.dryRunTransaction(txb, userAddress);
         const result = await this.client.signAndExecuteTransactionBlock({
             signer: walletKeyPair,
             transactionBlock: txb,
@@ -145,8 +169,6 @@ export class GameRoom {
         const { walletKeyPair, roomId } = options;
 
         const txb = new TransactionBlock();
-        txb.setGasBudget(30_000_000);
-
         const result = await this.client.signAndExecuteTransactionBlock({
             signer: walletKeyPair,
             transactionBlock: txb,
@@ -172,7 +194,6 @@ export class GameRoom {
 
         const txb = new TransactionBlock();
         const userAddress = walletKeyPair.getPublicKey().toSuiAddress();
-        txb.setGasBudget(60_000_000);
 
         const usdcDecimals = 6;
         const entryFeeSmallest = this.toU64SmallestUnits(entryFee, usdcDecimals);
@@ -198,7 +219,6 @@ export class GameRoom {
         }
 
         const [entryFeeCoin] = txb.splitCoins(usdcPrimary, [entryFeeSmallest]); // 0 split is allowed
-
         // Call join_room, capture (participant_id, change)
         const joinResult = txb.moveCall({
             target: this.getTarget("join_room"),
@@ -214,7 +234,7 @@ export class GameRoom {
 
         const [, changeCoin] = joinResult;
         txb.transferObjects([changeCoin], txb.pure(userAddress));
-
+        await this.dryRunTransaction(txb, userAddress);
         const result = await this.client.signAndExecuteTransactionBlock({
             signer: walletKeyPair,
             transactionBlock: txb,
@@ -233,8 +253,7 @@ export class GameRoom {
         const { walletKeyPair, roomId } = options;
 
         const txb = new TransactionBlock();
-        txb.setGasBudget(40_000_000);
-
+        const userAddress = walletKeyPair.getPublicKey().toSuiAddress();
         txb.moveCall({
             target: this.getTarget("start_game"),
             arguments: [
@@ -243,7 +262,7 @@ export class GameRoom {
                 txb.object("0x6"),
             ],
         });
-
+        await this.dryRunTransaction(txb, userAddress);
         const result = await this.client.signAndExecuteTransactionBlock({
             signer: walletKeyPair,
             transactionBlock: txb,
@@ -262,8 +281,7 @@ export class GameRoom {
         const { walletKeyPair, roomId } = options;
 
         const txb = new TransactionBlock();
-        txb.setGasBudget(30_000_000);
-
+        const userAddress = walletKeyPair.getPublicKey().toSuiAddress();
         txb.moveCall({
             target: this.getTarget("leave_room"),
             arguments: [
@@ -272,7 +290,7 @@ export class GameRoom {
                 txb.object("0x6"),
             ],
         });
-
+        await this.dryRunTransaction(txb, userAddress);
         const result = await this.client.signAndExecuteTransactionBlock({
             signer: walletKeyPair,
             transactionBlock: txb,
@@ -291,7 +309,7 @@ export class GameRoom {
         const { walletKeyPair, roomId } = options;
 
         const txb = new TransactionBlock();
-        txb.setGasBudget(60_000_000);
+
 
         const refundCoin = txb.moveCall({
             target: this.getTarget("cancel_room"),
@@ -305,7 +323,7 @@ export class GameRoom {
         // Return refund coin to caller
         const userAddress = walletKeyPair.getPublicKey().toSuiAddress();
         txb.transferObjects([refundCoin], txb.pure(userAddress));
-
+        await this.dryRunTransaction(txb, userAddress);
         const result = await this.client.signAndExecuteTransactionBlock({
             signer: walletKeyPair,
             transactionBlock: txb,
@@ -333,7 +351,8 @@ export class GameRoom {
         }
 
         const txb = new TransactionBlock();
-        txb.setGasBudget(100_000_000);
+        const userAddress = walletKeyPair.getPublicKey().toSuiAddress();
+
 
         txb.moveCall({
             target: this.getTarget("complete_game"),
@@ -345,7 +364,7 @@ export class GameRoom {
                 txb.object("0x6"),
             ],
         });
-
+        await this.dryRunTransaction(txb, userAddress);
         const result = await this.client.signAndExecuteTransactionBlock({
             signer: walletKeyPair,
             transactionBlock: txb,
