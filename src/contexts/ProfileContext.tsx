@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
-interface Profile {
+export interface Profile {
   id: string;
   username: string | null;
   display_name: string | null;
@@ -188,7 +188,7 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
         .single();
 
       if (error) throw error;
-      setProfile(data);
+      setProfile(data as Profile);
 
       // Fetch room and game stats
       const [roomStatsData, gameStatsData] = await Promise.all([
@@ -249,7 +249,7 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
         .single();
 
       if (error) throw error;
-      setProfile(data);
+      setProfile(data as Profile);
 
       toast({
         title: "Success",
@@ -282,7 +282,7 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
 
       if (error) throw error;
 
-      setProfile(data);
+      setProfile(data as Profile);
       toast({
         title: "Success",
         description: "Profile updated successfully",
