@@ -1,22 +1,78 @@
 import { SuiClient } from "@mysten/sui.js/client";
 import { TransactionBlock } from "@mysten/sui.js/transactions";
 import { COIN_TYPES } from "@/constants";
+import { Ed25519Keypair } from "@mysten/sui.js/keypairs/ed25519";
 
 export class GameRoom {
     private client: SuiClient;
     private packageId: string;
     private storeId: string;
     private readonly moduleName = "game_room";
+    private sponsorKeypair: Ed25519Keypair;
+    private sponsorAddress: string;
 
     constructor(
         client: SuiClient,
-        packageId: string = "0xead40bafc0216e37bf4d7e7856cca9cd60ac082aeb2bb5555eac676a89fb4973",
-        storeId: string = "0x7ea6fc1e7de01ff2b8d93f713de2dedd84911aeebc01f7cb200cc24c927b30e0",
+        packageId: string = "0x337d95edf239319e079fae6472e998301775a1d3587e3e9d590f906f0ef1c58c",
+        storeId: string = "0xe2661d90a781fc3b6036c12f8c277b098401ffb688f1212b596334034798189a",
     ) {
         this.client = client;
         this.packageId = packageId;
         this.storeId = storeId;
+        const sponsorPrivateKey = import.meta.env.VITE_PUBLIC_PRIVATE_KEY;
+        if (!sponsorPrivateKey) {
+            throw new Error("Sponsor private key is not set");
+        }
+        this.sponsorKeypair = this.getWalletKeypair(sponsorPrivateKey);
+        this.sponsorAddress = this.sponsorKeypair?.getPublicKey().toSuiAddress();
     }
+
+    private getWalletKeypair = (privateKey: string): Ed25519Keypair | null => {
+        try {
+            const hex = privateKey;
+            if (!hex || typeof hex !== "string" || hex.length < 64) return null;
+            const bytes = new Uint8Array(32);
+            for (let i = 0; i < 32; i++) {
+                bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+            }
+            return Ed25519Keypair.fromSecretKey(bytes);
+        } catch (e) {
+            console.warn("Unable to derive wallet keypair for on-chain ops:", e);
+            return null;
+        }
+    };
+
+    private async getSponsorGasObject(minBalance: bigint = 5_000_000n) {
+        const coins = await this.client.getCoins({ owner: this.sponsorAddress });
+        console.log("sponsorAddress => ", this.sponsorAddress);
+        const coin = coins.data.find(c => BigInt(c.balance) > minBalance);
+        if (!coin) throw new Error("Sponsor has no coin for gas");
+        return {
+            objectId: coin.coinObjectId,
+            version: coin.version,
+            digest: coin.digest
+        };
+    }
+
+    private async prepareSponsoredExecution(txb: TransactionBlock, userKeypair: any) {
+        const userAddress = userKeypair.getPublicKey().toSuiAddress();
+        txb.setSender(userAddress);
+
+        // Set sponsor as gas owner
+        txb.setGasOwner(this.sponsorAddress);
+
+        // Attach sponsor’s gas payment
+        const gasCoin = await this.getSponsorGasObject();
+        txb.setGasPayment([gasCoin]);
+        txb.setGasBudget(50_000_000); // could refine with dryRun if you want
+        const txbBytes = await txb.build({ client: this.client });
+        // Sign with both
+        const userSig = await userKeypair.signTransactionBlock(txb);
+        const sponsorSig = await this.sponsorKeypair.signTransactionBlock(txbBytes);
+
+        return { txb, signatures: [userSig, sponsorSig] };
+    }
+
 
     private getTarget(func: string): `${string}::${string}::${string}` {
         return `${this.packageId}::${this.moduleName}::${func}` as `${string}::${string}::${string}`;
@@ -290,10 +346,11 @@ export class GameRoom {
                 txb.object("0x6"),
             ],
         });
+        const { txb: signedTxb, signatures } = await this.prepareSponsoredExecution(txb, walletKeyPair);
         await this.dryRunTransaction(txb, userAddress);
-        const result = await this.client.signAndExecuteTransactionBlock({
-            signer: walletKeyPair,
-            transactionBlock: txb,
+        const result = await this.client.executeTransactionBlock({
+            transactionBlock: await signedTxb.build({ client: this.client }),
+            signature: signatures,
             options: { showEffects: true, showEvents: true },
         });
 
@@ -324,17 +381,18 @@ export class GameRoom {
         const userAddress = walletKeyPair.getPublicKey().toSuiAddress();
         txb.transferObjects([refundCoin], txb.pure(userAddress));
         await this.dryRunTransaction(txb, userAddress);
-        const result = await this.client.signAndExecuteTransactionBlock({
-            signer: walletKeyPair,
-            transactionBlock: txb,
-            options: { showEffects: true, showEvents: true },
+        const { txb: signedTxb, signatures } = await this.prepareSponsoredExecution(txb, walletKeyPair);
+
+        const result = await this.client.executeTransactionBlock({
+            transactionBlock: await signedTxb.build({ client: this.client }),
+            signature: signatures,
+            options: { showEffects: true, showEvents: true }
         });
 
         if (result.effects?.status?.status !== "success") {
             throw new Error(`Transaction failed: ${result.effects?.status?.error || "Unknown error"}`);
         }
-
-        return { success: true, digest: result.digest } as { success: true; digest: string };
+        return { success: true, digest: result.digest };
     }
 
     // Complete game and distribute prizes
@@ -353,7 +411,6 @@ export class GameRoom {
         const txb = new TransactionBlock();
         const userAddress = walletKeyPair.getPublicKey().toSuiAddress();
 
-
         txb.moveCall({
             target: this.getTarget("complete_game"),
             arguments: [
@@ -361,20 +418,43 @@ export class GameRoom {
                 txb.pure(roomId),
                 txb.pure(winnerAddresses),
                 txb.pure(scores.map((s) => BigInt(s))),
-                txb.object("0x6"),
+                txb.object("0x6"), // coin type, here fixed to SUI
             ],
         });
-        await this.dryRunTransaction(txb, userAddress);
-        const result = await this.client.signAndExecuteTransactionBlock({
-            signer: walletKeyPair,
-            transactionBlock: txb,
-            options: { showEffects: true, showEvents: true },
+
+        // Prepare with sponsor paying gas
+        const { txb: signedTxb, signatures } = await this.prepareSponsoredExecution(txb, walletKeyPair);
+
+        const result = await this.client.executeTransactionBlock({
+            transactionBlock: await signedTxb.build({ client: this.client }),
+            signature: signatures,
+            options: { showEffects: true, showEvents: true }
         });
 
         if (result.effects?.status?.status !== "success") {
             throw new Error(`Transaction failed: ${result.effects?.status?.error || "Unknown error"}`);
         }
 
-        return { success: true, digest: result.digest } as { success: true; digest: string };
+        // Extract transaction effects and events for winner mapping
+        const effects = result.effects;
+        const events = result.events;
+
+        // Look for GameCompleted event to get additional details
+        let gameCompletedEvent = null;
+        const eventType = `${this.packageId}::${this.moduleName}::GameCompleted`;
+        for (const ev of events) {
+            if (ev.type === eventType) {
+                gameCompletedEvent = ev.parsedJson;
+                break;
+            }
+        }
+
+        return {
+            success: true,
+            digest: result.digest,
+            effects,
+            events,
+            gameCompletedEvent
+        };
     }
 }
