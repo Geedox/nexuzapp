@@ -46,30 +46,6 @@ const GamesPage = () => {
       gameUrl: "https://ornate-lamington-115e41.netlify.app/", // Replace with actual URL
       instructions: "Jump over obstacles and collect coins to score points. Use arrow keys to move left/right."
     },
-    {
-      id: 'nft-battle',
-      name: "NFT Battle Arena",
-      players: 650,
-      status: "LIVE",
-      image: "⚔️",
-      instructions: "Coming soon! Battle with your NFTs in this strategic combat game."
-    },
-    {
-      id: 'blockchain-puzzle',
-      name: "Blockchain Puzzle Master",
-      players: 420,
-      status: "WAITING",
-      image: "🧩",
-      instructions: "Coming soon! Solve blockchain-themed puzzles to earn rewards."
-    },
-    {
-      id: 'space-mining',
-      name: "Space Mining Simulator",
-      players: 380,
-      status: "LIVE",
-      image: "⛏️",
-      instructions: "Coming soon! Mine asteroids and build your space empire."
-    }
   ];
 
   // Fetch active users for all games
