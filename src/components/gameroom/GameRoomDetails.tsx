@@ -377,12 +377,36 @@ const GameRoomDetails = ({ roomId, onBack }) => {
               Game: <span className="text-foreground">{room.game?.name || 'Unknown Game'}</span>
             </p>
           </div>
-          {room.is_private && (
-            <div className="bg-purple-500/20 border border-purple-500/30 rounded-lg px-4 py-2">
-              <p className="text-xs font-cyber text-purple-400">ROOM CODE</p>
-              <p className="font-cyber text-xl text-purple-300">{room.room_code}</p>
-            </div>
-          )}
+          <div className="flex flex-col gap-3">
+            {room.is_private && (
+              <div className="bg-purple-500/20 border border-purple-500/30 rounded-lg px-4 py-2">
+                <p className="text-xs font-cyber text-purple-400">ROOM CODE</p>
+                <p className="font-cyber text-xl text-purple-300">{room.room_code}</p>
+              </div>
+            )}
+            {room.on_chain_create_digest && (
+              <button
+                onClick={() =>
+                  window.open(
+                    `https://suiexplorer.com/txblock/${room.on_chain_create_digest}`,
+                    "_blank"
+                  )
+                }
+                className="bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 rounded-lg px-4 py-2 hover:from-cyan-500/30 hover:to-blue-500/30 transition-all duration-200 group"
+              >
+                <p className="text-xs font-cyber text-cyan-400 mb-1">ON-CHAIN</p>
+                <p className="font-cyber text-sm text-cyan-300 group-hover:text-cyan-200 transition-colors">
+                  View Transaction
+                </p>
+                <div className="flex items-center gap-1 mt-1">
+                  <span className="text-xs text-cyan-400">🔗</span>
+                  <span className="text-xs text-cyan-400 font-mono">
+                    {room.on_chain_create_digest.slice(0, 8)}...
+                  </span>
+                </div>
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -462,12 +486,12 @@ const GameRoomDetails = ({ roomId, onBack }) => {
               <div
                 key={winner.id}
                 className={`flex items-center justify-between rounded-lg p-4 border ${winner.final_position === 1
-                    ? 'bg-gradient-to-r from-yellow-500/20 to-amber-500/20 border-yellow-500/30'
-                    : winner.final_position === 2
-                      ? 'bg-gradient-to-r from-gray-300/20 to-gray-400/20 border-gray-400/30'
-                      : winner.final_position === 3
-                        ? 'bg-gradient-to-r from-amber-600/20 to-orange-600/20 border-amber-600/30'
-                        : 'bg-secondary/30 border-primary/20'
+                  ? 'bg-gradient-to-r from-yellow-500/20 to-amber-500/20 border-yellow-500/30'
+                  : winner.final_position === 2
+                    ? 'bg-gradient-to-r from-gray-300/20 to-gray-400/20 border-gray-400/30'
+                    : winner.final_position === 3
+                      ? 'bg-gradient-to-r from-amber-600/20 to-orange-600/20 border-amber-600/30'
+                      : 'bg-secondary/30 border-primary/20'
                   }`}
               >
                 <div className="flex items-center gap-4">
