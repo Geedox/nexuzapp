@@ -19,7 +19,7 @@ export class GameRoom {
         this.client = client;
         this.packageId = packageId;
         this.storeId = storeId;
-        const sponsorPrivateKey = import.meta.env.VITE_PUBLIC_PRIVATE_KEY;
+        const sponsorPrivateKey = import.meta.env.VITE_PRIVATE_KEY;
         if (!sponsorPrivateKey) {
             throw new Error("Sponsor private key is not set");
         }
