@@ -33,6 +33,8 @@ interface GameRoom {
   actual_end_time: string | null;
   total_prize_pool: number;
   platform_fee_collected: number;
+  on_chain_create_digest: string | null;
+  on_chain_room_id: string | null;
   created_at: string;
   updated_at: string;
   game?: any;
