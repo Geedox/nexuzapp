@@ -5,7 +5,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
 const GameRoomDetails = ({ roomId, onBack }) => {
-  const { getRoomDetails, getRoomParticipants, updateGameScore, leaveRoom, cancelRoom } = useGameRoom();
+  const { getRoomDetails, getRoomParticipants, updateGameScore, leaveRoom, cancelRoom, playGame } = useGameRoom();
   const { user } = useAuth();
   const { toast } = useToast();
   const [room, setRoom] = useState(null);
@@ -14,8 +14,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [showGamePlayer, setShowGamePlayer] = useState(false);
-  const [isLoadingGame, setIsLoadingGame] = useState(false);
+  const [isLaunchingGame, setIsLaunchingGame] = useState(false);
   const [winners, setWinners] = useState([]);
 
   // Function to check if room should auto-complete
@@ -73,69 +72,6 @@ const GameRoomDetails = ({ roomId, onBack }) => {
       }
     }
   }, [roomId, getRoomDetails, getRoomParticipants, toast]);
-
-  // Message handler for game iframe
-  const handleMessage = useCallback(async (event) => {
-    if (event.data.type === 'EXIT_GAME') {
-      setShowGamePlayer(false);
-      loadRoomData(false);
-    } else if (event.data.type === 'SUBMIT_SCORE') {
-      try {
-        const score = event.data.score;
-
-        const { error } = await supabase
-          .from('game_room_participants')
-          .update({ score })
-          .eq('room_id', roomId)
-          .eq('user_id', user.id);
-
-        if (error) {
-          throw error;
-        }
-
-        event.source.postMessage({
-          type: 'SCORE_SUBMITTED',
-          success: true,
-          isNewHighScore: true,
-          message: 'Score submitted successfully!'
-        }, '*');
-
-        toast({
-          title: "Score Updated!",
-          description: `Your score: ${score} points`,
-        });
-
-        await loadRoomData(false);
-      } catch (error) {
-        console.error('Error updating score:', error);
-
-        event.source.postMessage({
-          type: 'SCORE_SUBMITTED',
-          success: false,
-          error: 'Failed to submit score'
-        }, '*');
-
-        toast({
-          title: "Error",
-          description: "Failed to update score",
-          variant: "destructive",
-        });
-      }
-    } else if (event.data.type === 'GAME_READY') {
-      event.source.postMessage({
-        type: 'ROOM_INFO',
-        roomId: roomId,
-        gameId: room?.game?.id,
-        playerCurrentScore: participants.find(p => p.user_id === user?.id)?.score || 0
-      }, '*');
-    }
-  }, [roomId, user, loadRoomData, toast, room, participants]);
-
-  // Listen for messages from game iframe
-  useEffect(() => {
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, [handleMessage]);
 
   useEffect(() => {
     loadRoomData();
@@ -215,26 +151,20 @@ const GameRoomDetails = ({ roomId, onBack }) => {
     return room.status;
   }, [room, currentTime]);
 
-  // Game interaction handlers
+  // Updated game interaction handler
   const handlePlayGame = async () => {
     try {
-      setIsLoadingGame(true);
-      await new Promise(resolve => setTimeout(resolve, 500));
-      setShowGamePlayer(true);
+      setIsLaunchingGame(true);
+      await playGame(roomId);
 
-      toast({
-        title: "Game Loaded",
-        description: "Game is ready to play!",
-      });
+      // Refresh room data after game launch
+      setTimeout(() => {
+        loadRoomData(false);
+      }, 1000);
     } catch (error) {
-      console.error('Error loading game:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load game",
-        variant: "destructive",
-      });
+      console.error('Error launching game:', error);
     } finally {
-      setIsLoadingGame(false);
+      setIsLaunchingGame(false);
     }
   };
 
@@ -376,6 +306,11 @@ const GameRoomDetails = ({ roomId, onBack }) => {
             <p className="text-muted-foreground font-cyber">
               Game: <span className="text-foreground">{room.game?.name || 'Unknown Game'}</span>
             </p>
+            {room.game?.game_url && (
+              <p className="text-xs text-muted-foreground font-cyber mt-1">
+                Game URL: {room.game.game_url}
+              </p>
+            )}
           </div>
           <div className="flex flex-col gap-3">
             {room.is_private && (
@@ -577,16 +512,17 @@ const GameRoomDetails = ({ roomId, onBack }) => {
 
       {/* Action Buttons */}
       <div className="flex gap-4">
-        {/* Play Game Button - Shows when conditions are met */}
+        {/* Play Game Button - Updated to use new tab functionality */}
         {canPlayGame && (
           <button
             onClick={handlePlayGame}
-            disabled={isLoadingGame}
+            disabled={isLaunchingGame}
             className="flex-1 bg-gradient-to-r from-primary to-accent text-background font-cyber font-bold py-3 rounded-xl hover:scale-105 transition-all cyber-button shadow-lg hover:shadow-primary/50 disabled:opacity-50 disabled:hover:scale-100"
           >
-            {isLoadingGame ? (
+            {isLaunchingGame ? (
               <span className="flex items-center justify-center gap-2">
-                <span className="animate-spin">⚡</span> Loading Game...
+                <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-background"></div>
+                Launching Game...
               </span>
             ) : (
               '🎮 Play Game'
@@ -697,34 +633,6 @@ const GameRoomDetails = ({ roomId, onBack }) => {
               >
                 Keep Room
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Game Player Modal */}
-      {showGamePlayer && room?.game && (
-        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4">
-          <div className="bg-background border border-primary/30 rounded-xl w-full max-w-5xl max-h-[90vh] overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b border-primary/20">
-              <div className="flex items-center gap-4">
-                <h3 className="font-cyber text-xl text-primary">{room.game.name}</h3>
-                <span className="text-sm text-muted-foreground">Room: {roomId.slice(0, 8)}...</span>
-              </div>
-              <button
-                onClick={() => setShowGamePlayer(false)}
-                className="text-muted-foreground hover:text-primary transition-colors text-2xl font-bold"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="relative w-full h-[600px] bg-black">
-              <iframe
-                src={room.game.id === '11111111-1111-1111-1111-111111111111' ? '/games/endless-runner/index.html' : '/games/flappy-bird/index.html'}
-                className="w-full h-full border-0"
-                title={room.game.name}
-                sandbox="allow-scripts allow-same-origin"
-              />
             </div>
           </div>
         </div>

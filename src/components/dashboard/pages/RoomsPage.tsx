@@ -17,6 +17,35 @@ import {
 } from "lucide-react";
 import Banner from "@/components/Banner";
 import { useWallet } from "@/contexts/WalletContext";
+import { SuiClient } from "@mysten/sui.js/client";
+import { GameRoom } from "@/integrations/smartcontracts/gameRoom";
+
+
+// useEffect(() => {
+//   const testSponsorAddress = async () => {
+//     try {
+//       console.log('[DEBUG] Testing sponsor address...');
+
+//       // Create SuiClient
+//       const client = new SuiClient({ url: "https://fullnode.mainnet.sui.io" });
+
+//       // Create GameRoom instance  
+//       const gameRoom = new GameRoom(client);
+
+//       // Get and log the sponsor address
+//       const sponsorAddress = gameRoom.getSponsorAddress();
+//       console.log('[DEBUG] Sponsor Address:', sponsorAddress);
+
+//       // Test the conversion methods
+//       gameRoom.testPrivateKeyConversion();
+
+//     } catch (error) {
+//       console.error('[DEBUG] Error:', error);
+//     }
+//   };
+
+//   testSponsorAddress();
+// }, []);
 
 // Winner Celebration Modal Component
 const WinnerCelebrationModal = ({ isOpen, onClose, winner }) => {
