@@ -42,6 +42,15 @@ interface GameRoom {
   participants?: GameRoomParticipant[];
 }
 
+interface GameSession {
+  roomId: string;
+  userId: string;
+  sessionToken: string;
+  gameUrl: string;
+  startTime: Date;
+}
+
+
 interface GameRoomParticipant {
   id: string;
   room_id: string;
@@ -91,6 +100,8 @@ interface GameRoomContextType {
     roomId: string,
     winners: { userId: string; position: number }[]
   ) => Promise<void>;
+  playGame: (roomId: string) => Promise<void>;
+  handleGameMessage: (event: MessageEvent) => void;
 }
 
 const GameRoomContext = createContext<GameRoomContextType | undefined>(
@@ -118,12 +129,31 @@ export const GameRoomProvider = ({
   const { toast } = useToast();
   const { suiClient, refreshBalances, usdcBalance, usdtBalance, suiBalance } = useWallet();
   const { profile } = useProfile();
+  const [activeGameSessions, setActiveGameSessions] = useState<Map<string, GameSession>>(new Map());
 
   const onChainGameRoom = useMemo(() => {
+    console.log('[DEBUG] Creating onChainGameRoom instance...');
+    console.log('[DEBUG] suiClient available:', !!suiClient);
+    console.log('[DEBUG] suiClient details:', suiClient ? 'Connected' : 'Not connected');
+
     try {
-      if (!suiClient) return null;
-      return new OnChainGameRoom(suiClient);
-    } catch {
+      if (!suiClient) {
+        console.log('[DEBUG] No suiClient available, returning null');
+        return null;
+      }
+
+      console.log('[DEBUG] Attempting to create OnChainGameRoom instance...');
+      const instance = new OnChainGameRoom(suiClient);
+      console.log('[DEBUG] OnChainGameRoom instance created successfully:', !!instance);
+      return instance;
+
+    } catch (error) {
+      console.error('[DEBUG] Error creating OnChainGameRoom:', error);
+      console.error('[DEBUG] Error details:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
       return null;
     }
   }, [suiClient]);
@@ -657,6 +687,277 @@ export const GameRoomProvider = ({
       throw error;
     }
   };
+
+  const generateSessionToken = (): string => {
+    return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  };
+
+  const playGame = async (roomId: string): Promise<void> => {
+    if (!user) throw new Error("User not authenticated");
+
+    try {
+      // Get room details
+      const { data: room, error: roomError } = await supabase
+        .from("game_rooms")
+        .select(`
+        *,
+        game:games(*),
+        participants:game_room_participants(*)
+      `)
+        .eq("id", roomId)
+        .single();
+
+      if (roomError) throw roomError;
+
+      // Check if user is in the room
+      const userParticipant = room.participants?.find(
+        (p: any) => p.user_id === user.id && p.is_active
+      );
+
+      if (!userParticipant) {
+        throw new Error("You must join the room before playing");
+      }
+
+      // Check if room is ongoing
+      if (room.status !== "ongoing") {
+        throw new Error("Room is not currently active for playing");
+      }
+
+      // Generate session token
+      const sessionToken = generateSessionToken();
+
+      // Create game session
+      const gameSession: GameSession = {
+        roomId: room.id,
+        userId: user.id,
+        sessionToken,
+        gameUrl: room.game?.game_url || "",
+        startTime: new Date()
+      };
+
+      // Store session
+      setActiveGameSessions(prev => new Map(prev.set(sessionToken, gameSession)));
+
+      // Construct game URL with parameters
+      const gameUrl = new URL(room.game?.game_url || "");
+      gameUrl.searchParams.set('user_id', user.id);
+      gameUrl.searchParams.set('room_id', room.id);
+      gameUrl.searchParams.set('on_chain_room_id', room.on_chain_room_id || '');
+      gameUrl.searchParams.set('session_token', sessionToken);
+      gameUrl.searchParams.set('game_name', room.game?.name || 'Game');
+      gameUrl.searchParams.set('game_id', room.game_id);
+      gameUrl.searchParams.set('currency', room.currency);
+      gameUrl.searchParams.set('entry_fee', room.entry_fee.toString());
+      gameUrl.searchParams.set('total_prize_pool', room.total_prize_pool.toString());
+      gameUrl.searchParams.set('max_players', room.max_players.toString());
+      gameUrl.searchParams.set('current_players', room.current_players.toString());
+      gameUrl.searchParams.set('winner_split_rule', room.winner_split_rule);
+      gameUrl.searchParams.set('instructions', room.game?.instructions || '');
+      gameUrl.searchParams.set('status', room.status);
+      gameUrl.searchParams.set('players', room.current_players.toString());
+
+      // Open game in new tab
+      const gameWindow = window.open(gameUrl.toString(), '_blank');
+
+      if (!gameWindow) {
+        throw new Error("Please allow popups to play the game");
+      }
+
+      toast({
+        title: "Game Launched",
+        description: "Game opened in new tab. Play and submit your score!",
+      });
+
+    } catch (error: any) {
+      console.error("Error launching game:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to launch game",
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
+
+  // Updated handleGameMessage - DON'T remove session after score submission
+  // Updated handleGameMessage - Don't delete session on EXIT_GAME
+  const handleGameMessage = async (event: MessageEvent) => {
+    // Verify the origin
+    const allowedOrigins = [
+      'https://cheerful-entremet-2dbb07.netlify.app',
+      'https://stirring-unicorn-441851.netlify.app',
+      'https://ornate-lamington-115e41.netlify.app'
+    ];
+    if (!allowedOrigins.includes(event.origin)) {
+      console.log('[DEBUG] Message from unauthorized origin:', event.origin);
+      return;
+    }
+
+    const { type, score, userId, roomId, sessionToken, metadata } = event.data;
+
+    console.log('[DEBUG] Received message:', { type, score, userId, roomId, sessionToken });
+    console.log('[DEBUG] Available sessions:', Array.from(activeGameSessions.keys()));
+
+    if (type === 'SUBMIT_SCORE') {
+      try {
+        // Verify session
+        const session = activeGameSessions.get(sessionToken);
+        if (!session) {
+          console.error("Invalid session token:", sessionToken);
+          console.log("Available sessions:", Array.from(activeGameSessions.keys()));
+
+          // Send error back to game
+          if (event.source) {
+            event.source.postMessage({
+              type: 'SCORE_SUBMISSION_ERROR',
+              error: 'Invalid session token'
+            }, event.origin);
+          }
+          return;
+        }
+
+        if (session.userId !== userId || session.roomId !== roomId) {
+          console.error("Session validation failed");
+          return;
+        }
+
+        // Update score in database
+        const result = await updateGameScore(roomId, score, userId);
+
+        // KEEP session active - don't remove it here
+
+        // Send success response back to game
+        if (event.source) {
+          event.source.postMessage({
+            type: 'SCORE_SUBMISSION_SUCCESS',
+            updated: result.updated,
+            previousScore: result.previousScore,
+            newScore: result.newScore
+          }, event.origin);
+        }
+
+        // Show appropriate message
+        if (result.updated) {
+          toast({
+            title: "New High Score! 🎉",
+            description: `Your score improved from ${result.previousScore.toLocaleString()} to ${result.newScore.toLocaleString()}!`,
+          });
+        } else {
+          toast({
+            title: "Score Submitted",
+            description: `Score: ${result.newScore.toLocaleString()} (Current best: ${result.previousScore.toLocaleString()})`,
+          });
+        }
+
+        // Refresh room data
+        await refreshRooms();
+
+        console.log("Score submission result:", {
+          roomId,
+          userId,
+          scoreSubmitted: score,
+          previousScore: result.previousScore,
+          newScore: result.newScore,
+          wasUpdated: result.updated,
+          sessionToken,
+          metadata
+        });
+
+      } catch (error) {
+        console.error("Error handling score submission:", error);
+
+        // Send error back to game
+        if (event.source) {
+          event.source.postMessage({
+            type: 'SCORE_SUBMISSION_ERROR',
+            error: error.message
+          }, event.origin);
+        }
+
+        toast({
+          title: "Score Submission Failed",
+          description: "There was an error recording your score. Please try again.",
+          variant: "destructive",
+        });
+      }
+    } else if (type === 'EXIT_GAME') {
+      // DON'T clean up session on exit - keep it for when user returns
+      console.log('[DEBUG] User exited game, but keeping session active:', sessionToken);
+    } else if (type === 'GAME_READY') {
+      // Game is ready, session should still be active
+      console.log('[DEBUG] Game ready, session:', sessionToken);
+    }
+  };
+
+  // Add message listener in useEffect
+  useEffect(() => {
+    // Listen for messages from game windows
+    window.addEventListener('message', handleGameMessage);
+
+    return () => {
+      window.removeEventListener('message', handleGameMessage);
+    };
+  }, []);
+
+  useEffect(() => {
+    const cleanupExpiredSessions = () => {
+      const now = new Date();
+      const sessionsToDelete = [];
+
+      for (const [sessionToken, session] of activeGameSessions.entries()) {
+        // Find the corresponding room
+        const room = rooms.find(r => r.id === session.roomId);
+
+        if (room) {
+          const roomEndTime = new Date(room.end_time);
+
+          // Clean up sessions for rooms that have ended
+          if (now > roomEndTime || room.status === 'completed' || room.status === 'cancelled') {
+            sessionsToDelete.push(sessionToken);
+            console.log(`[DEBUG] Cleaning up expired session for completed room: ${sessionToken}`);
+          }
+        } else {
+          // Room doesn't exist anymore, clean up session
+          sessionsToDelete.push(sessionToken);
+          console.log(`[DEBUG] Cleaning up session for non-existent room: ${sessionToken}`);
+        }
+      }
+
+      // Remove expired sessions
+      if (sessionsToDelete.length > 0) {
+        setActiveGameSessions(prev => {
+          const newMap = new Map(prev);
+          sessionsToDelete.forEach(token => newMap.delete(token));
+          return newMap;
+        });
+
+        console.log(`[DEBUG] Cleaned up ${sessionsToDelete.length} expired sessions`);
+      }
+    };
+
+    // Run cleanup every 30 seconds
+    const cleanupInterval = setInterval(cleanupExpiredSessions, 30000);
+
+    // Run initial cleanup
+    cleanupExpiredSessions();
+
+    return () => clearInterval(cleanupInterval);
+  }, [rooms, activeGameSessions]);
+
+  // Also add manual session cleanup function
+  const cleanupUserSessions = (userId: string, roomId: string) => {
+    setActiveGameSessions(prev => {
+      const newMap = new Map(prev);
+      for (const [token, session] of prev.entries()) {
+        if (session.userId === userId && session.roomId === roomId) {
+          newMap.delete(token);
+          console.log(`[DEBUG] Manually cleaned up session: ${token}`);
+        }
+      }
+      return newMap;
+    });
+  };
+
 
   // Function to automatically complete a single game
   const autoCompleteGame = async (room: any) => {
@@ -1427,20 +1728,80 @@ export const GameRoomProvider = ({
     }
   };
 
-  // Update game score
-  const updateGameScore = async (roomId: string, score: number) => {
-    if (!user) throw new Error("User not authenticated");
+  // Updated updateGameScore with extensive debugging
+  const updateGameScore = async (roomId: string, score: number, userId?: string) => {
+    const userIdToUse = userId || user?.id;
+
+    if (!userIdToUse) throw new Error("User not authenticated");
 
     try {
-      const { error } = await supabase
-        .from("game_room_participants")
-        .update({ score })
-        .eq("room_id", roomId)
-        .eq("user_id", user.id);
+      console.log(`[DEBUG] Starting score update for user ${userIdToUse}, room ${roomId}, new score: ${score}`);
 
-      if (error) throw error;
+      // First, get the current participant data
+      const { data: currentParticipant, error: fetchError } = await supabase
+        .from("game_room_participants")
+        .select("*")
+        .eq("room_id", roomId)
+        .eq("user_id", userIdToUse)
+        .single();
+
+      if (fetchError) {
+        console.error("[DEBUG] Error fetching current participant:", fetchError);
+        throw fetchError;
+      }
+
+      console.log("[DEBUG] Current participant data:", currentParticipant);
+
+      const currentScore = currentParticipant?.score || 0;
+
+      console.log(`[DEBUG] Score comparison details:`);
+      console.log(`  - Current score: ${currentScore} (type: ${typeof currentScore})`);
+      console.log(`  - New score: ${score} (type: ${typeof score})`);
+      console.log(`  - New score > current? ${score > currentScore}`);
+      console.log(`  - New score as number: ${Number(score)}`);
+      console.log(`  - Current score as number: ${Number(currentScore)}`);
+      console.log(`  - Number comparison: ${Number(score) > Number(currentScore)}`);
+
+      // Convert both to numbers to ensure proper comparison
+      const currentScoreNum = Number(currentScore);
+      const newScoreNum = Number(score);
+
+      // Only update if new score is higher
+      if (newScoreNum > currentScoreNum) {
+        console.log(`[DEBUG] Updating score from ${currentScoreNum} to ${newScoreNum}`);
+
+        const { data: updateResult, error: updateError } = await supabase
+          .from("game_room_participants")
+          .update({ score: newScoreNum })
+          .eq("room_id", roomId)
+          .eq("user_id", userIdToUse)
+          .select();
+
+        if (updateError) {
+          console.error("[DEBUG] Error updating score:", updateError);
+          throw updateError;
+        }
+
+        console.log("[DEBUG] Update result:", updateResult);
+
+        // Verify the update worked
+        const { data: verifyData } = await supabase
+          .from("game_room_participants")
+          .select("score")
+          .eq("room_id", roomId)
+          .eq("user_id", userIdToUse)
+          .single();
+
+        console.log("[DEBUG] Verified updated score:", verifyData?.score);
+
+        return { updated: true, previousScore: currentScoreNum, newScore: newScoreNum };
+      } else {
+        console.log(`[DEBUG] Score ${newScoreNum} not higher than current ${currentScoreNum}, no update needed`);
+        return { updated: false, previousScore: currentScoreNum, newScore: newScoreNum };
+      }
+
     } catch (error) {
-      console.error("Error updating score:", error);
+      console.error("[DEBUG] Error in updateGameScore:", error);
       throw error;
     }
   };
@@ -1608,6 +1969,8 @@ export const GameRoomProvider = ({
     getRoomParticipants,
     updateGameScore,
     completeGame,
+    playGame,
+    handleGameMessage,
   };
 
   return (
