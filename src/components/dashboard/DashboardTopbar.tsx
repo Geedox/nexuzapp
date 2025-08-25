@@ -117,7 +117,7 @@ const DashboardTopbar = () => {
               console.log("Sidebar is now:", isOpen ? "open" : "closed");
             }}
           />
-          <div className="text-base sm:text-lg font-cyber text-primary">
+          <div className="text-base sm:text-lg font-cyber font-bold text-primary">
             {getPageTitle()}
           </div>
         </div>
