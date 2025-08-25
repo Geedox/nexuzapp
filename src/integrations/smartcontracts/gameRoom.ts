@@ -14,8 +14,8 @@ export class GameRoom {
 
     constructor(
         client: SuiClient,
-        packageId: string = "0x337d95edf239319e079fae6472e998301775a1d3587e3e9d590f906f0ef1c58c",
-        storeId: string = "0xe2661d90a781fc3b6036c12f8c277b098401ffb688f1212b596334034798189a",
+        packageId: string = "0x6e51446bb0d7c9d9fa516f8a962ab8543412b1ef8375c3caad5e806f5d20a97b",
+        storeId: string = "0x1f19c53319e4774508a60194feaf86865aacd6642aa890e795e88891b1045360",
     ) {
         this.client = client;
         this.packageId = packageId;
@@ -37,13 +37,13 @@ export class GameRoom {
 
     private getWalletKeypair = (privateKey: string): Ed25519Keypair => {
         try {
-            console.log('[DEBUG] Processing private key...');
-            console.log('[DEBUG] Private key length:', privateKey.length);
-            console.log('[DEBUG] Private key first 10 chars:', privateKey.substring(0, 10));
+            // console.log('[DEBUG] Processing private key...');
+            // console.log('[DEBUG] Private key length:', privateKey.length);
+            // console.log('[DEBUG] Private key first 10 chars:', privateKey.substring(0, 10));
 
             // Check if it's a Sui bech32 private key (starts with 'suiprivkey')
             if (privateKey.startsWith('suiprivkey')) {
-                console.log('[DEBUG] Detected Sui bech32 private key format');
+                // console.log('[DEBUG] Detected Sui bech32 private key format');
                 try {
                     // Decode the bech32 private key to get the raw bytes
                     const { secretKey } = decodeSuiPrivateKey(privateKey);
@@ -57,12 +57,12 @@ export class GameRoom {
                     // Create keypair from the decoded bytes
                     const keypair = Ed25519Keypair.fromSecretKey(secretKey);
                     const testAddress = keypair.getPublicKey().toSuiAddress();
-                    console.log('[DEBUG] Successfully created keypair from decoded bech32');
-                    console.log('[DEBUG] Derived address:', testAddress);
+                    // console.log('[DEBUG] Successfully created keypair from decoded bech32');
+                    // console.log('[DEBUG] Derived address:', testAddress);
                     return keypair;
 
                 } catch (bech32Error) {
-                    console.error('[DEBUG] Failed to decode bech32 private key:', bech32Error);
+                    // console.error('[DEBUG] Failed to decode bech32 private key:', bech32Error);
                     throw new Error(`Failed to parse Sui bech32 private key: ${bech32Error.message}`);
                 }
             }
@@ -97,15 +97,15 @@ export class GameRoom {
                 bytes[i] = parseInt(hexByte, 16);
             }
 
-            console.log('[DEBUG] Converted to bytes array, length:', bytes.length);
-            console.log('[DEBUG] First few bytes:', Array.from(bytes.slice(0, 4)));
+            // console.log('[DEBUG] Converted to bytes array, length:', bytes.length);
+            // console.log('[DEBUG] First few bytes:', Array.from(bytes.slice(0, 4)));
 
             // Create keypair from secret key
             const keypair = Ed25519Keypair.fromSecretKey(bytes);
 
             // Test the keypair
-            const testAddress = keypair.getPublicKey().toSuiAddress();
-            console.log('[DEBUG] Test address from keypair:', testAddress);
+            // const testAddress = keypair.getPublicKey().toSuiAddress();
+            // console.log('[DEBUG] Test address from keypair:', testAddress);
 
             return keypair;
 
@@ -146,7 +146,7 @@ export class GameRoom {
                 }
             } else {
                 // Method for hex keys
-                let cleanKey = keyToTest.startsWith('0x') ? keyToTest.slice(2) : keyToTest;
+                const cleanKey = keyToTest.startsWith('0x') ? keyToTest.slice(2) : keyToTest;
                 if (cleanKey.length === 64) {
                     console.log('[DEBUG] Testing hex format...');
                     const bytes = new Uint8Array(32);
@@ -164,37 +164,37 @@ export class GameRoom {
         }
     }
 
-    private async getSponsorGasObject(minBalance: bigint = 5_000_000n) {
-        const coins = await this.client.getCoins({ owner: this.sponsorAddress });
-        console.log("sponsorAddress => ", this.sponsorAddress);
-        console.log("sponsorAddress coins count => ", coins.data.length);
-        const coin = coins.data.find(c => BigInt(c.balance) > minBalance);
-        if (!coin) throw new Error("Sponsor has no coin for gas");
-        return {
-            objectId: coin.coinObjectId,
-            version: coin.version,
-            digest: coin.digest
-        };
-    }
+    // private async getSponsorGasObject(minBalance: bigint = 5_000_000n) {
+    //     const coins = await this.client.getCoins({ owner: this.sponsorAddress });
+    //     console.log("sponsorAddress => ", this.sponsorAddress);
+    //     console.log("sponsorAddress coins count => ", coins.data.length);
+    //     const coin = coins.data.find(c => BigInt(c.balance) > minBalance);
+    //     if (!coin) throw new Error("Sponsor has no coin for gas");
+    //     return {
+    //         objectId: coin.coinObjectId,
+    //         version: coin.version,
+    //         digest: coin.digest
+    //     };
+    // }
 
-    private async prepareSponsoredExecution(txb: TransactionBlock, userKeypair: any) {
-        const userAddress = userKeypair.getPublicKey().toSuiAddress();
-        txb.setSender(userAddress);
+    // private async prepareSponsoredExecution(txb: TransactionBlock, userKeypair: any) {
+    //     const userAddress = userKeypair.getPublicKey().toSuiAddress();
+    //     txb.setSender(userAddress);
 
-        // Set sponsor as gas owner
-        txb.setGasOwner(this.sponsorAddress);
+    //     // Set sponsor as gas owner
+    //     txb.setGasOwner(this.sponsorAddress);
 
-        // Attach sponsor's gas payment
-        const gasCoin = await this.getSponsorGasObject();
-        txb.setGasPayment([gasCoin]);
-        txb.setGasBudget(50_000_000); // could refine with dryRun if you want
-        const txbBytes = await txb.build({ client: this.client });
-        // Sign with both
-        const userSig = await userKeypair.signTransactionBlock(txb);
-        const sponsorSig = await this.sponsorKeypair.signTransactionBlock(txbBytes);
+    //     // Attach sponsor's gas payment
+    //     const gasCoin = await this.getSponsorGasObject();
+    //     txb.setGasPayment([gasCoin]);
+    //     txb.setGasBudget(50_000_000); // could refine with dryRun if you want
+    //     const txbBytes = await txb.build({ client: this.client });
+    //     // Sign with both
+    //     const userSig = await userKeypair.signTransactionBlock(txb);
+    //     const sponsorSig = await this.sponsorKeypair.signTransactionBlock(txbBytes);
 
-        return { txb, signatures: [userSig, sponsorSig] };
-    }
+    //     return { txb, signatures: [userSig, sponsorSig] };
+    // }
 
     private getTarget(func: string): `${string}::${string}::${string}` {
         return `${this.packageId}::${this.moduleName}::${func}` as `${string}::${string}::${string}`;
@@ -457,22 +457,22 @@ export class GameRoom {
     // Leave a room
     async leaveRoom(options: { walletKeyPair: any; roomId: string }) {
         const { walletKeyPair, roomId } = options;
-
         const txb = new TransactionBlock();
         const userAddress = walletKeyPair.getPublicKey().toSuiAddress();
-        txb.moveCall({
+        const refundCoin = txb.moveCall({
             target: this.getTarget("leave_room"),
             arguments: [
                 txb.object(this.storeId),
+                txb.pure(userAddress),
                 txb.pure(roomId),
                 txb.object("0x6"),
             ],
         });
-        const { txb: signedTxb, signatures } = await this.prepareSponsoredExecution(txb, walletKeyPair);
-        await this.dryRunTransaction(txb, userAddress);
-        const result = await this.client.executeTransactionBlock({
-            transactionBlock: await signedTxb.build({ client: this.client }),
-            signature: signatures,
+        txb.transferObjects([refundCoin], txb.pure(userAddress));
+        await this.dryRunTransaction(txb, this.sponsorAddress);
+        const result = await this.client.signAndExecuteTransactionBlock({
+            transactionBlock: await txb.build({ client: this.client }),
+            signer: this.sponsorKeypair,
             options: { showEffects: true, showEvents: true },
         });
 
@@ -493,6 +493,7 @@ export class GameRoom {
             target: this.getTarget("cancel_room"),
             arguments: [
                 txb.object(this.storeId),
+                txb.pure(walletKeyPair.getPublicKey().toSuiAddress()),
                 txb.pure(roomId),
                 txb.object("0x6"),
             ],
@@ -501,12 +502,12 @@ export class GameRoom {
         // Return refund coin to caller
         const userAddress = walletKeyPair.getPublicKey().toSuiAddress();
         txb.transferObjects([refundCoin], txb.pure(userAddress));
-        await this.dryRunTransaction(txb, userAddress);
-        const { txb: signedTxb, signatures } = await this.prepareSponsoredExecution(txb, walletKeyPair);
+        await this.dryRunTransaction(txb, this.sponsorAddress);
 
-        const result = await this.client.executeTransactionBlock({
-            transactionBlock: await signedTxb.build({ client: this.client }),
-            signature: signatures,
+        // Prepare with sponsor paying gas first
+        const result = await this.client.signAndExecuteTransactionBlock({
+            transactionBlock: await txb.build({ client: this.client }),
+            signer: this.sponsorKeypair,
             options: { showEffects: true, showEvents: true }
         });
 
@@ -523,15 +524,13 @@ export class GameRoom {
         winnerAddresses: string[];
         scores: number[];
     }) {
-        const { walletKeyPair, roomId, winnerAddresses, scores } = options;
+        const { roomId, winnerAddresses, scores } = options;
 
         if (winnerAddresses.length !== scores.length) {
             throw new Error("winnerAddresses and scores must have the same length");
         }
 
         const txb = new TransactionBlock();
-        const userAddress = walletKeyPair.getPublicKey().toSuiAddress();
-
         txb.moveCall({
             target: this.getTarget("complete_game"),
             arguments: [
@@ -542,20 +541,18 @@ export class GameRoom {
                 txb.object("0x6"), // coin type, here fixed to SUI
             ],
         });
+        await this.dryRunTransaction(txb, this.sponsorAddress);
 
         // Prepare with sponsor paying gas
-        const { txb: signedTxb, signatures } = await this.prepareSponsoredExecution(txb, walletKeyPair);
-
-        const result = await this.client.executeTransactionBlock({
-            transactionBlock: await signedTxb.build({ client: this.client }),
-            signature: signatures,
+        const result = await this.client.signAndExecuteTransactionBlock({
+            transactionBlock: await txb.build({ client: this.client }),
+            signer: this.sponsorKeypair,
             options: { showEffects: true, showEvents: true }
         });
 
         if (result.effects?.status?.status !== "success") {
             throw new Error(`Transaction failed: ${result.effects?.status?.error || "Unknown error"}`);
         }
-
         // Extract transaction effects and events for winner mapping
         const effects = result.effects;
         const events = result.events;
@@ -569,7 +566,6 @@ export class GameRoom {
                 break;
             }
         }
-
         return {
             success: true,
             digest: result.digest,
