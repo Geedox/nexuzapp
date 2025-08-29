@@ -752,7 +752,8 @@ export const GameRoomProvider = ({
       gameUrl.searchParams.set('max_players', room.max_players.toString());
       gameUrl.searchParams.set('current_players', room.current_players.toString());
       gameUrl.searchParams.set('winner_split_rule', room.winner_split_rule);
-      gameUrl.searchParams.set('instructions', room.game?.instructions || '');
+      // gameUrl.searchParams.set('instructions', room.game?.instructions || '');
+      gameUrl.searchParams.set('instructions', room.game?.description || '');
       gameUrl.searchParams.set('status', room.status);
       gameUrl.searchParams.set('players', room.current_players.toString());
 

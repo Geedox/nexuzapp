@@ -704,6 +704,7 @@ export type Database = {
           description: string | null
           entry_fee_max: number | null
           entry_fee_min: number | null
+          game_url: string | null
           id: string
           image_url: string | null
           is_active: boolean | null
@@ -716,6 +717,7 @@ export type Database = {
           description?: string | null
           entry_fee_max?: number | null
           entry_fee_min?: number | null
+          game_url?: string | null
           id?: string
           image_url?: string | null
           is_active?: boolean | null
@@ -728,6 +730,7 @@ export type Database = {
           description?: string | null
           entry_fee_max?: number | null
           entry_fee_min?: number | null
+          game_url?: string | null
           id?: string
           image_url?: string | null
           is_active?: boolean | null

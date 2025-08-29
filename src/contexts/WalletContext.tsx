@@ -57,49 +57,6 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
   // Token types for Sui testnet
   const TOKEN_TYPES = COIN_TYPES;
 
-  // Create wallet record in database
-  const createWalletRecord = async (address: string) => {
-    if (!user) return;
-
-    try {
-      console.log("🏦 Creating wallet record in database...");
-
-      const walletRecords: { user_id: string; currency: any; balance: number; wallet_address: string; is_connected: boolean }[] = [
-        {
-          user_id: user.id,
-          currency: "SUI",
-          balance: 0,
-          wallet_address: address,
-          is_connected: true,
-        },
-        {
-          user_id: user.id,
-          currency: "USDC",
-          balance: 0,
-          wallet_address: address,
-          is_connected: true,
-        },
-        {
-          user_id: user.id,
-          currency: "USDT",
-          balance: 0,
-          wallet_address: address,
-          is_connected: true,
-        },
-      ];
-
-      const { error } = await supabase.from("wallets").upsert(walletRecords, {
-        onConflict: "user_id,currency",
-        ignoreDuplicates: false,
-      });
-
-      if (error) throw error;
-      console.log("✅ Wallet records created successfully");
-    } catch (error) {
-      console.error("❌ Error creating wallet record:", error);
-    }
-  };
-
   // Fetch blockchain balances
   const fetchBlockchainBalances = async () => {
     if (!profile?.sui_wallet_data?.address) return;
@@ -213,7 +170,6 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
   // Load balances when wallet is available
   useEffect(() => {
     if (profile?.sui_wallet_data?.address) {
-      createWalletRecord(profile.sui_wallet_data.address);
       fetchBlockchainBalances().finally(() => setLoading(false));
     } else {
       setLoading(false);
