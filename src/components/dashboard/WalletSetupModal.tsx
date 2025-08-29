@@ -134,7 +134,7 @@ export const WalletSetupModal = ({ open, onClose }: WalletSetupModalProps) => {
 
       try {
         // Access the internal private key directly 
-        // @ts-ignore - accessing private property for raw bytes
+        // @ts-expect-error - accessing private property for raw bytes
         privateKeyBytes = keypair.keypair.secretKey.slice(0, 32);
         console.log('✅ Got raw private key bytes directly');
       } catch (error) {
