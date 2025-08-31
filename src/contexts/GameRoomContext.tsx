@@ -9,6 +9,7 @@ import { GameRoom as OnChainGameRoom } from "@/integrations/smartcontracts/gameR
 import { useMemo } from "react";
 import { useTransaction } from "@/contexts/TransactionContext";
 import type { Database, TablesInsert } from "@/integrations/supabase/types";
+import { logger } from "@/utils/logger";
 
 interface GameRoom {
   id: string;
@@ -88,6 +89,15 @@ interface GameRoomContextType {
   loading: boolean;
   creating: boolean;
   joining: boolean;
+  // Pagination state
+  currentPage: number;
+  totalPages: number;
+  totalRooms: number;
+  roomsPerPage: number;
+  // Pagination functions
+  goToPage: (page: number) => Promise<void>;
+  nextPage: () => Promise<void>;
+  prevPage: () => Promise<void>;
   refreshRooms: () => Promise<void>;
   createRoom: (data: CreateRoomData) => Promise<GameRoom>;
   joinRoom: (roomId: string, roomCode?: string) => Promise<void>;
@@ -95,7 +105,7 @@ interface GameRoomContextType {
   cancelRoom: (roomId: string) => Promise<void>;
   getRoomDetails: (roomId: string) => Promise<GameRoom | null>;
   getRoomParticipants: (roomId: string) => Promise<GameRoomParticipant[]>;
-  updateGameScore: (roomId: string, score: number) => Promise<void>;
+  updateGameScore: (roomId: string, score: number, userId?: string) => Promise<{ updated: boolean; previousScore: number; newScore: number }>;
   completeGame: (
     roomId: string,
     winners: { userId: string; position: number }[]
@@ -125,6 +135,11 @@ export const GameRoomProvider = ({
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [joining, setJoining] = useState(false);
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalRooms, setTotalRooms] = useState(0);
+  const [roomsPerPage] = useState(12); // Show 12 rooms per page (3x4 grid)
   const { user } = useAuth();
   const { toast } = useToast();
   const { suiClient, refreshBalances, usdcBalance, usdtBalance, suiBalance } = useWallet();
@@ -132,24 +147,24 @@ export const GameRoomProvider = ({
   const [activeGameSessions, setActiveGameSessions] = useState<Map<string, GameSession>>(new Map());
 
   const onChainGameRoom = useMemo(() => {
-    console.log('[DEBUG] Creating onChainGameRoom instance...');
-    console.log('[DEBUG] suiClient available:', !!suiClient);
-    console.log('[DEBUG] suiClient details:', suiClient ? 'Connected' : 'Not connected');
+    logger.debug('Creating onChainGameRoom instance...');
+    logger.debug('suiClient available:', !!suiClient);
+    logger.debug('suiClient details:', suiClient ? 'Connected' : 'Not connected');
 
     try {
       if (!suiClient) {
-        console.log('[DEBUG] No suiClient available, returning null');
+        logger.debug('No suiClient available, returning null');
         return null;
       }
 
-      console.log('[DEBUG] Attempting to create OnChainGameRoom instance...');
+      logger.debug('Attempting to create OnChainGameRoom instance...');
       const instance = new OnChainGameRoom(suiClient);
-      console.log('[DEBUG] OnChainGameRoom instance created successfully:', !!instance);
+      logger.debug('OnChainGameRoom instance created successfully:', !!instance);
       return instance;
 
     } catch (error) {
-      console.error('[DEBUG] Error creating OnChainGameRoom:', error);
-      console.error('[DEBUG] Error details:', {
+      logger.error('[DEBUG] Error creating OnChainGameRoom:', error);
+      logger.trace('[DEBUG] Error details:', {
         message: error.message,
         stack: error.stack,
         name: error.name
@@ -168,7 +183,7 @@ export const GameRoomProvider = ({
       }
       return Ed25519Keypair.fromSecretKey(bytes);
     } catch (e) {
-      console.warn("Unable to derive wallet keypair for on-chain ops:", e);
+      logger.warn("Unable to derive wallet keypair for on-chain ops:", e);
       return null;
     }
   };
@@ -303,7 +318,7 @@ export const GameRoomProvider = ({
     onChainResult?: any
   ) => {
     try {
-      console.log(`Starting prize distribution for room ${room.id}`);
+      logger.info(`Starting prize distribution for room ${room.id}`);
 
       // Calculate platform fee (10%)
       const platformFee = room.total_prize_pool * 0.07;
@@ -312,7 +327,7 @@ export const GameRoomProvider = ({
       // Get prize split percentages
       const prizeSplits = getPrizeSplitPercentages(room.winner_split_rule);
 
-      console.log(`Prize distribution details:`, {
+      logger.info(`Prize distribution details:`, {
         totalPrizePool: room.total_prize_pool,
         platformFee,
         distributablePrize,
@@ -335,7 +350,7 @@ export const GameRoomProvider = ({
         );
         if (!participant) continue;
 
-        console.log(
+        logger.info(
           `Processing winner - Position ${winner.position}: ${earnings} ${room.currency}`
         );
 
@@ -350,7 +365,7 @@ export const GameRoomProvider = ({
           .eq("user_id", winner.userId);
 
         if (participantError) {
-          console.error("Error updating participant:", participantError);
+          logger.error("Error updating participant:", participantError);
           continue;
         }
 
@@ -391,7 +406,7 @@ export const GameRoomProvider = ({
           .single();
 
         if (txError) {
-          console.error("Error creating transaction:", txError);
+          logger.error("Error creating transaction:", txError);
           continue;
         }
 
@@ -412,7 +427,7 @@ export const GameRoomProvider = ({
             prize_amount: earnings,
           });
         } catch (winnersTableError) {
-          console.log("Winners table might not exist:", winnersTableError);
+          logger.debug("Winners table might not exist:", winnersTableError);
         }
 
         // Update game-specific leaderboard
@@ -487,11 +502,11 @@ export const GameRoomProvider = ({
             });
           }
 
-          console.log(
+          logger.success(
             `Updated leaderboards for user ${winner.userId}: position=${winner.position}, earnings=${earnings}`
           );
         } catch (leaderboardError) {
-          console.error("Leaderboard update failed:", leaderboardError);
+          logger.error("Leaderboard update failed:", leaderboardError);
         }
 
         // Mark user for profile update
@@ -571,7 +586,7 @@ export const GameRoomProvider = ({
           // Mark user for profile update
           usersToUpdateProfile.add(participant.user_id);
         } catch (error) {
-          console.error(
+          logger.error(
             `Error updating leaderboard for non-winner ${participant.user_id}:`,
             error
           );
@@ -579,7 +594,7 @@ export const GameRoomProvider = ({
       }
 
       // Update profile stats for all affected users using the SQL function
-      console.log(
+      logger.info(
         `Updating profile stats for ${usersToUpdateProfile.size} users`
       );
       for (const userId of usersToUpdateProfile) {
@@ -587,9 +602,9 @@ export const GameRoomProvider = ({
           await supabase.rpc("update_user_profile_stats", {
             p_user_id: userId,
           });
-          console.log(`Profile stats updated for user ${userId}`);
+          logger.success(`Profile stats updated for user ${userId}`);
         } catch (profileError) {
-          console.error(
+          logger.error(
             `Error updating profile stats for user ${userId}:`,
             profileError
           );
@@ -633,10 +648,10 @@ export const GameRoomProvider = ({
                 })
                 .eq("id", userId);
 
-              console.log(`Manual profile update completed for user ${userId}`);
+              logger.success(`Manual profile update completed for user ${userId}`);
             }
           } catch (fallbackError) {
-            console.error(
+            logger.debug(
               `Fallback profile update also failed for user ${userId}:`,
               fallbackError
             );
@@ -671,19 +686,19 @@ export const GameRoomProvider = ({
               })
               .eq("id", room.id);
 
-            console.log(`Stored on-chain transaction mapping for room ${room.id}`);
+            logger.success(`Stored on-chain transaction mapping for room ${room.id}`);
           }
         } catch (mappingError) {
-          console.error("Error storing transaction mapping:", mappingError);
+          logger.error("Error storing transaction mapping:", mappingError);
           // Don't fail the entire operation for mapping storage errors
         }
       }
 
-      console.log(
+      logger.success(
         `Successfully completed game room ${room.id} and updated ${usersToUpdateProfile.size} user profiles`
       );
     } catch (error) {
-      console.error("Error distributing prizes:", error);
+      logger.error("Error distributing prizes:", error);
       throw error;
     }
   };
@@ -770,7 +785,7 @@ export const GameRoomProvider = ({
       });
 
     } catch (error: any) {
-      console.error("Error launching game:", error);
+      logger.error("Error launching game:", error);
       toast({
         title: "Error",
         description: error.message || "Failed to launch game",
@@ -790,22 +805,22 @@ export const GameRoomProvider = ({
       'https://ornate-lamington-115e41.netlify.app'
     ];
     if (!allowedOrigins.includes(event.origin)) {
-      console.log('[DEBUG] Message from unauthorized origin:', event.origin);
+      logger.debug('Message from unauthorized origin:', event.origin);
       return;
     }
 
     const { type, score, userId, roomId, sessionToken, metadata } = event.data;
 
-    console.log('[DEBUG] Received message:', { type, score, userId, roomId, sessionToken });
-    console.log('[DEBUG] Available sessions:', Array.from(activeGameSessions.keys()));
+    logger.debug('Received message:', { type, score, userId, roomId, sessionToken });
+    logger.debug('Available sessions:', Array.from(activeGameSessions.keys()));
 
     if (type === 'SUBMIT_SCORE') {
       try {
         // Verify session
         const session = activeGameSessions.get(sessionToken);
         if (!session) {
-          console.error("Invalid session token:", sessionToken);
-          console.log("Available sessions:", Array.from(activeGameSessions.keys()));
+          logger.error("Invalid session token:", sessionToken);
+          logger.debug("Available sessions:", Array.from(activeGameSessions.keys()));
 
           // Send error back to game
           if (event.source) {
@@ -818,7 +833,7 @@ export const GameRoomProvider = ({
         }
 
         if (session.userId !== userId || session.roomId !== roomId) {
-          console.error("Session validation failed");
+          logger.error("Session validation failed");
           return;
         }
 
@@ -853,7 +868,7 @@ export const GameRoomProvider = ({
         // Refresh room data
         await refreshRooms();
 
-        console.log("Score submission result:", {
+        logger.info("Score submission result:", {
           roomId,
           userId,
           scoreSubmitted: score,
@@ -865,7 +880,7 @@ export const GameRoomProvider = ({
         });
 
       } catch (error) {
-        console.error("Error handling score submission:", error);
+        logger.error("Error handling score submission:", error);
 
         // Send error back to game
         if (event.source) {
@@ -883,10 +898,10 @@ export const GameRoomProvider = ({
       }
     } else if (type === 'EXIT_GAME') {
       // DON'T clean up session on exit - keep it for when user returns
-      console.log('[DEBUG] User exited game, but keeping session active:', sessionToken);
+      logger.debug('User exited game, but keeping session active:', sessionToken);
     } else if (type === 'GAME_READY') {
       // Game is ready, session should still be active
-      console.log('[DEBUG] Game ready, session:', sessionToken);
+      logger.debug('Game ready, session:', sessionToken);
     }
   };
 
@@ -915,12 +930,12 @@ export const GameRoomProvider = ({
           // Clean up sessions for rooms that have ended
           if (now > roomEndTime || room.status === 'completed' || room.status === 'cancelled') {
             sessionsToDelete.push(sessionToken);
-            console.log(`[DEBUG] Cleaning up expired session for completed room: ${sessionToken}`);
+            logger.debug(`Cleaning up expired session for completed room: ${sessionToken}`);
           }
         } else {
           // Room doesn't exist anymore, clean up session
           sessionsToDelete.push(sessionToken);
-          console.log(`[DEBUG] Cleaning up session for non-existent room: ${sessionToken}`);
+          logger.debug(`Cleaning up session for non-existent room: ${sessionToken}`);
         }
       }
 
@@ -932,7 +947,7 @@ export const GameRoomProvider = ({
           return newMap;
         });
 
-        console.log(`[DEBUG] Cleaned up ${sessionsToDelete.length} expired sessions`);
+        logger.debug(`Cleaned up ${sessionsToDelete.length} expired sessions`);
       }
     };
 
@@ -945,25 +960,10 @@ export const GameRoomProvider = ({
     return () => clearInterval(cleanupInterval);
   }, [rooms, activeGameSessions]);
 
-  // Also add manual session cleanup function
-  const cleanupUserSessions = (userId: string, roomId: string) => {
-    setActiveGameSessions(prev => {
-      const newMap = new Map(prev);
-      for (const [token, session] of prev.entries()) {
-        if (session.userId === userId && session.roomId === roomId) {
-          newMap.delete(token);
-          console.log(`[DEBUG] Manually cleaned up session: ${token}`);
-        }
-      }
-      return newMap;
-    });
-  };
-
-
   // Function to automatically complete a single game
   const autoCompleteGame = async (room: any) => {
     try {
-      console.log(`Auto-completing game room: ${room.id} (${room.name})`);
+      logger.info(`Auto-completing game room: ${room.id} (${room.name})`);
 
       // Call smart contract first to complete the game on-chain
       let onChainResult = null;
@@ -974,7 +974,7 @@ export const GameRoomProvider = ({
             throw new Error(`Cannot complete game ${room.id} on-chain: Missing wallet signer`);
             // Continue with database completion as fallback
           } else {
-            console.log(`Completing game on-chain for room ${room.id}`);
+            logger.info(`Completing game on-chain for room ${room.id}`);
 
             // Get all active participants with their scores for on-chain completion
             const { data: participants } = await supabase
@@ -1009,13 +1009,13 @@ export const GameRoomProvider = ({
                 if (!onChainResult?.digest) {
                   throw new Error(`Failed to complete game on-chain for room ${room.id}: Missing transaction digest`);
                 }
-                console.log(`Successfully completed game on-chain for room ${room.id} with digest: ${onChainResult.digest}`);
+                logger.success(`Successfully completed game on-chain for room ${room.id} with digest: ${onChainResult.digest}`);
               }
             }
           }
         }
       } catch (onChainError) {
-        console.error(`Failed to complete game on-chain for room ${room.id}:`, onChainError);
+        logger.error(`Failed to complete game on-chain for room ${room.id}:`, onChainError);
         throw onChainError;
       }
 
@@ -1038,7 +1038,7 @@ export const GameRoomProvider = ({
           })
           .eq("id", room.id);
 
-        console.log(`Room ${room.id} completed with no participants`);
+        logger.info(`Room ${room.id} completed with no participants`);
         return;
       }
 
@@ -1061,7 +1061,7 @@ export const GameRoomProvider = ({
       // Distribute prizes with on-chain transaction information
       await distributePrizes(room, participants, winners, onChainResult);
     } catch (error) {
-      console.error(`Error auto-completing game ${room.id}:`, error);
+      logger.error(`Error auto-completing game ${room.id}:`, error);
 
       // If auto-completion fails, at least update the status
       try {
@@ -1074,7 +1074,7 @@ export const GameRoomProvider = ({
           })
           .eq("id", room.id);
       } catch (statusError) {
-        console.error("Error updating room status as fallback:", statusError);
+        logger.error("Error updating room status as fallback:", statusError);
       }
     }
   };
@@ -1098,7 +1098,7 @@ export const GameRoomProvider = ({
 
       if (!expiredRooms || expiredRooms.length === 0) return;
 
-      console.log(
+      logger.info(
         `Found ${expiredRooms.length} expired rooms to auto-complete`
       );
 
@@ -1106,7 +1106,7 @@ export const GameRoomProvider = ({
         await autoCompleteGame(room);
       }
     } catch (error) {
-      console.error("Error auto-completing expired games:", error);
+      logger.error("Error auto-completing expired games:", error);
     }
   };
 
@@ -1162,16 +1162,26 @@ export const GameRoomProvider = ({
         }
       }
     } catch (error) {
-      console.error("Error updating room statuses:", error);
+      logger.error("Error updating room statuses:", error);
     }
   };
 
   // Fetch all public rooms and user's private rooms
   const fetchRooms = async () => {
     try {
+      setLoading(true);
       // First, update room statuses based on time
       await updateRoomStatuses();
 
+      const start = (currentPage - 1) * roomsPerPage;
+
+      // First get the total count
+      const { count } = await supabase
+        .from("game_rooms")
+        .select("*", { count: "exact", head: true })
+        .or("is_private.eq.false,creator_id.eq." + user?.id);
+
+      // Then get the paginated data
       const { data, error } = await supabase
         .from("game_rooms")
         .select(
@@ -1183,12 +1193,15 @@ export const GameRoomProvider = ({
         `
         )
         .or("is_private.eq.false,creator_id.eq." + user?.id)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .range(start, start + roomsPerPage - 1);
 
       if (error) throw error;
       setRooms(data as GameRoom[] || []);
+      setTotalRooms(count || 0);
+      setTotalPages(Math.ceil((count || 0) / roomsPerPage));
     } catch (error) {
-      console.error("Error fetching rooms:", error);
+      logger.error("Error fetching rooms:", error);
       toast({
         title: "Error",
         description: "Failed to fetch game rooms",
@@ -1200,6 +1213,7 @@ export const GameRoomProvider = ({
   };
 
   const refreshRooms = async () => {
+    setCurrentPage(1); // Reset to first page when refreshing
     await fetchRooms();
   };
 
@@ -1230,7 +1244,7 @@ export const GameRoomProvider = ({
         .single();
 
       if (instanceError) {
-        console.error("Game instance error:", instanceError);
+        logger.error("Game instance error:", instanceError);
         throw new Error(
           instanceError.message || "Failed to create game instance"
         );
@@ -1246,7 +1260,7 @@ export const GameRoomProvider = ({
         const signer = getWalletKeypair();
         if (!signer) throw new Error("Missing wallet signer for on-chain room creation");
 
-        console.log(`Creating game room on-chain: ${data.name}`);
+        logger.info(`Creating game room on-chain: ${data.name}`);
         const chainResult = await onChainGameRoom.createGameRoom({
           walletKeyPair: signer,
           name: data.name,
@@ -1266,7 +1280,7 @@ export const GameRoomProvider = ({
           throw new Error("On-chain room creation failed - missing room ID or transaction digest");
         }
 
-        console.log(`Successfully created game room on-chain: ${data.name} with ID: ${chainResult.roomId}`);
+        logger.success(`Successfully created game room on-chain: ${data.name} with ID: ${chainResult.roomId}`);
 
         // Only proceed with database updates after successful on-chain creation
         const insertPayload: TablesInsert<"game_rooms"> = {
@@ -1297,7 +1311,7 @@ export const GameRoomProvider = ({
           .single();
 
         if (roomError) {
-          console.error("Room creation error:", roomError);
+          logger.error("Room creation error:", roomError);
           throw new Error(roomError.message || "Failed to create room");
         }
 
@@ -1393,7 +1407,7 @@ export const GameRoomProvider = ({
       }
 
     } catch (error: any) {
-      console.error("Error creating room:", error);
+      logger.error("Error creating room:", error);
       toast({
         title: "Error",
         description: error.message || "Failed to create game room",
@@ -1465,14 +1479,14 @@ export const GameRoomProvider = ({
         const signer = getWalletKeypair();
         if (!signer) throw new Error("Missing wallet signer for on-chain join");
 
-        console.log(`Joining room on-chain: ${roomId}`);
+        logger.info(`Joining room on-chain: ${roomId}`);
         await onChainGameRoom.joinGameRoom({
           walletKeyPair: signer,
           roomId: room.on_chain_room_id,
           roomCode: roomCode || "",
           entryFee: room.is_sponsored ? 0 : Number(room.entry_fee || 0),
         });
-        console.log(`Successfully joined room on-chain: ${roomId}`);
+        logger.success(`Successfully joined room on-chain: ${roomId}`);
       }
 
       // Only proceed with database updates after successful on-chain join
@@ -1498,7 +1512,7 @@ export const GameRoomProvider = ({
         description: "Joined room successfully",
       });
     } catch (error: any) {
-      console.error("Error joining room:", error);
+      logger.error("Error joining room:", error);
       toast({
         title: "Error",
         description: error.message || "Failed to join room",
@@ -1531,9 +1545,9 @@ export const GameRoomProvider = ({
         const signer = getWalletKeypair();
         if (!signer) throw new Error("Missing wallet signer for on-chain leave");
 
-        console.log(`Leaving room on-chain: ${roomId}`);
+        logger.info(`Leaving room on-chain: ${roomId}`);
         await onChainGameRoom.leaveRoom({ walletKeyPair: signer, roomId: room.on_chain_room_id });
-        console.log(`Successfully left room on-chain: ${roomId}`);
+        logger.success(`Successfully left room on-chain: ${roomId}`);
       }
 
       // Only proceed with database updates after successful on-chain leave
@@ -1555,7 +1569,7 @@ export const GameRoomProvider = ({
         description: "Left room successfully",
       });
     } catch (error) {
-      console.error("Error leaving room:", error);
+      logger.error("Error leaving room:", error);
       toast({
         title: "Error",
         description: "Failed to leave room",
@@ -1592,7 +1606,7 @@ export const GameRoomProvider = ({
         throw new Error("Can only cancel rooms in waiting status");
       }
 
-      console.log(
+      logger.info(
         `Cancelling room ${roomId} and refunding ${room.participants.length} participants`
       );
 
@@ -1601,9 +1615,9 @@ export const GameRoomProvider = ({
         const signer = getWalletKeypair();
         if (!signer) throw new Error("Missing wallet signer for on-chain cancel");
 
-        console.log(`Cancelling room on-chain: ${roomId}`);
+        logger.info(`Cancelling room on-chain: ${roomId}`);
         await onChainGameRoom.cancelRoom({ walletKeyPair: signer, roomId: room.on_chain_room_id });
-        console.log(`Successfully cancelled room on-chain: ${roomId}`);
+        logger.success(`Successfully cancelled room on-chain: ${roomId}`);
 
         // Only proceed with database updates after successful on-chain cancel
         // Refund all participants (NO 10% platform fee on cancellations)
@@ -1625,7 +1639,7 @@ export const GameRoomProvider = ({
               .single();
 
             if (refundError) {
-              console.error("Error creating refund transaction:", refundError);
+              logger.error("Error creating refund transaction:", refundError);
               continue;
             }
           }
@@ -1667,7 +1681,7 @@ export const GameRoomProvider = ({
       }
 
     } catch (error: any) {
-      console.error("Error cancelling room:", error);
+      logger.error("Error cancelling room:", error);
       toast({
         title: "Error",
         description: error.message || "Failed to cancel room",
@@ -1699,7 +1713,7 @@ export const GameRoomProvider = ({
       if (error) throw error;
       return data as GameRoom;
     } catch (error) {
-      console.error("Error fetching room details:", error);
+      logger.error("Error fetching room details:", error);
       return null;
     }
   };
@@ -1724,7 +1738,7 @@ export const GameRoomProvider = ({
       if (error) throw error;
       return data as GameRoomParticipant[] || [];
     } catch (error) {
-      console.error("Error fetching participants:", error);
+      logger.error("Error fetching participants:", error);
       return [];
     }
   };
@@ -1736,7 +1750,7 @@ export const GameRoomProvider = ({
     if (!userIdToUse) throw new Error("User not authenticated");
 
     try {
-      console.log(`[DEBUG] Starting score update for user ${userIdToUse}, room ${roomId}, new score: ${score}`);
+      logger.debug(`Starting score update for user ${userIdToUse}, room ${roomId}, new score: ${score}`);
 
       // First, get the current participant data
       const { data: currentParticipant, error: fetchError } = await supabase
@@ -1747,21 +1761,21 @@ export const GameRoomProvider = ({
         .single();
 
       if (fetchError) {
-        console.error("[DEBUG] Error fetching current participant:", fetchError);
+        logger.debug("Error fetching current participant:", fetchError);
         throw fetchError;
       }
 
-      console.log("[DEBUG] Current participant data:", currentParticipant);
+      logger.debug("Current participant data:", currentParticipant);
 
       const currentScore = currentParticipant?.score || 0;
 
-      console.log(`[DEBUG] Score comparison details:`);
-      console.log(`  - Current score: ${currentScore} (type: ${typeof currentScore})`);
-      console.log(`  - New score: ${score} (type: ${typeof score})`);
-      console.log(`  - New score > current? ${score > currentScore}`);
-      console.log(`  - New score as number: ${Number(score)}`);
-      console.log(`  - Current score as number: ${Number(currentScore)}`);
-      console.log(`  - Number comparison: ${Number(score) > Number(currentScore)}`);
+      logger.debug(`Score comparison details:`);
+      logger.info(`  - Current score: ${currentScore} (type: ${typeof currentScore})`);
+      logger.info(`  - New score: ${score} (type: ${typeof score})`);
+      logger.info(`  - New score > current? ${score > currentScore}`);
+      logger.info(`  - New score as number: ${Number(score)}`);
+      logger.info(`  - Current score as number: ${Number(currentScore)}`);
+      logger.info(`  - Number comparison: ${Number(score) > Number(currentScore)}`);
 
       // Convert both to numbers to ensure proper comparison
       const currentScoreNum = Number(currentScore);
@@ -1769,7 +1783,7 @@ export const GameRoomProvider = ({
 
       // Only update if new score is higher
       if (newScoreNum > currentScoreNum) {
-        console.log(`[DEBUG] Updating score from ${currentScoreNum} to ${newScoreNum}`);
+        logger.debug(`Updating score from ${currentScoreNum} to ${newScoreNum}`);
 
         const { data: updateResult, error: updateError } = await supabase
           .from("game_room_participants")
@@ -1779,11 +1793,11 @@ export const GameRoomProvider = ({
           .select();
 
         if (updateError) {
-          console.error("[DEBUG] Error updating score:", updateError);
+          logger.debug("Error updating score:", updateError);
           throw updateError;
         }
 
-        console.log("[DEBUG] Update result:", updateResult);
+        logger.debug("Update result:", updateResult);
 
         // Verify the update worked
         const { data: verifyData } = await supabase
@@ -1793,16 +1807,16 @@ export const GameRoomProvider = ({
           .eq("user_id", userIdToUse)
           .single();
 
-        console.log("[DEBUG] Verified updated score:", verifyData?.score);
+        logger.debug("Verified updated score:", verifyData?.score);
 
         return { updated: true, previousScore: currentScoreNum, newScore: newScoreNum };
       } else {
-        console.log(`[DEBUG] Score ${newScoreNum} not higher than current ${currentScoreNum}, no update needed`);
+        logger.debug(`Score ${newScoreNum} not higher than current ${currentScoreNum}, no update needed`);
         return { updated: false, previousScore: currentScoreNum, newScore: newScoreNum };
       }
 
     } catch (error) {
-      console.error("[DEBUG] Error in updateGameScore:", error);
+      logger.error("Error in updateGameScore:", error);
       throw error;
     }
   };
@@ -1837,7 +1851,7 @@ export const GameRoomProvider = ({
         const signer = getWalletKeypair();
         if (!signer) throw new Error("Missing wallet signer for on-chain completion");
 
-        console.log(`Completing game on-chain for room ${roomId}`);
+        logger.info(`Completing game on-chain for room ${roomId}`);
 
         const activeParticipants = (room.participants || []).filter((p: any) => p.is_active);
         const winnersSorted = winners.sort((a, b) => a.position - b.position);
@@ -1860,7 +1874,7 @@ export const GameRoomProvider = ({
           scores,
         });
 
-        console.log(`Successfully completed game on-chain for room ${roomId} with digest: ${onChainResult.digest}`);
+        logger.success(`Successfully completed game on-chain for room ${roomId} with digest: ${onChainResult.digest}`);
       }
 
       // Only proceed with database updates after successful on-chain completion
@@ -1876,7 +1890,7 @@ export const GameRoomProvider = ({
         description: "Game completed and winnings distributed",
       });
     } catch (error) {
-      console.error("Error completing game:", error);
+      logger.error("Error completing game:", error);
       toast({
         title: "Error",
         description: "Failed to complete game",
@@ -1886,7 +1900,7 @@ export const GameRoomProvider = ({
     }
   };
 
-  // Load rooms when user changes
+  // Load rooms when user changes or currentPage changes
   useEffect(() => {
     if (user) {
       fetchRooms();
@@ -1895,7 +1909,7 @@ export const GameRoomProvider = ({
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user, currentPage]);
 
   // Enhanced useEffect to periodically check for expired games
   useEffect(() => {
@@ -1961,6 +1975,24 @@ export const GameRoomProvider = ({
     loading,
     creating,
     joining,
+    // Pagination state
+    currentPage,
+    totalPages,
+    totalRooms,
+    roomsPerPage,
+    // Pagination functions
+    goToPage: async (page: number) => {
+      setCurrentPage(page);
+      await fetchRooms();
+    },
+    nextPage: async () => {
+      setCurrentPage(prev => Math.min(prev + 1, totalPages));
+      await fetchRooms();
+    },
+    prevPage: async () => {
+      setCurrentPage(prev => Math.max(prev - 1, 1));
+      await fetchRooms();
+    },
     refreshRooms,
     createRoom,
     joinRoom,

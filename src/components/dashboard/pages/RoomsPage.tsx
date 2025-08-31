@@ -17,37 +17,8 @@ import {
 } from "lucide-react";
 import Banner from "@/components/Banner";
 import { useWallet } from "@/contexts/WalletContext";
-import { SuiClient } from "@mysten/sui.js/client";
-import { GameRoom } from "@/integrations/smartcontracts/gameRoom";
+import { logger } from "@/utils";
 
-
-// useEffect(() => {
-//   const testSponsorAddress = async () => {
-//     try {
-//       console.log('[DEBUG] Testing sponsor address...');
-
-//       // Create SuiClient
-//       const client = new SuiClient({ url: "https://fullnode.mainnet.sui.io" });
-
-//       // Create GameRoom instance  
-//       const gameRoom = new GameRoom(client);
-
-//       // Get and log the sponsor address
-//       const sponsorAddress = gameRoom.getSponsorAddress();
-//       console.log('[DEBUG] Sponsor Address:', sponsorAddress);
-
-//       // Test the conversion methods
-//       gameRoom.testPrivateKeyConversion();
-
-//     } catch (error) {
-//       console.error('[DEBUG] Error:', error);
-//     }
-//   };
-
-//   testSponsorAddress();
-// }, []);
-
-// Winner Celebration Modal Component
 const WinnerCelebrationModal = ({ isOpen, onClose, winner }) => {
   const [showFireworks, setShowFireworks] = useState(false);
   const [animationStep, setAnimationStep] = useState(0);
@@ -205,7 +176,7 @@ const WinnerCelebrationModal = ({ isOpen, onClose, winner }) => {
           url: window.location.origin,
         });
       } catch (err) {
-        console.log("Share cancelled or failed");
+        logger.warn("Share cancelled or failed");
       }
     } else {
       navigator.clipboard.writeText(shareText);
@@ -433,6 +404,14 @@ const RoomsPage = () => {
     createRoom,
     joinRoom,
     refreshRooms,
+    // Pagination state and functions
+    currentPage,
+    totalPages,
+    totalRooms,
+    roomsPerPage,
+    goToPage,
+    nextPage,
+    prevPage,
   } = useGameRoom();
   const { user } = useAuth();
   const { profile } = useProfile();
@@ -526,7 +505,7 @@ const RoomsPage = () => {
         });
         setUserWins(winsMap);
       } catch (error) {
-        console.error("Error fetching user wins:", error);
+        logger.error("Error fetching user wins:", error);
       }
     };
 
@@ -663,7 +642,7 @@ const RoomsPage = () => {
         setSelectedRoomId(room.id);
       }, 1000);
     } catch (error) {
-      console.error("Error creating room:", error);
+      logger.error("Error creating room:", error);
     }
   };
 
@@ -678,7 +657,7 @@ const RoomsPage = () => {
       setRoomCode("");
       setSelectedRoom(null);
     } catch (error) {
-      console.error("Error joining room:", error);
+      logger.error("Error joining room:", error);
     }
   };
 
@@ -897,154 +876,268 @@ const RoomsPage = () => {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {safeRooms.map((room) => (
-              <div
-                key={room.id}
-                className={`relative bg-gradient-to-br from-card to-secondary/20 border rounded-xl p-6 hover:border-primary/40 transition-all duration-300 hover:scale-105 group cyber-border ${userWonInRoom(room)
-                  ? "border-yellow-500/50 shadow-lg shadow-yellow-500/20"
-                  : "border-primary/20"
-                  }`}
-              >
-                {/* Winner Badge */}
-                {userWonInRoom(room) && (
-                  <div className="absolute -top-2 -right-2 bg-gradient-to-r from-yellow-400 to-amber-500 text-black px-3 py-1 rounded-full text-xs font-bold font-cyber z-10">
-                    🏆 WINNER
-                  </div>
-                )}
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {safeRooms.map((room) => (
+                <div
+                  key={room.id}
+                  className={`relative bg-gradient-to-br from-card to-secondary/20 border rounded-xl p-6 hover:border-primary/40 transition-all duration-300 hover:scale-105 group cyber-border ${userWonInRoom(room)
+                    ? "border-yellow-500/50 shadow-lg shadow-yellow-500/20"
+                    : "border-primary/20"
+                    }`}
+                >
+                  {/* Winner Badge */}
+                  {userWonInRoom(room) && (
+                    <div className="absolute -top-2 -right-2 bg-gradient-to-r from-yellow-400 to-amber-500 text-black px-3 py-1 rounded-full text-xs font-bold font-cyber z-10">
+                      🏆 WINNER
+                    </div>
+                  )}
 
-                <div className="flex justify-between items-start mb-4">
-                  <h3 className="font-cyber text-lg font-bold text-primary glow-text-subtle">
-                    {room.name}
-                  </h3>
-                  <div
-                    className={`px-3 py-1 rounded-full text-xs font-bold font-cyber border ${getStatusColor(
-                      room.status
+                  <div className="flex justify-between items-start mb-4">
+                    <h3 className="font-cyber text-lg font-bold text-primary glow-text-subtle">
+                      {room.name}
+                    </h3>
+                    <div
+                      className={`px-3 py-1 rounded-full text-xs font-bold font-cyber border ${getStatusColor(
+                        room.status
+                      )}`}
+                    >
+                      {room.status.toUpperCase()}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 mb-4">
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground font-cyber">
+                        Game:
+                      </span>
+                      <span className="text-sm font-cyber text-foreground">
+                        {room.game?.name || "Unknown"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground font-cyber">
+                        Players:
+                      </span>
+                      <span className="text-sm font-cyber text-foreground">
+                        <span
+                          className={
+                            room.current_players >= room.max_players
+                              ? "text-red-400"
+                              : "text-green-400"
+                          }
+                        >
+                          {room.current_players}
+                        </span>
+                        /{room.max_players}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground font-cyber">
+                        Host:
+                      </span>
+                      <span className="text-sm font-cyber text-foreground">
+                        {room.creator?.username || "Unknown"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground font-cyber">
+                        Entry:
+                      </span>
+                      <span className="text-sm font-cyber text-accent font-bold">
+                        {room.is_sponsored
+                          ? "FREE"
+                          : formatCurrency(room.entry_fee, room.currency)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground font-cyber">
+                        Prize Pool:
+                      </span>
+                      <span className="text-sm font-cyber text-green-400 font-bold glow-text-subtle">
+                        {formatCurrency(room.total_prize_pool, room.currency)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground font-cyber">
+                        Start:
+                      </span>
+                      <span className="text-xs font-cyber text-foreground">
+                        {formatDateTime(room.start_time)}
+                      </span>
+                    </div>
+
+                    {/* Show win details for completed rooms where user won */}
+                    {userWonInRoom(room) && (
+                      <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-2 mt-2">
+                        <div className="flex justify-between text-xs font-cyber">
+                          <span className="text-yellow-400">Your Position:</span>
+                          <span className="text-yellow-300">
+                            #{userWins[room.id].final_position}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-xs font-cyber">
+                          <span className="text-yellow-400">Earnings:</span>
+                          <span className="text-yellow-300 font-bold">
+                            {userWins[room.id].earnings} {room.currency}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {room.is_private && (
+                      <div className="flex justify-center mt-2">
+                        <span className="text-xs font-cyber text-purple-400">
+                          🔒 Private Room
+                        </span>
+                      </div>
+                    )}
+                    {room.is_sponsored && (
+                      <div className="flex justify-center mt-2">
+                        <span className="text-xs font-cyber text-yellow-400">
+                          💰 Sponsored
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => handleRoomAction(room)}
+                    disabled={
+                      joining ||
+                      (!isUserInRoom(room) &&
+                        !canJoinRoom(room) &&
+                        room.status !== "completed")
+                    }
+                    className={`w-full font-cyber font-bold py-2 rounded-lg transition-all duration-300 ${getActionButtonClass(
+                      room
                     )}`}
                   >
-                    {room.status.toUpperCase()}
-                  </div>
+                    {joining && selectedRoom?.id === room.id ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-background"></div>
+                        Joining...
+                      </span>
+                    ) : (
+                      getActionButtonText(room)
+                    )}
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex flex-col items-center space-y-4 mt-8">
+                {/* Page Info */}
+                <div className="text-center">
+                  <p className="text-sm font-cyber text-muted-foreground">
+                    Showing {((currentPage - 1) * roomsPerPage) + 1} to {Math.min(currentPage * roomsPerPage, totalRooms)} of {totalRooms} rooms
+                  </p>
+                  <p className="text-xs font-cyber text-muted-foreground mt-1">
+                    Page {currentPage} of {totalPages}
+                  </p>
                 </div>
 
-                <div className="space-y-2 mb-4">
-                  <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground font-cyber">
-                      Game:
-                    </span>
-                    <span className="text-sm font-cyber text-foreground">
-                      {room.game?.name || "Unknown"}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground font-cyber">
-                      Players:
-                    </span>
-                    <span className="text-sm font-cyber text-foreground">
-                      <span
-                        className={
-                          room.current_players >= room.max_players
-                            ? "text-red-400"
-                            : "text-green-400"
-                        }
-                      >
-                        {room.current_players}
-                      </span>
-                      /{room.max_players}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground font-cyber">
-                      Host:
-                    </span>
-                    <span className="text-sm font-cyber text-foreground">
-                      {room.creator?.username || "Unknown"}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground font-cyber">
-                      Entry:
-                    </span>
-                    <span className="text-sm font-cyber text-accent font-bold">
-                      {room.is_sponsored
-                        ? "FREE"
-                        : formatCurrency(room.entry_fee, room.currency)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground font-cyber">
-                      Prize Pool:
-                    </span>
-                    <span className="text-sm font-cyber text-green-400 font-bold glow-text-subtle">
-                      {formatCurrency(room.total_prize_pool, room.currency)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground font-cyber">
-                      Start:
-                    </span>
-                    <span className="text-xs font-cyber text-foreground">
-                      {formatDateTime(room.start_time)}
-                    </span>
+                {/* Pagination Buttons */}
+                <div className="flex items-center gap-2">
+                  {/* Previous Page Button */}
+                  <button
+                    onClick={prevPage}
+                    disabled={currentPage === 1}
+                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-secondary to-secondary/80 border border-primary/30 rounded-lg font-cyber font-bold text-sm hover:border-primary/50 hover:scale-105 transition-all disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed"
+                  >
+                    ← Previous
+                  </button>
+
+                  {/* Page Numbers */}
+                  <div className="flex items-center gap-1">
+                    {/* First Page */}
+                    {currentPage > 3 && (
+                      <>
+                        <button
+                          onClick={() => goToPage(1)}
+                          className="px-3 py-2 bg-gradient-to-r from-secondary to-secondary/80 border border-primary/30 rounded-lg font-cyber font-bold text-sm hover:border-primary/50 hover:scale-105 transition-all"
+                        >
+                          1
+                        </button>
+                        {currentPage > 4 && (
+                          <span className="px-2 text-muted-foreground">...</span>
+                        )}
+                      </>
+                    )}
+
+                    {/* Current Page Range */}
+                    {(() => {
+                      const startPage = Math.max(1, currentPage - 2);
+                      const endPage = Math.min(totalPages, currentPage + 2);
+                      const pages = [];
+
+                      for (let i = startPage; i <= endPage; i++) {
+                        pages.push(
+                          <button
+                            key={i}
+                            onClick={() => goToPage(i)}
+                            className={`px-3 py-2 font-cyber font-bold text-sm border rounded-lg transition-all hover:scale-105 ${i === currentPage
+                              ? "bg-gradient-to-r from-primary to-accent text-background border-primary shadow-lg shadow-primary/30"
+                              : "bg-gradient-to-r from-secondary to-secondary/80 text-foreground border-primary/30 hover:border-primary/50"
+                              }`}
+                          >
+                            {i}
+                          </button>
+                        );
+                      }
+
+                      return pages;
+                    })()}
+
+                    {/* Last Page */}
+                    {currentPage < totalPages - 2 && (
+                      <>
+                        {currentPage < totalPages - 3 && (
+                          <span className="px-2 text-muted-foreground">...</span>
+                        )}
+                        <button
+                          onClick={() => goToPage(totalPages)}
+                          className="px-3 py-2 bg-gradient-to-r from-secondary to-secondary/80 border border-primary/30 rounded-lg font-cyber font-bold text-sm hover:border-primary/50 hover:scale-105 transition-all"
+                        >
+                          {totalPages}
+                        </button>
+                      </>
+                    )}
                   </div>
 
-                  {/* Show win details for completed rooms where user won */}
-                  {userWonInRoom(room) && (
-                    <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-2 mt-2">
-                      <div className="flex justify-between text-xs font-cyber">
-                        <span className="text-yellow-400">Your Position:</span>
-                        <span className="text-yellow-300">
-                          #{userWins[room.id].final_position}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-xs font-cyber">
-                        <span className="text-yellow-400">Earnings:</span>
-                        <span className="text-yellow-300 font-bold">
-                          {userWins[room.id].earnings} {room.currency}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {room.is_private && (
-                    <div className="flex justify-center mt-2">
-                      <span className="text-xs font-cyber text-purple-400">
-                        🔒 Private Room
-                      </span>
-                    </div>
-                  )}
-                  {room.is_sponsored && (
-                    <div className="flex justify-center mt-2">
-                      <span className="text-xs font-cyber text-yellow-400">
-                        💰 Sponsored
-                      </span>
-                    </div>
-                  )}
+                  {/* Next Page Button */}
+                  <button
+                    onClick={nextPage}
+                    disabled={currentPage === totalPages}
+                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-secondary to-secondary/80 border border-primary/30 rounded-lg font-cyber font-bold text-sm hover:border-primary/50 hover:scale-105 transition-all disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed"
+                  >
+                    Next →
+                  </button>
                 </div>
 
-                <button
-                  onClick={() => handleRoomAction(room)}
-                  disabled={
-                    joining ||
-                    (!isUserInRoom(room) &&
-                      !canJoinRoom(room) &&
-                      room.status !== "completed")
-                  }
-                  className={`w-full font-cyber font-bold py-2 rounded-lg transition-all duration-300 ${getActionButtonClass(
-                    room
-                  )}`}
-                >
-                  {joining && selectedRoom?.id === room.id ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-background"></div>
-                      Joining...
-                    </span>
-                  ) : (
-                    getActionButtonText(room)
-                  )}
-                </button>
+                {/* Quick Navigation */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-cyber text-muted-foreground">Go to:</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max={totalPages}
+                    value={currentPage}
+                    onChange={(e) => {
+                      const page = parseInt(e.target.value);
+                      if (page >= 1 && page <= totalPages) {
+                        goToPage(page);
+                      }
+                    }}
+                    className="w-16 px-2 py-1 bg-secondary/50 border border-primary/30 rounded text-center text-xs font-cyber text-foreground focus:border-primary focus:outline-none"
+                  />
+                  <span className="text-xs font-cyber text-muted-foreground">of {totalPages}</span>
+                </div>
               </div>
-            ))}
-          </div>
+            )}
+          </>
         )}
 
         {/* Create Room Modal */}
