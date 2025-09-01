@@ -13,6 +13,7 @@ import {
   Zap,
   TrendingUp,
   Send,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -26,6 +27,12 @@ const WalletPage = () => {
     []
   );
   const [loadingTransactions, setLoadingTransactions] = useState(false);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [transactionsPerPage] = useState(10);
+  const [hasMoreTransactions, setHasMoreTransactions] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const { profile } = useProfile();
   const {
@@ -68,29 +75,41 @@ const WalletPage = () => {
   };
 
   // Fetch blockchain transaction history
-  const fetchTransactionHistory = async () => {
+  const fetchTransactionHistory = async (isLoadMore = false) => {
     if (!profile?.sui_wallet_data?.address || !suiClient) {
       console.log("❌ Missing requirements for transaction fetch");
       return;
     }
 
-    setLoadingTransactions(true);
+    if (isLoadMore) {
+      setLoadingMore(true);
+    } else {
+      setLoadingTransactions(true);
+      setCurrentPage(1);
+    }
+
     try {
       console.log("📋 Fetching wallet transaction history...");
       const address = profile.sui_wallet_data.address;
 
+      // Calculate offset for pagination
+      const offset = isLoadMore ? blockchainTransactions.length : 0;
+      const limit = isLoadMore ? 10 : 25; // Fetch more for initial load
+
       // Get transactions where user is sender
       const sentTxResponse = await suiClient.queryTransactionBlocks({
         filter: { FromAddress: address },
-        limit: 25,
+        limit: limit,
         order: "descending",
+        cursor: isLoadMore ? blockchainTransactions[blockchainTransactions.length - 1]?.transaction_hash : undefined,
       });
 
       // Get transactions where user received tokens
       const receivedTxResponse = await suiClient.queryTransactionBlocks({
         filter: { ToAddress: address },
-        limit: 25,
+        limit: limit,
         order: "descending",
+        cursor: isLoadMore ? blockchainTransactions[blockchainTransactions.length - 1]?.transaction_hash : undefined,
       });
 
       // Combine and deduplicate
@@ -103,123 +122,124 @@ const WalletPage = () => {
 
       // Process each transaction
       const processedTransactions = await Promise.all(
-        Array.from(allTxDigests).map(async (digest) => {
-          try {
-            const txDetails = await suiClient.getTransactionBlock({
-              digest: digest,
-              options: {
-                showBalanceChanges: true,
-                showEffects: true,
-                showEvents: true,
-                showInput: true,
-              },
-            });
+        Array.from(allTxDigests)
+          .slice(0, isLoadMore ? 10 : 15)
+          .map(async (digest) => {
+            try {
+              const txDetails = await suiClient.getTransactionBlock({
+                digest: digest,
+                options: {
+                  showBalanceChanges: true,
+                  showEffects: true,
+                  showEvents: true,
+                  showInput: true,
+                },
+              });
 
-            if (!txDetails.effects) return null;
+              if (!txDetails.effects) return null;
 
-            const isSuccess = txDetails.effects.status.status === "success";
-            const timestamp = txDetails.timestampMs
-              ? Number(txDetails.timestampMs)
-              : Date.now();
-            const events = txDetails.events || [];
-            const balanceChanges = txDetails.balanceChanges || [];
+              const isSuccess = txDetails.effects.status.status === "success";
+              const timestamp = txDetails.timestampMs
+                ? Number(txDetails.timestampMs)
+                : Date.now();
+              const events = txDetails.events || [];
+              const balanceChanges = txDetails.balanceChanges || [];
 
-            // Calculate gas used
-            let gasUsed = 0;
-            if (txDetails.effects.gasUsed) {
-              gasUsed =
-                (Number(txDetails.effects.gasUsed.computationCost) +
-                  Number(txDetails.effects.gasUsed.storageCost) -
-                  Number(txDetails.effects.gasUsed.storageRebate)) /
-                1_000_000_000;
-            }
-
-            // Check if it's a swap (look for multiple balance changes)
-            const userBalanceChanges = balanceChanges.filter(
-              (change) =>
-                (change.owner as { AddressOwner: string })?.AddressOwner ===
-                address
-            );
-
-            let transactionType = "transfer";
-            let amount = 0;
-            let currency = "SUI";
-            let description = "Transaction";
-
-            // Detect swap transactions
-            if (userBalanceChanges.length >= 2) {
-              const outgoingChange = userBalanceChanges.find(
-                (change) => Number(change.amount) < 0
-              );
-              const incomingChange = userBalanceChanges.find(
-                (change) => Number(change.amount) > 0
-              );
-
-              if (outgoingChange && incomingChange) {
-                transactionType = "swap";
-                const fromCurrency = getCurrencyFromCoinType(
-                  outgoingChange.coinType
-                );
-                const toCurrency = getCurrencyFromCoinType(
-                  incomingChange.coinType
-                );
-                const fromAmount = formatTokenAmount(
-                  Math.abs(Number(outgoingChange.amount)).toString(),
-                  fromCurrency
-                );
-                const toAmount = formatTokenAmount(
-                  incomingChange.amount,
-                  toCurrency
-                );
-
-                currency = fromCurrency;
-                amount = fromAmount;
-                description = `Swapped ${fromAmount.toFixed(
-                  fromCurrency === "SUI" ? 4 : 2
-                )} ${fromCurrency} for ${toAmount.toFixed(
-                  toCurrency === "SUI" ? 4 : 2
-                )} ${toCurrency}`;
+              // Calculate gas used
+              let gasUsed = 0;
+              if (txDetails.effects.gasUsed) {
+                gasUsed =
+                  (Number(txDetails.effects.gasUsed.computationCost) +
+                    Number(txDetails.effects.gasUsed.storageCost) -
+                    Number(txDetails.effects.gasUsed.storageRebate)) /
+                  1_000_000_000;
               }
-            } else if (userBalanceChanges.length === 1) {
-              // Single balance change - deposit or withdrawal
-              const change = userBalanceChanges[0];
-              currency = getCurrencyFromCoinType(change.coinType);
-              const changeAmount = Number(change.amount);
-              amount = formatTokenAmount(
-                Math.abs(changeAmount).toString(),
-                currency
+
+              // Check if it's a swap (look for multiple balance changes)
+              const userBalanceChanges = balanceChanges.filter(
+                (change) =>
+                  (change.owner as { AddressOwner: string })?.AddressOwner ===
+                  address
               );
 
-              if (changeAmount > 0) {
-                transactionType = "deposit";
-                description = `Received ${amount.toFixed(
-                  currency === "SUI" ? 4 : 2
-                )} ${currency}`;
-              } else {
-                transactionType = "withdrawal";
-                description = `Sent ${amount.toFixed(
-                  currency === "SUI" ? 4 : 2
-                )} ${currency}`;
-              }
-            }
+              let transactionType = "transfer";
+              let amount = 0;
+              let currency = "SUI";
+              let description = "Transaction";
 
-            return {
-              id: digest,
-              type: transactionType,
-              amount: amount,
-              currency: currency,
-              status: isSuccess ? "completed" : "failed",
-              description: description,
-              transaction_hash: digest,
-              created_at: new Date(timestamp).toISOString(),
-              source: "blockchain",
-              gas_used: gasUsed,
-            };
-          } catch (error) {
-            console.error("Error processing transaction:", digest, error);
-            return null;
-          }
-        })
+              // Detect swap transactions
+              if (userBalanceChanges.length >= 2) {
+                const outgoingChange = userBalanceChanges.find(
+                  (change) => Number(change.amount) < 0
+                );
+                const incomingChange = userBalanceChanges.find(
+                  (change) => Number(change.amount) > 0
+                );
+
+                if (outgoingChange && incomingChange) {
+                  transactionType = "swap";
+                  const fromCurrency = getCurrencyFromCoinType(
+                    outgoingChange.coinType
+                  );
+                  const toCurrency = getCurrencyFromCoinType(
+                    incomingChange.coinType
+                  );
+                  const fromAmount = formatTokenAmount(
+                    Math.abs(Number(outgoingChange.amount)).toString(),
+                    fromCurrency
+                  );
+                  const toAmount = formatTokenAmount(
+                    incomingChange.amount,
+                    toCurrency
+                  );
+
+                  currency = fromCurrency;
+                  amount = fromAmount;
+                  description = `Swapped ${fromAmount.toFixed(
+                    fromCurrency === "SUI" ? 4 : 2
+                  )} ${fromCurrency} for ${toAmount.toFixed(
+                    toCurrency === "SUI" ? 4 : 2
+                  )} ${toCurrency}`;
+                }
+              } else if (userBalanceChanges.length === 1) {
+                // Single balance change - deposit or withdrawal
+                const change = userBalanceChanges[0];
+                currency = getCurrencyFromCoinType(change.coinType);
+                const changeAmount = Number(change.amount);
+                amount = formatTokenAmount(
+                  Math.abs(changeAmount).toString(),
+                  currency
+                );
+
+                if (changeAmount > 0) {
+                  transactionType = "deposit";
+                  description = `Received ${amount.toFixed(
+                    currency === "SUI" ? 4 : 2
+                  )} ${currency}`;
+                } else {
+                  transactionType = "withdrawal";
+                  description = `Sent ${amount.toFixed(
+                    currency === "SUI" ? 4 : 2
+                  )} ${currency}`;
+                }
+              }
+              return {
+                id: digest,
+                type: transactionType,
+                amount: amount,
+                currency: currency,
+                status: isSuccess ? "completed" : "failed",
+                description: description,
+                transaction_hash: digest,
+                created_at: new Date(timestamp).toISOString(),
+                source: "blockchain",
+                gas_used: gasUsed,
+              };
+            } catch (error) {
+              console.error("Error processing transaction:", digest, error);
+              return null;
+            }
+          })
       );
 
       // Filter out null results and sort by date
@@ -235,23 +255,42 @@ const WalletPage = () => {
         validTransactions.length,
         "valid transactions"
       );
-      setBlockchainTransactions(validTransactions);
+
+      if (isLoadMore) {
+        // Append new transactions for load more
+        setBlockchainTransactions(prev => [...prev, ...validTransactions]);
+        setHasMoreTransactions(validTransactions.length === 10);
+        setCurrentPage(prev => prev + 1);
+      } else {
+        // Set initial transactions
+        setBlockchainTransactions(validTransactions);
+        setHasMoreTransactions(validTransactions.length === 15);
+      }
     } catch (error) {
       console.error("❌ Error fetching transaction history:", error);
-      setBlockchainTransactions([]);
+      if (!isLoadMore) {
+        setBlockchainTransactions([]);
+      }
       toast({
         title: "Error",
         description: "Failed to fetch transaction history",
         variant: "destructive",
       });
     } finally {
-      setLoadingTransactions(false);
+      if (isLoadMore) {
+        setLoadingMore(false);
+      } else {
+        setLoadingTransactions(false);
+      }
     }
   };
 
   // Load transaction history when wallet is available
   useEffect(() => {
     if (profile?.sui_wallet_data?.address && suiClient) {
+      // Reset pagination when wallet changes
+      setCurrentPage(1);
+      setHasMoreTransactions(true);
       fetchTransactionHistory();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -267,15 +306,16 @@ const WalletPage = () => {
       amount: Number(swapData.fromAmount),
       currency: swapData.fromCurrency,
       transaction_hash: swapData.transactionHash,
-      description: `${swapData.type === "cetus" ? "Cetus" : "Direct"} Swap: ${
-        swapData.fromAmount
-      } ${swapData.fromCurrency} → ${swapData.toAmount} ${swapData.toCurrency}`,
+      description: `${swapData.type === "cetus" ? "Cetus" : "Direct"} Swap: ${swapData.fromAmount
+        } ${swapData.fromCurrency} → ${swapData.toAmount} ${swapData.toCurrency}`,
       status: "completed",
     });
 
-    // Refresh data
+    // Refresh data and reset pagination
     refreshBalances();
     refreshTransactions();
+    setCurrentPage(1);
+    setHasMoreTransactions(true);
     fetchTransactionHistory();
 
     toast({
@@ -287,7 +327,14 @@ const WalletPage = () => {
   // Handle refresh
   const handleRefresh = async () => {
     await refreshBalances();
+    setCurrentPage(1);
+    setHasMoreTransactions(true);
     await fetchTransactionHistory();
+  };
+
+  // Handle load more transactions
+  const handleLoadMore = async () => {
+    await fetchTransactionHistory(true);
   };
 
   const getTransactionIcon = (type: string) => {
@@ -340,7 +387,7 @@ const WalletPage = () => {
     window.open(explorers[0], "_blank");
   };
 
-  // Combine all transactions
+  // Combine all transactions and apply pagination
   const allTransactions = [
     ...platformTransactions.map((tx) => ({ ...tx, source: "platform" })),
     ...blockchainTransactions,
@@ -348,6 +395,9 @@ const WalletPage = () => {
     (a, b) =>
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
+
+  // Get paginated transactions
+  const paginatedTransactions = allTransactions.slice(0, currentPage * transactionsPerPage);
 
   if (!profile?.sui_wallet_data) {
     return (
@@ -560,63 +610,101 @@ const WalletPage = () => {
               </div>
             </div>
           ) : (
-            allTransactions.map((tx) => (
-              <div
-                key={`${tx.source}-${tx.id}`}
-                className="flex items-center justify-between p-4 bg-secondary/20 rounded-lg hover:bg-secondary/30 transition-all duration-300"
-              >
-                <div className="flex items-center space-x-4">
-                  <div className="text-2xl">{getTransactionIcon(tx.type)}</div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-cyber font-bold text-foreground">
-                        {getTransactionDescription(tx)}
-                      </span>
-                      {tx.source === "blockchain" && (
-                        <div className="w-4 h-4 bg-gradient-to-r from-primary to-accent rounded-full flex items-center justify-center text-xs font-bold text-white">
-                          S
+            <>
+              {paginatedTransactions.map((tx) => (
+                <div
+                  key={`${tx.source}-${tx.id}`}
+                  className="flex items-center justify-between p-4 bg-secondary/20 rounded-lg hover:bg-secondary/30 transition-all duration-300"
+                >
+                  <div className="flex items-center space-x-4">
+                    <div className="text-2xl">{getTransactionIcon(tx.type)}</div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-cyber font-bold text-foreground">
+                          {getTransactionDescription(tx)}
+                        </span>
+                        {tx.source === "blockchain" && (
+                          <div className="w-4 h-4 bg-gradient-to-r from-primary to-accent rounded-full flex items-center justify-center text-xs font-bold text-white">
+                            S
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-sm text-muted-foreground font-cyber">
+                        {tx.created_at
+                          ? formatDistanceToNow(new Date(tx.created_at), {
+                            addSuffix: true,
+                          })
+                          : "Unknown time"}
+                      </div>
+                      {tx.transaction_hash && tx.source === "blockchain" && (
+                        <button
+                          onClick={() => openExplorer(tx.transaction_hash)}
+                          className="text-xs text-blue-400 hover:text-blue-300 font-cyber flex items-center gap-1 mt-1"
+                        >
+                          View on Explorer <ExternalLink className="w-3 h-3" />
+                        </button>
+                      )}
+                      {tx.gas_used && tx.gas_used > 0 && (
+                        <div className="text-xs text-orange-400 font-cyber mt-1">
+                          Gas: {tx.gas_used.toFixed(6)} SUI
                         </div>
                       )}
                     </div>
-                    <div className="text-sm text-muted-foreground font-cyber">
-                      {tx.created_at
-                        ? formatDistanceToNow(new Date(tx.created_at), {
-                            addSuffix: true,
-                          })
-                        : "Unknown time"}
-                    </div>
-                    {tx.transaction_hash && tx.source === "blockchain" && (
-                      <button
-                        onClick={() => openExplorer(tx.transaction_hash)}
-                        className="text-xs text-blue-400 hover:text-blue-300 font-cyber flex items-center gap-1 mt-1"
-                      >
-                        View on Explorer <ExternalLink className="w-3 h-3" />
-                      </button>
-                    )}
-                    {tx.gas_used && tx.gas_used > 0 && (
-                      <div className="text-xs text-orange-400 font-cyber mt-1">
-                        Gas: {tx.gas_used.toFixed(6)} SUI
-                      </div>
-                    )}
                   </div>
-                </div>
-                <div className="text-right">
-                  <div
-                    className={`font-cyber font-bold text-lg ${
-                      tx.type === "deposit" || tx.type === "win"
+                  <div className="text-right">
+                    <div
+                      className={`font-cyber font-bold text-lg ${tx.type === "deposit" || tx.type === "win"
                         ? "text-green-400"
                         : "text-red-400"
-                    }`}
-                  >
-                    {tx.type === "deposit" || tx.type === "win" ? "+" : "-"}
-                    {formatAmount(tx.amount, tx.currency)}
-                  </div>
-                  <div className="text-xs text-muted-foreground font-cyber uppercase">
-                    {tx.status || "completed"}
+                        }`}
+                    >
+                      {tx.type === "deposit" || tx.type === "win" ? "+" : "-"}
+                      {formatAmount(tx.amount, tx.currency)}
+                    </div>
+                    <div className="text-xs text-muted-foreground font-cyber uppercase">
+                      {tx.status || "completed"}
+                    </div>
                   </div>
                 </div>
+              ))}
+
+              {/* Load More Button */}
+              {hasMoreTransactions && paginatedTransactions.length > 0 && (
+                <div className="text-center pt-4">
+                  <Button
+                    onClick={handleLoadMore}
+                    disabled={loadingMore}
+                    variant="outline"
+                    className="border-primary/50 hover:bg-primary/20 text-primary font-cyber"
+                  >
+                    {loadingMore ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                        Loading...
+                      </>
+                    ) : (
+                      <>
+                        Load More Transactions
+                        <ChevronDown className="w-4 h-4 ml-2" />
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+
+              {/* No More Transactions Message */}
+              {!hasMoreTransactions && allTransactions.length > 0 && (
+                <div className="text-center pt-4 text-sm text-muted-foreground font-cyber">
+                  🎉 All transactions loaded!
+                </div>
+              )}
+
+              {/* Transaction Count Info */}
+              <div className="text-center pt-2 text-xs text-muted-foreground font-cyber">
+                Showing {paginatedTransactions.length} of {allTransactions.length} transactions
+                {currentPage > 1 && ` • Page ${currentPage}`}
               </div>
-            ))
+            </>
           )}
         </div>
       </div>

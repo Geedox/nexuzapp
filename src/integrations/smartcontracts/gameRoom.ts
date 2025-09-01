@@ -3,6 +3,7 @@ import { TransactionBlock } from "@mysten/sui.js/transactions";
 import { COIN_TYPES } from "@/constants";
 import { Ed25519Keypair } from "@mysten/sui.js/keypairs/ed25519";
 import { decodeSuiPrivateKey } from "@mysten/sui.js/cryptography";
+import { logger } from "@/utils";
 
 export class GameRoom {
     private client: SuiClient;
@@ -22,7 +23,7 @@ export class GameRoom {
         this.storeId = storeId;
 
         const sponsorPrivateKey = import.meta.env.VITE_PRIVATE_KEY;
-        console.log('[DEBUG] Raw private key from env:', sponsorPrivateKey ? `${sponsorPrivateKey.substring(0, 8)}...` : 'NOT FOUND');
+        logger.debug('Raw private key from env:', sponsorPrivateKey ? `${sponsorPrivateKey.substring(0, 8)}...` : 'NOT FOUND');
 
         if (!sponsorPrivateKey) {
             throw new Error("Sponsor private key is not set");
@@ -31,23 +32,23 @@ export class GameRoom {
         this.sponsorKeypair = this.getWalletKeypair(sponsorPrivateKey);
         this.sponsorAddress = this.sponsorKeypair?.getPublicKey().toSuiAddress();
 
-        console.log('[DEBUG] Sponsor address derived:', this.sponsorAddress);
-        console.log('[DEBUG] Sponsor keypair created successfully:', !!this.sponsorKeypair);
+        logger.debug('Sponsor address derived:', this.sponsorAddress);
+        logger.debug('Sponsor keypair created successfully:', !!this.sponsorKeypair);
     }
 
     private getWalletKeypair = (privateKey: string): Ed25519Keypair => {
         try {
-            // console.log('[DEBUG] Processing private key...');
-            // console.log('[DEBUG] Private key length:', privateKey.length);
-            // console.log('[DEBUG] Private key first 10 chars:', privateKey.substring(0, 10));
+            // logger.debug('Processing private key...');
+            // logger.debug('Private key length:', privateKey.length);
+            // logger.debug('Private key first 10 chars:', privateKey.substring(0, 10));
 
             // Check if it's a Sui bech32 private key (starts with 'suiprivkey')
             if (privateKey.startsWith('suiprivkey')) {
-                // console.log('[DEBUG] Detected Sui bech32 private key format');
+                // logger.debug('Detected Sui bech32 private key format');
                 try {
                     // Decode the bech32 private key to get the raw bytes
                     const { secretKey } = decodeSuiPrivateKey(privateKey);
-                    console.log('[DEBUG] Secret key decoded, length:', secretKey.length);
+                    logger.debug('Secret key decoded, length:', secretKey.length);
 
                     // Ensure we have exactly 32 bytes
                     if (secretKey.length !== 32) {
@@ -57,8 +58,8 @@ export class GameRoom {
                     // Create keypair from the decoded bytes
                     const keypair = Ed25519Keypair.fromSecretKey(secretKey);
                     const testAddress = keypair.getPublicKey().toSuiAddress();
-                    // console.log('[DEBUG] Successfully created keypair from decoded bech32');
-                    // console.log('[DEBUG] Derived address:', testAddress);
+                    // logger.debug('Successfully created keypair from decoded bech32');
+                    // logger.debug('Derived address:', testAddress);
                     return keypair;
 
                 } catch (bech32Error) {
@@ -71,7 +72,7 @@ export class GameRoom {
             let cleanKey = privateKey;
             if (privateKey.startsWith('0x')) {
                 cleanKey = privateKey.slice(2);
-                console.log('[DEBUG] Removed 0x prefix, new length:', cleanKey.length);
+                logger.debug('Removed 0x prefix, new length:', cleanKey.length);
             }
 
             // Check if key is valid hex and proper length
@@ -88,7 +89,7 @@ export class GameRoom {
                 throw new Error("Private key contains invalid hex characters");
             }
 
-            console.log('[DEBUG] Private key validation passed for hex format');
+            logger.debug('Private key validation passed for hex format');
 
             // Convert hex string to bytes
             const bytes = new Uint8Array(32);
@@ -97,20 +98,12 @@ export class GameRoom {
                 bytes[i] = parseInt(hexByte, 16);
             }
 
-            // console.log('[DEBUG] Converted to bytes array, length:', bytes.length);
-            // console.log('[DEBUG] First few bytes:', Array.from(bytes.slice(0, 4)));
-
             // Create keypair from secret key
             const keypair = Ed25519Keypair.fromSecretKey(bytes);
-
-            // Test the keypair
-            // const testAddress = keypair.getPublicKey().toSuiAddress();
-            // console.log('[DEBUG] Test address from keypair:', testAddress);
-
             return keypair;
 
         } catch (e) {
-            console.error("[DEBUG] Error creating wallet keypair:", e);
+            logger.error("Error creating wallet keypair:", e);
             throw new Error(`Failed to create wallet keypair: ${e.message}`);
         }
     };
@@ -125,37 +118,37 @@ export class GameRoom {
         const keyToTest = testPrivateKey || import.meta.env.VITE_PRIVATE_KEY;
 
         if (!keyToTest) {
-            console.error('[DEBUG] No private key to test');
+            logger.error("No private key to test");
             return;
         }
 
-        console.log('[DEBUG] Testing private key conversion...');
-        console.log('[DEBUG] Original key format:', keyToTest.substring(0, 10) + '...');
-        console.log('[DEBUG] Key length:', keyToTest.length);
+        logger.info("Testing private key conversion...");
+        logger.debug('Original key format:', keyToTest.substring(0, 10) + '...');
+        logger.debug('Key length:', keyToTest.length);
 
         try {
             if (keyToTest.startsWith('suiprivkey')) {
-                console.log('[DEBUG] Testing Sui bech32 format...');
+                logger.debug('Testing Sui bech32 format...');
                 try {
                     const { secretKey } = decodeSuiPrivateKey(keyToTest);
                     const keypair1 = Ed25519Keypair.fromSecretKey(secretKey);
                     const address1 = keypair1.getPublicKey().toSuiAddress();
-                    console.log('[DEBUG] Bech32 decoding successful, address:', address1);
+                    logger.debug('Bech32 decoding successful, address:', address1);
                 } catch (e) {
-                    console.log('[DEBUG] Bech32 method failed:', e.message);
+                    logger.debug('Bech32 method failed:', e.message);
                 }
             } else {
                 // Method for hex keys
                 const cleanKey = keyToTest.startsWith('0x') ? keyToTest.slice(2) : keyToTest;
                 if (cleanKey.length === 64) {
-                    console.log('[DEBUG] Testing hex format...');
+                    logger.debug('Testing hex format...');
                     const bytes = new Uint8Array(32);
                     for (let i = 0; i < 32; i++) {
                         bytes[i] = parseInt(cleanKey.substr(i * 2, 2), 16);
                     }
                     const keypair2 = Ed25519Keypair.fromSecretKey(bytes);
                     const address2 = keypair2.getPublicKey().toSuiAddress();
-                    console.log('[DEBUG] Hex method address:', address2);
+                    logger.debug('Hex method address:', address2);
                 }
             }
 
@@ -163,38 +156,6 @@ export class GameRoom {
             console.error('[DEBUG] Test failed:', error);
         }
     }
-
-    // private async getSponsorGasObject(minBalance: bigint = 5_000_000n) {
-    //     const coins = await this.client.getCoins({ owner: this.sponsorAddress });
-    //     console.log("sponsorAddress => ", this.sponsorAddress);
-    //     console.log("sponsorAddress coins count => ", coins.data.length);
-    //     const coin = coins.data.find(c => BigInt(c.balance) > minBalance);
-    //     if (!coin) throw new Error("Sponsor has no coin for gas");
-    //     return {
-    //         objectId: coin.coinObjectId,
-    //         version: coin.version,
-    //         digest: coin.digest
-    //     };
-    // }
-
-    // private async prepareSponsoredExecution(txb: TransactionBlock, userKeypair: any) {
-    //     const userAddress = userKeypair.getPublicKey().toSuiAddress();
-    //     txb.setSender(userAddress);
-
-    //     // Set sponsor as gas owner
-    //     txb.setGasOwner(this.sponsorAddress);
-
-    //     // Attach sponsor's gas payment
-    //     const gasCoin = await this.getSponsorGasObject();
-    //     txb.setGasPayment([gasCoin]);
-    //     txb.setGasBudget(50_000_000); // could refine with dryRun if you want
-    //     const txbBytes = await txb.build({ client: this.client });
-    //     // Sign with both
-    //     const userSig = await userKeypair.signTransactionBlock(txb);
-    //     const sponsorSig = await this.sponsorKeypair.signTransactionBlock(txbBytes);
-
-    //     return { txb, signatures: [userSig, sponsorSig] };
-    // }
 
     private getTarget(func: string): `${string}::${string}::${string}` {
         return `${this.packageId}::${this.moduleName}::${func}` as `${string}::${string}::${string}`;
@@ -312,7 +273,7 @@ export class GameRoom {
 
         const [, changeCoin] = createResult;
         // Return change to sender
-        console.log("userAddress in createGameRoom => ", userAddress);
+        logger.info("userAddress in createGameRoom => ", userAddress);
         txb.transferObjects([changeCoin], txb.pure(userAddress));
         await this.dryRunTransaction(txb, userAddress);
         const result = await this.client.signAndExecuteTransactionBlock({
