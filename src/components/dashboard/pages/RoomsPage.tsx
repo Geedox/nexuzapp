@@ -602,20 +602,6 @@ const RoomsPage = () => {
       });
       return;
     }
-
-    // Validate minimum duration (10 minutes)
-    const minDuration = 10 * 60 * 1000; // 10 minutes in milliseconds
-    if (
-      formData.endTime.getTime() - formData.startTime.getTime() <
-      minDuration
-    ) {
-      toast({
-        title: "Invalid Duration",
-        description: "Game must last at least 10 minutes",
-        variant: "destructive",
-      });
-      return;
-    }
     const balance =
       formData.currency === "USDC"
         ? usdcBalance
@@ -1315,13 +1301,9 @@ const RoomsPage = () => {
                       </label>
                       <input
                         type="datetime-local"
-                        value={formatDateForInput(formData.startTime)}
+                        value={formData.startTime.toISOString().slice(0, 16)}
                         onChange={(e) => {
-                          if (!e.target.value) return;
-
-                          // Fix timezone issue by creating date in local timezone
-                          const localDateTime = e.target.value; // This is in YYYY-MM-DDTHH:MM format
-                          const newStartTime = new Date(localDateTime + ":00"); // Add seconds to make it valid
+                          const newStartTime = new Date(e.target.value);
 
                           // Calculate the minimum end time (start time + 10 minutes)
                           const minEndTime = new Date(
@@ -1343,7 +1325,7 @@ const RoomsPage = () => {
                           });
                         }}
                         className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
-                        min={formatDateForInput(new Date())}
+                        min={new Date().toISOString().slice(0, 16)}
                       />
                       <p className="text-xs font-cyber text-muted-foreground mt-1">
                         Game will start at this time
@@ -1409,13 +1391,34 @@ const RoomsPage = () => {
                       </label>
                       <input
                         type="datetime-local"
-                        value={formatDateForInput(formData.endTime)}
+                        value={formData.endTime.toISOString().slice(0, 16)}
                         onChange={(e) => {
-                          if (!e.target.value) return;
+                          const newEndTime = new Date(e.target.value);
 
-                          // Fix timezone issue by creating date in local timezone
-                          const localDateTime = e.target.value; // This is in YYYY-MM-DDTHH:MM format
-                          const newEndTime = new Date(localDateTime + ":00"); // Add seconds to make it valid
+                          // Validate that end time is after start time
+                          if (newEndTime <= formData.startTime) {
+                            toast({
+                              title: "Invalid End Time",
+                              description: "End time must be after start time",
+                              variant: "destructive",
+                            });
+                            return;
+                          }
+
+                          // Check minimum duration (10 minutes)
+                          const minDuration = 10 * 60 * 1000; // 10 minutes in milliseconds
+                          if (
+                            newEndTime.getTime() -
+                              formData.startTime.getTime() <
+                            minDuration
+                          ) {
+                            toast({
+                              title: "Invalid Duration",
+                              description: "Game must last at least 10 minutes",
+                              variant: "destructive",
+                            });
+                            return;
+                          }
 
                           setFormData({ ...formData, endTime: newEndTime });
                         }}
