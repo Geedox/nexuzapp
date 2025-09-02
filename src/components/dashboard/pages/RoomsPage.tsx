@@ -5,6 +5,7 @@ import { useProfile } from "@/contexts/ProfileContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import GameRoomDetails from "@/components/gameroom/GameRoomDetails";
+import GameRoomFiltersComponent from "@/components/gameroom/GameRoomFilters";
 import {
   Download,
   Share2,
@@ -113,10 +114,10 @@ const WinnerCelebrationModal = ({ isOpen, onClose, winner }) => {
       winner.position === 1
         ? "🏆"
         : winner.position === 2
-          ? "🥈"
-          : winner.position === 3
-            ? "🥉"
-            : "🏅",
+        ? "🥈"
+        : winner.position === 3
+        ? "🥉"
+        : "🏅",
       600,
       200
     );
@@ -144,7 +145,8 @@ const WinnerCelebrationModal = ({ isOpen, onClose, winner }) => {
     ctx.font = "32px Arial";
     ctx.fillText(`${winner.gameName} - ${winner.roomName}`, 600, 540);
     ctx.fillText(
-      `Score: ${winner.score.toLocaleString()} | ${winner.totalParticipants
+      `Score: ${winner.score.toLocaleString()} | ${
+        winner.totalParticipants
       } Players`,
       600,
       580
@@ -156,17 +158,21 @@ const WinnerCelebrationModal = ({ isOpen, onClose, winner }) => {
 
     // Download
     const link = document.createElement("a");
-    link.download = `winner-${winner.playerName}-${winner.position
-      }-${Date.now()}.png`;
+    link.download = `winner-${winner.playerName}-${
+      winner.position
+    }-${Date.now()}.png`;
     link.href = canvas.toDataURL();
     link.click();
   };
 
   const shareWin = async () => {
-    const shareText = `🏆 I just won ${getPositionText(winner.position)} in ${winner.gameName
-      }!\n\n💰 Prize: ${winner.earnings} ${winner.currency
-      }\n📊 Score: ${winner.score.toLocaleString()}\n👥 Beat ${winner.totalParticipants - 1
-      } other players!\n\n${getCelebrationMessage(winner.position)}`;
+    const shareText = `🏆 I just won ${getPositionText(winner.position)} in ${
+      winner.gameName
+    }!\n\n💰 Prize: ${winner.earnings} ${
+      winner.currency
+    }\n📊 Score: ${winner.score.toLocaleString()}\n👥 Beat ${
+      winner.totalParticipants - 1
+    } other players!\n\n${getCelebrationMessage(winner.position)}`;
 
     if (navigator.share) {
       try {
@@ -251,22 +257,24 @@ const WinnerCelebrationModal = ({ isOpen, onClose, winner }) => {
         <div className="relative font-cyber z-10 p-6 text-center space-y-4">
           {/* Animated Trophy */}
           <div
-            className={`text-6xl mb-6 font-cyber ${animationStep >= 1 ? "animate-bounce" : "opacity-0 scale-0"
-              } transition-all duration-1000`}
+            className={`text-6xl mb-6 font-cyber ${
+              animationStep >= 1 ? "animate-bounce" : "opacity-0 scale-0"
+            } transition-all duration-1000`}
           >
             {winner.position === 1
               ? "🏆"
               : winner.position === 2
-                ? "🥈"
-                : winner.position === 3
-                  ? "🥉"
-                  : "🏅"}
+              ? "🥈"
+              : winner.position === 3
+              ? "🥉"
+              : "🏅"}
           </div>
 
           {/* Position Badge */}
           <div
-            className={`${animationStep >= 1 ? "scale-100 opacity-100" : "scale-0 opacity-0"
-              } transition-all font-cyber duration-700`}
+            className={`${
+              animationStep >= 1 ? "scale-100 opacity-100" : "scale-0 opacity-0"
+            } transition-all font-cyber duration-700`}
           >
             <div
               className={`inline-block px-12 py-4 bg-gradient-to-r ${getPositionColor(
@@ -281,10 +289,11 @@ const WinnerCelebrationModal = ({ isOpen, onClose, winner }) => {
 
           {/* Main Congratulations */}
           <div
-            className={`${animationStep >= 2
-              ? "opacity-100 translate-y-0"
-              : "opacity-0 translate-y-10"
-              } transition-all duration-700`}
+            className={`${
+              animationStep >= 2
+                ? "opacity-100 translate-y-0"
+                : "opacity-0 translate-y-10"
+            } transition-all duration-700`}
           >
             <h1 className="text-5xl md:text-6xl font-cyber font-bold bg-gradient-to-r from-white via-yellow-200 to-white bg-clip-text text-transparent mb-4 drop-shadow-2xl">
               CONGRATULATIONS!
@@ -296,10 +305,11 @@ const WinnerCelebrationModal = ({ isOpen, onClose, winner }) => {
 
           {/* Player Info */}
           <div
-            className={`${animationStep >= 2
-              ? "opacity-100 translate-y-0"
-              : "opacity-0 translate-y-10"
-              } font-cyber transition-all duration-700 delay-300`}
+            className={`${
+              animationStep >= 2
+                ? "opacity-100 translate-y-0"
+                : "opacity-0 translate-y-10"
+            } font-cyber transition-all duration-700 delay-300`}
           >
             <h2 className="text-4xl font-bold text-white mb-3 drop-shadow-lg">
               {winner.playerName}
@@ -316,8 +326,9 @@ const WinnerCelebrationModal = ({ isOpen, onClose, winner }) => {
 
           {/* Prize Amount */}
           <div
-            className={`${animationStep >= 3 ? "opacity-100 scale-100" : "opacity-0 scale-0"
-              } font-cyber transition-all duration-1000`}
+            className={`${
+              animationStep >= 3 ? "opacity-100 scale-100" : "opacity-0 scale-0"
+            } font-cyber transition-all duration-1000`}
           >
             <div className="bg-gradient-to-r from-green-500/30 to-emerald-500/30 border-2 border-green-400/50 rounded-3xl p-8 mb-8 backdrop-blur-sm">
               <p className="text-green-300 text-2xl mb-3 font-semibold">
@@ -570,20 +581,51 @@ const RoomsPage = () => {
       return;
     }
 
-    // Validate times
+    // Validate start time is in the future
+    const now = new Date();
+    const oneMinuteFromNow = new Date(now.getTime() + 60 * 1000);
+    if (formData.startTime < oneMinuteFromNow) {
+      toast({
+        title: "Invalid Start Time",
+        description: "Start time must be at least 1 minute in the future",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate end time is after start time
     if (formData.endTime <= formData.startTime) {
       toast({
-        title: "Error",
+        title: "Invalid End Time",
         description: "End time must be after start time",
         variant: "destructive",
       });
       return;
     }
-    const balance = formData.currency === "USDC" ? usdcBalance : formData.currency === "USDT" ? usdtBalance : suiBalance;
+
+    // Validate minimum duration (10 minutes)
+    const minDuration = 10 * 60 * 1000; // 10 minutes in milliseconds
+    if (
+      formData.endTime.getTime() - formData.startTime.getTime() <
+      minDuration
+    ) {
+      toast({
+        title: "Invalid Duration",
+        description: "Game must last at least 10 minutes",
+        variant: "destructive",
+      });
+      return;
+    }
+    const balance =
+      formData.currency === "USDC"
+        ? usdcBalance
+        : formData.currency === "USDT"
+        ? usdtBalance
+        : suiBalance;
 
     // Check wallet balance for both sponsored rooms and entry fee
     if (formData.isSponsored) {
-      if ((balance) < formData.sponsorAmount) {
+      if (balance < formData.sponsorAmount) {
         toast({
           title: "Error",
           description: "Insufficient balance for sponsorship amount",
@@ -592,7 +634,7 @@ const RoomsPage = () => {
         return;
       }
     } else {
-      if ((balance) < formData.entryFee) {
+      if (balance < formData.entryFee) {
         toast({
           title: "Error",
           description: "Insufficient balance for entry fee",
@@ -604,7 +646,7 @@ const RoomsPage = () => {
 
     try {
       const room = await createRoom({
-        ...formData
+        ...formData,
       });
 
       setShowCreateModal(false);
@@ -762,6 +804,17 @@ const RoomsPage = () => {
     });
   };
 
+  // Helper function to format date for datetime-local input (local timezone)
+  const formatDateForInput = (date) => {
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    const hours = String(d.getHours()).padStart(2, "0");
+    const minutes = String(d.getMinutes()).padStart(2, "0");
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
   const formatCurrency = (amount, currency) => {
     return `${amount.toLocaleString()} ${currency}`;
   };
@@ -840,6 +893,9 @@ const RoomsPage = () => {
           </div>
         )}
 
+        {/* Filters */}
+        <GameRoomFiltersComponent className="mb-6" />
+
         <div className="flex gap-4 mb-6">
           <button
             onClick={() => setShowCreateModal(true)}
@@ -881,10 +937,11 @@ const RoomsPage = () => {
               {safeRooms.map((room) => (
                 <div
                   key={room.id}
-                  className={`relative bg-gradient-to-br from-card to-secondary/20 border rounded-xl p-6 hover:border-primary/40 transition-all duration-300 hover:scale-105 group cyber-border ${userWonInRoom(room)
-                    ? "border-yellow-500/50 shadow-lg shadow-yellow-500/20"
-                    : "border-primary/20"
-                    }`}
+                  className={`relative bg-gradient-to-br from-card to-secondary/20 border rounded-xl p-6 hover:border-primary/40 transition-all duration-300 hover:scale-105 group cyber-border ${
+                    userWonInRoom(room)
+                      ? "border-yellow-500/50 shadow-lg shadow-yellow-500/20"
+                      : "border-primary/20"
+                  }`}
                 >
                   {/* Winner Badge */}
                   {userWonInRoom(room) && (
@@ -971,7 +1028,9 @@ const RoomsPage = () => {
                     {userWonInRoom(room) && (
                       <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-2 mt-2">
                         <div className="flex justify-between text-xs font-cyber">
-                          <span className="text-yellow-400">Your Position:</span>
+                          <span className="text-yellow-400">
+                            Your Position:
+                          </span>
                           <span className="text-yellow-300">
                             #{userWins[room.id].final_position}
                           </span>
@@ -1032,7 +1091,9 @@ const RoomsPage = () => {
                 {/* Page Info */}
                 <div className="text-center">
                   <p className="text-sm font-cyber text-muted-foreground">
-                    Showing {((currentPage - 1) * roomsPerPage) + 1} to {Math.min(currentPage * roomsPerPage, totalRooms)} of {totalRooms} rooms
+                    Showing {(currentPage - 1) * roomsPerPage + 1} to{" "}
+                    {Math.min(currentPage * roomsPerPage, totalRooms)} of{" "}
+                    {totalRooms} rooms
                   </p>
                   <p className="text-xs font-cyber text-muted-foreground mt-1">
                     Page {currentPage} of {totalPages}
@@ -1062,7 +1123,9 @@ const RoomsPage = () => {
                           1
                         </button>
                         {currentPage > 4 && (
-                          <span className="px-2 text-muted-foreground">...</span>
+                          <span className="px-2 text-muted-foreground">
+                            ...
+                          </span>
                         )}
                       </>
                     )}
@@ -1078,10 +1141,11 @@ const RoomsPage = () => {
                           <button
                             key={i}
                             onClick={() => goToPage(i)}
-                            className={`px-3 py-2 font-cyber font-bold text-sm border rounded-lg transition-all hover:scale-105 ${i === currentPage
-                              ? "bg-gradient-to-r from-primary to-accent text-background border-primary shadow-lg shadow-primary/30"
-                              : "bg-gradient-to-r from-secondary to-secondary/80 text-foreground border-primary/30 hover:border-primary/50"
-                              }`}
+                            className={`px-3 py-2 font-cyber font-bold text-sm border rounded-lg transition-all hover:scale-105 ${
+                              i === currentPage
+                                ? "bg-gradient-to-r from-primary to-accent text-background border-primary shadow-lg shadow-primary/30"
+                                : "bg-gradient-to-r from-secondary to-secondary/80 text-foreground border-primary/30 hover:border-primary/50"
+                            }`}
                           >
                             {i}
                           </button>
@@ -1095,7 +1159,9 @@ const RoomsPage = () => {
                     {currentPage < totalPages - 2 && (
                       <>
                         {currentPage < totalPages - 3 && (
-                          <span className="px-2 text-muted-foreground">...</span>
+                          <span className="px-2 text-muted-foreground">
+                            ...
+                          </span>
                         )}
                         <button
                           onClick={() => goToPage(totalPages)}
@@ -1119,7 +1185,9 @@ const RoomsPage = () => {
 
                 {/* Quick Navigation */}
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-cyber text-muted-foreground">Go to:</span>
+                  <span className="text-xs font-cyber text-muted-foreground">
+                    Go to:
+                  </span>
                   <input
                     type="number"
                     min="1"
@@ -1133,7 +1201,9 @@ const RoomsPage = () => {
                     }}
                     className="w-16 px-2 py-1 bg-secondary/50 border border-primary/30 rounded text-center text-xs font-cyber text-foreground focus:border-primary focus:outline-none"
                   />
-                  <span className="text-xs font-cyber text-muted-foreground">of {totalPages}</span>
+                  <span className="text-xs font-cyber text-muted-foreground">
+                    of {totalPages}
+                  </span>
                 </div>
               </div>
             )}
@@ -1142,295 +1212,299 @@ const RoomsPage = () => {
 
         {/* Create Room Modal */}
         {showCreateModal && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-            <div className="bg-gradient-to-br from-card to-secondary border-2 border-primary/50 rounded-2xl p-8 max-w-2xl w-full mx-4 cyber-border shadow-2xl shadow-primary/20 max-h-[90vh] overflow-y-auto">
-              <h2 className="font-cyber text-2xl font-bold text-primary mb-6 text-center glow-text">
-                🎮 CREATE GAME ROOM
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-sm font-cyber text-primary mb-1 block">
-                      Room Name
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.name}
-                      onChange={(e) =>
-                        setFormData({ ...formData, name: e.target.value })
-                      }
-                      className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                      placeholder="Epic Battle Arena"
-                    />
-                  </div>
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in p-4">
+            <div className="bg-gradient-to-br from-card to-secondary border-2 border-primary/50 rounded-2xl shadow-2xl shadow-primary/20 max-h-[95vh] w-full max-w-4xl flex flex-col">
+              {/* Modal Header */}
+              <div className="p-6 border-b border-primary/20">
+                <h2 className="font-cyber text-2xl font-bold text-primary text-center glow-text">
+                  🎮 CREATE GAME ROOM
+                </h2>
+              </div>
 
-                  <div>
-                    <label className="text-sm font-cyber text-primary mb-1 block">
-                      Select Game
-                    </label>
-                    <select
-                      value={formData.gameId}
-                      onChange={(e) =>
-                        setFormData({ ...formData, gameId: e.target.value })
-                      }
-                      className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
-                    >
-                      <option value="">Choose a game...</option>
-                      {games.map((game) => (
-                        <option key={game.id} value={game.id}>
-                          {game.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-cyber text-primary mb-1 block">
-                      Wallet
-                    </label>
-                    <input
-                      type="text"
-                      disabled
-                      value={profile?.sui_wallet_data?.address || ""}
-                      className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-cyber text-primary mb-1 block">
-                      {formData.isSponsored ? "Sponsor Amount" : "Entry Fee"}
-                    </label>
-                    <input
-                      type="number"
-                      value={
-                        formData.isSponsored
-                          ? formData.sponsorAmount
-                          : formData.entryFee
-                      }
-                      onChange={(e) => {
-                        const value = parseFloat(e.target.value) || 0;
-                        if (formData.isSponsored) {
-                          setFormData({ ...formData, sponsorAmount: value });
-                        } else {
-                          setFormData({ ...formData, entryFee: value });
+              {/* Modal Content - Scrollable */}
+              <div className="flex-1 overflow-y-auto p-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-sm font-cyber text-primary mb-1 block">
+                        Room Name
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.name}
+                        onChange={(e) =>
+                          setFormData({ ...formData, name: e.target.value })
                         }
-                      }}
-                      className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
-                      min="0"
-                      step="0.01"
-                    />
-                    {!formData.isSponsored && formData.entryFee > 0 && (
-                      <p className="text-xs font-cyber text-yellow-400 mt-1">
-                        You'll pay {formData.entryFee}{" "}
-                        {formData.currency || ""} to join your own room
-                      </p>
-                    )}
-                    {formData.isSponsored && formData.sponsorAmount > 0 && (
-                      <p className="text-xs font-cyber text-yellow-400 mt-1">
-                        You'll pay {formData.sponsorAmount}{" "}
-                        {formData.currency || ""} to sponsor this room
-                      </p>
-                    )}
-                  </div>
+                        className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        placeholder="Epic Battle Arena"
+                      />
+                    </div>
 
-                  <div>
-                    <label className="text-sm font-cyber text-primary mb-1 block">
-                      Start Time
-                    </label>
-                    <input
-                      type="datetime-local"
-                      value={formData.startTime.toISOString().slice(0, 16)}
-                      onChange={(e) => {
-                        const newStartTime = new Date(e.target.value);
-
-                        // Calculate the minimum end time (start time + 10 minutes)
-                        const minEndTime = new Date(
-                          newStartTime.getTime() + 10 * 60 * 1000
-                        );
-
-                        // If current end time is before the new minimum, adjust it
-                        let newEndTime = formData.endTime;
-                        if (formData.endTime <= newStartTime) {
-                          newEndTime = new Date(
-                            newStartTime.getTime() + 60 * 60 * 1000
-                          ); // Default to 1 hour
+                    <div>
+                      <label className="text-sm font-cyber text-primary mb-1 block">
+                        Select Game
+                      </label>
+                      <select
+                        value={formData.gameId}
+                        onChange={(e) =>
+                          setFormData({ ...formData, gameId: e.target.value })
                         }
+                        className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
+                      >
+                        <option value="">Choose a game...</option>
+                        {games.map((game) => (
+                          <option key={game.id} value={game.id}>
+                            {game.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                        setFormData({
-                          ...formData,
-                          startTime: newStartTime,
-                          endTime: newEndTime,
-                        });
-                      }}
-                      className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
-                      min={new Date().toISOString().slice(0, 16)}
-                    />
-                    <p className="text-xs font-cyber text-muted-foreground mt-1">
-                      Game will start at this time
-                    </p>
-                  </div>
-                </div>
+                    <div>
+                      <label className="text-sm font-cyber text-primary mb-1 block">
+                        Wallet
+                      </label>
+                      <input
+                        type="text"
+                        disabled
+                        value={profile?.sui_wallet_data?.address || ""}
+                        className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
+                      />
+                    </div>
 
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-sm font-cyber text-primary mb-1 block">
-                      Max Players
-                    </label>
-                    <input
-                      type="number"
-                      value={formData.maxPlayers}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          maxPlayers: parseInt(e.target.value) || 2,
-                        })
-                      }
-                      className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
-                      min="2"
-                      max="100"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-cyber text-primary mb-1 block">
-                      Winner Split Rule
-                    </label>
-                    <select
-                      value={formData.winnerSplitRule}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          winnerSplitRule: e.target.value as "winner_takes_all" | "top_2" | "top_3" | "top_4" | "top_5" | "top_6" | "top_7" | "top_8" | "top_9" | "top_10",
-                        })
-                      }
-                      className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
-                    >
-                      {winnerRules.map((rule) => (
-                        <option key={rule.value} value={rule.value}>
-                          {rule.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-cyber text-primary mb-1 block">
-                      End Time
-                    </label>
-                    <input
-                      type="datetime-local"
-                      value={formData.endTime.toISOString().slice(0, 16)}
-                      onChange={(e) => {
-                        const newEndTime = new Date(e.target.value);
-
-                        // Validate that end time is after start time
-                        if (newEndTime <= formData.startTime) {
-                          toast({
-                            title: "Invalid End Time",
-                            description: "End time must be after start time",
-                            variant: "destructive",
-                          });
-                          return;
+                    <div>
+                      <label className="text-sm font-cyber text-primary mb-1 block">
+                        {formData.isSponsored ? "Sponsor Amount" : "Entry Fee"}
+                      </label>
+                      <input
+                        type="number"
+                        value={
+                          formData.isSponsored
+                            ? formData.sponsorAmount
+                            : formData.entryFee
                         }
-
-                        // Check minimum duration (10 minutes)
-                        const minDuration = 10 * 60 * 1000; // 10 minutes in milliseconds
-                        if (
-                          newEndTime.getTime() - formData.startTime.getTime() <
-                          minDuration
-                        ) {
-                          toast({
-                            title: "Invalid Duration",
-                            description: "Game must last at least 10 minutes",
-                            variant: "destructive",
-                          });
-                          return;
-                        }
-
-                        setFormData({ ...formData, endTime: newEndTime });
-                      }}
-                      className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
-                    />
-                    <p className="text-xs font-cyber text-muted-foreground mt-1">
-                      Game will end at this time (minimum 10 minutes after
-                      start)
-                    </p>
-                    {formData.startTime &&
-                      formData.endTime &&
-                      formData.endTime > formData.startTime && (
-                        <p className="text-xs font-cyber text-accent mt-1">
-                          Duration:{" "}
-                          {Math.round(
-                            (formData.endTime.getTime() -
-                              formData.startTime.getTime()) /
-                            (1000 * 60)
-                          )}{" "}
-                          minutes
+                        onChange={(e) => {
+                          const value = parseFloat(e.target.value) || 0;
+                          if (formData.isSponsored) {
+                            setFormData({ ...formData, sponsorAmount: value });
+                          } else {
+                            setFormData({ ...formData, entryFee: value });
+                          }
+                        }}
+                        className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
+                        min="0"
+                        step="0.01"
+                      />
+                      {!formData.isSponsored && formData.entryFee > 0 && (
+                        <p className="text-xs font-cyber text-yellow-400 mt-1">
+                          You'll pay {formData.entryFee}{" "}
+                          {formData.currency || ""} to join your own room
                         </p>
                       )}
+                      {formData.isSponsored && formData.sponsorAmount > 0 && (
+                        <p className="text-xs font-cyber text-yellow-400 mt-1">
+                          You'll pay {formData.sponsorAmount}{" "}
+                          {formData.currency || ""} to sponsor this room
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-cyber text-primary mb-1 block">
+                        Start Time
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={formatDateForInput(formData.startTime)}
+                        onChange={(e) => {
+                          if (!e.target.value) return;
+
+                          // Fix timezone issue by creating date in local timezone
+                          const localDateTime = e.target.value; // This is in YYYY-MM-DDTHH:MM format
+                          const newStartTime = new Date(localDateTime + ":00"); // Add seconds to make it valid
+
+                          // Calculate the minimum end time (start time + 10 minutes)
+                          const minEndTime = new Date(
+                            newStartTime.getTime() + 10 * 60 * 1000
+                          );
+
+                          // If current end time is before the new minimum, adjust it
+                          let newEndTime = formData.endTime;
+                          if (formData.endTime <= newStartTime) {
+                            newEndTime = new Date(
+                              newStartTime.getTime() + 60 * 60 * 1000
+                            ); // Default to 1 hour
+                          }
+
+                          setFormData({
+                            ...formData,
+                            startTime: newStartTime,
+                            endTime: newEndTime,
+                          });
+                        }}
+                        className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
+                        min={formatDateForInput(new Date())}
+                      />
+                      <p className="text-xs font-cyber text-muted-foreground mt-1">
+                        Game will start at this time
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="space-y-3 pt-2">
-                    <label className="flex items-center gap-3 cursor-pointer group">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-sm font-cyber text-primary mb-1 block">
+                        Max Players
+                      </label>
                       <input
-                        type="checkbox"
-                        checked={formData.isPrivate}
+                        type="number"
+                        value={formData.maxPlayers}
                         onChange={(e) =>
                           setFormData({
                             ...formData,
-                            isPrivate: e.target.checked,
+                            maxPlayers: parseInt(e.target.value) || 2,
                           })
                         }
-                        className="w-5 h-5 rounded border-primary/30 text-primary focus:ring-primary"
+                        className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
+                        min="2"
+                        max="100"
                       />
-                      <span className="text-sm font-cyber text-foreground group-hover:text-primary transition-colors">
-                        🔒 Private Room (Requires Code)
-                      </span>
-                    </label>
+                    </div>
 
-                    <label className="flex items-center gap-3 cursor-pointer group">
-                      <input
-                        type="checkbox"
-                        checked={formData.isSponsored}
+                    <div>
+                      <label className="text-sm font-cyber text-primary mb-1 block">
+                        Winner Split Rule
+                      </label>
+                      <select
+                        value={formData.winnerSplitRule}
                         onChange={(e) =>
                           setFormData({
                             ...formData,
-                            isSponsored: e.target.checked,
-                            entryFee: 0,
+                            winnerSplitRule: e.target.value as
+                              | "winner_takes_all"
+                              | "top_2"
+                              | "top_3"
+                              | "top_4"
+                              | "top_5"
+                              | "top_6"
+                              | "top_7"
+                              | "top_8"
+                              | "top_9"
+                              | "top_10",
                           })
                         }
-                        className="w-5 h-5 rounded border-primary/30 text-primary focus:ring-primary"
+                        className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
+                      >
+                        {winnerRules.map((rule) => (
+                          <option key={rule.value} value={rule.value}>
+                            {rule.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-cyber text-primary mb-1 block">
+                        End Time
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={formatDateForInput(formData.endTime)}
+                        onChange={(e) => {
+                          if (!e.target.value) return;
+
+                          // Fix timezone issue by creating date in local timezone
+                          const localDateTime = e.target.value; // This is in YYYY-MM-DDTHH:MM format
+                          const newEndTime = new Date(localDateTime + ":00"); // Add seconds to make it valid
+
+                          setFormData({ ...formData, endTime: newEndTime });
+                        }}
+                        className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
                       />
-                      <span className="text-sm font-cyber text-foreground group-hover:text-primary transition-colors">
-                        💰 Sponsored Room (Free Entry)
-                      </span>
-                    </label>
+                      <p className="text-xs font-cyber text-muted-foreground mt-1">
+                        Game will end at this time (minimum 10 minutes after
+                        start)
+                      </p>
+                      {formData.startTime &&
+                        formData.endTime &&
+                        formData.endTime > formData.startTime && (
+                          <p className="text-xs font-cyber text-accent mt-1">
+                            Duration:{" "}
+                            {Math.round(
+                              (formData.endTime.getTime() -
+                                formData.startTime.getTime()) /
+                                (1000 * 60)
+                            )}{" "}
+                            minutes
+                          </p>
+                        )}
+                    </div>
+
+                    <div className="space-y-3 pt-2">
+                      <label className="flex items-center gap-3 cursor-pointer group">
+                        <input
+                          type="checkbox"
+                          checked={formData.isPrivate}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              isPrivate: e.target.checked,
+                            })
+                          }
+                          className="w-5 h-5 rounded border-primary/30 text-primary focus:ring-primary"
+                        />
+                        <span className="text-sm font-cyber text-foreground group-hover:text-primary transition-colors">
+                          🔒 Private Room (Requires Code)
+                        </span>
+                      </label>
+
+                      <label className="flex items-center gap-3 cursor-pointer group">
+                        <input
+                          type="checkbox"
+                          checked={formData.isSponsored}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              isSponsored: e.target.checked,
+                              entryFee: 0,
+                            })
+                          }
+                          className="w-5 h-5 rounded border-primary/30 text-primary focus:ring-primary"
+                        />
+                        <span className="text-sm font-cyber text-foreground group-hover:text-primary transition-colors">
+                          💰 Sponsored Room (Free Entry)
+                        </span>
+                      </label>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <div className="flex gap-3 mt-8">
-                <button
-                  onClick={handleCreateRoom}
-                  disabled={creating}
-                  className="flex-1 bg-gradient-to-r from-primary to-accent text-background font-cyber font-bold py-3 rounded-xl hover:scale-105 transition-all cyber-button shadow-lg hover:shadow-primary/50 disabled:opacity-50 disabled:hover:scale-100"
-                >
-                  {creating ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-background"></div>
-                      CREATING...
-                    </span>
-                  ) : (
-                    "CREATE ROOM"
-                  )}
-                </button>
-                <button
-                  onClick={() => setShowCreateModal(false)}
-                  disabled={creating}
-                  className="flex-1 bg-secondary border-2 border-primary/30 font-cyber font-bold py-3 rounded-xl hover:bg-secondary/80 hover:border-primary/50 transition-all disabled:opacity-50"
-                >
-                  CANCEL
-                </button>
+              {/* Modal Footer */}
+              <div className="p-6 border-t border-primary/20">
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleCreateRoom}
+                    disabled={creating}
+                    className="flex-1 bg-gradient-to-r from-primary to-accent text-background font-cyber font-bold py-3 rounded-xl hover:scale-105 transition-all cyber-button shadow-lg hover:shadow-primary/50 disabled:opacity-50 disabled:hover:scale-100"
+                  >
+                    {creating ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-background"></div>
+                        CREATING...
+                      </span>
+                    ) : (
+                      "CREATE ROOM"
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setShowCreateModal(false)}
+                    disabled={creating}
+                    className="flex-1 bg-secondary border-2 border-primary/30 font-cyber font-bold py-3 rounded-xl hover:bg-secondary/80 hover:border-primary/50 transition-all disabled:opacity-50"
+                  >
+                    CANCEL
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1461,9 +1535,9 @@ const RoomsPage = () => {
                     {selectedRoom.is_sponsored
                       ? "FREE (Sponsored)"
                       : formatCurrency(
-                        selectedRoom.entry_fee,
-                        selectedRoom.currency
-                      )}
+                          selectedRoom.entry_fee,
+                          selectedRoom.currency
+                        )}
                   </p>
                 </div>
 
