@@ -800,9 +800,9 @@ export const GameRoomProvider = ({
   const handleGameMessage = async (event: MessageEvent) => {
     // Verify the origin
     const allowedOrigins = [
-      'https://cheerful-entremet-2dbb07.netlify.app',
-      'https://stirring-unicorn-441851.netlify.app',
-      'https://ornate-lamington-115e41.netlify.app'
+      'https://flappy-bird-nexuz.netlify.app',
+      'https://doodle-jump-nexuz.netlify.app',
+      'https://endless-runner-nexuz.netlify.app'
     ];
     if (!allowedOrigins.includes(event.origin)) {
       logger.debug('Message from unauthorized origin:', event.origin);

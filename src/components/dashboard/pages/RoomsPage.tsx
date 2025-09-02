@@ -113,10 +113,10 @@ const WinnerCelebrationModal = ({ isOpen, onClose, winner }) => {
       winner.position === 1
         ? "🏆"
         : winner.position === 2
-          ? "🥈"
-          : winner.position === 3
-            ? "🥉"
-            : "🏅",
+        ? "🥈"
+        : winner.position === 3
+        ? "🥉"
+        : "🏅",
       600,
       200
     );
@@ -144,7 +144,8 @@ const WinnerCelebrationModal = ({ isOpen, onClose, winner }) => {
     ctx.font = "32px Arial";
     ctx.fillText(`${winner.gameName} - ${winner.roomName}`, 600, 540);
     ctx.fillText(
-      `Score: ${winner.score.toLocaleString()} | ${winner.totalParticipants
+      `Score: ${winner.score.toLocaleString()} | ${
+        winner.totalParticipants
       } Players`,
       600,
       580
@@ -156,17 +157,21 @@ const WinnerCelebrationModal = ({ isOpen, onClose, winner }) => {
 
     // Download
     const link = document.createElement("a");
-    link.download = `winner-${winner.playerName}-${winner.position
-      }-${Date.now()}.png`;
+    link.download = `winner-${winner.playerName}-${
+      winner.position
+    }-${Date.now()}.png`;
     link.href = canvas.toDataURL();
     link.click();
   };
 
   const shareWin = async () => {
-    const shareText = `🏆 I just won ${getPositionText(winner.position)} in ${winner.gameName
-      }!\n\n💰 Prize: ${winner.earnings} ${winner.currency
-      }\n📊 Score: ${winner.score.toLocaleString()}\n👥 Beat ${winner.totalParticipants - 1
-      } other players!\n\n${getCelebrationMessage(winner.position)}`;
+    const shareText = `🏆 I just won ${getPositionText(winner.position)} in ${
+      winner.gameName
+    }!\n\n💰 Prize: ${winner.earnings} ${
+      winner.currency
+    }\n📊 Score: ${winner.score.toLocaleString()}\n👥 Beat ${
+      winner.totalParticipants - 1
+    } other players!\n\n${getCelebrationMessage(winner.position)}`;
 
     if (navigator.share) {
       try {
@@ -251,22 +256,24 @@ const WinnerCelebrationModal = ({ isOpen, onClose, winner }) => {
         <div className="relative font-cyber z-10 p-6 text-center space-y-4">
           {/* Animated Trophy */}
           <div
-            className={`text-6xl mb-6 font-cyber ${animationStep >= 1 ? "animate-bounce" : "opacity-0 scale-0"
-              } transition-all duration-1000`}
+            className={`text-6xl mb-6 font-cyber ${
+              animationStep >= 1 ? "animate-bounce" : "opacity-0 scale-0"
+            } transition-all duration-1000`}
           >
             {winner.position === 1
               ? "🏆"
               : winner.position === 2
-                ? "🥈"
-                : winner.position === 3
-                  ? "🥉"
-                  : "🏅"}
+              ? "🥈"
+              : winner.position === 3
+              ? "🥉"
+              : "🏅"}
           </div>
 
           {/* Position Badge */}
           <div
-            className={`${animationStep >= 1 ? "scale-100 opacity-100" : "scale-0 opacity-0"
-              } transition-all font-cyber duration-700`}
+            className={`${
+              animationStep >= 1 ? "scale-100 opacity-100" : "scale-0 opacity-0"
+            } transition-all font-cyber duration-700`}
           >
             <div
               className={`inline-block px-12 py-4 bg-gradient-to-r ${getPositionColor(
@@ -281,10 +288,11 @@ const WinnerCelebrationModal = ({ isOpen, onClose, winner }) => {
 
           {/* Main Congratulations */}
           <div
-            className={`${animationStep >= 2
-              ? "opacity-100 translate-y-0"
-              : "opacity-0 translate-y-10"
-              } transition-all duration-700`}
+            className={`${
+              animationStep >= 2
+                ? "opacity-100 translate-y-0"
+                : "opacity-0 translate-y-10"
+            } transition-all duration-700`}
           >
             <h1 className="text-5xl md:text-6xl font-cyber font-bold bg-gradient-to-r from-white via-yellow-200 to-white bg-clip-text text-transparent mb-4 drop-shadow-2xl">
               CONGRATULATIONS!
@@ -296,10 +304,11 @@ const WinnerCelebrationModal = ({ isOpen, onClose, winner }) => {
 
           {/* Player Info */}
           <div
-            className={`${animationStep >= 2
-              ? "opacity-100 translate-y-0"
-              : "opacity-0 translate-y-10"
-              } font-cyber transition-all duration-700 delay-300`}
+            className={`${
+              animationStep >= 2
+                ? "opacity-100 translate-y-0"
+                : "opacity-0 translate-y-10"
+            } font-cyber transition-all duration-700 delay-300`}
           >
             <h2 className="text-4xl font-bold text-white mb-3 drop-shadow-lg">
               {winner.playerName}
@@ -316,8 +325,9 @@ const WinnerCelebrationModal = ({ isOpen, onClose, winner }) => {
 
           {/* Prize Amount */}
           <div
-            className={`${animationStep >= 3 ? "opacity-100 scale-100" : "opacity-0 scale-0"
-              } font-cyber transition-all duration-1000`}
+            className={`${
+              animationStep >= 3 ? "opacity-100 scale-100" : "opacity-0 scale-0"
+            } font-cyber transition-all duration-1000`}
           >
             <div className="bg-gradient-to-r from-green-500/30 to-emerald-500/30 border-2 border-green-400/50 rounded-3xl p-8 mb-8 backdrop-blur-sm">
               <p className="text-green-300 text-2xl mb-3 font-semibold">
@@ -579,11 +589,16 @@ const RoomsPage = () => {
       });
       return;
     }
-    const balance = formData.currency === "USDC" ? usdcBalance : formData.currency === "USDT" ? usdtBalance : suiBalance;
+    const balance =
+      formData.currency === "USDC"
+        ? usdcBalance
+        : formData.currency === "USDT"
+        ? usdtBalance
+        : suiBalance;
 
     // Check wallet balance for both sponsored rooms and entry fee
     if (formData.isSponsored) {
-      if ((balance) < formData.sponsorAmount) {
+      if (balance < formData.sponsorAmount) {
         toast({
           title: "Error",
           description: "Insufficient balance for sponsorship amount",
@@ -592,7 +607,7 @@ const RoomsPage = () => {
         return;
       }
     } else {
-      if ((balance) < formData.entryFee) {
+      if (balance < formData.entryFee) {
         toast({
           title: "Error",
           description: "Insufficient balance for entry fee",
@@ -604,7 +619,7 @@ const RoomsPage = () => {
 
     try {
       const room = await createRoom({
-        ...formData
+        ...formData,
       });
 
       setShowCreateModal(false);
@@ -881,10 +896,11 @@ const RoomsPage = () => {
               {safeRooms.map((room) => (
                 <div
                   key={room.id}
-                  className={`relative bg-gradient-to-br from-card to-secondary/20 border rounded-xl p-6 hover:border-primary/40 transition-all duration-300 hover:scale-105 group cyber-border ${userWonInRoom(room)
-                    ? "border-yellow-500/50 shadow-lg shadow-yellow-500/20"
-                    : "border-primary/20"
-                    }`}
+                  className={`relative bg-gradient-to-br from-card to-secondary/20 border rounded-xl p-6 hover:border-primary/40 transition-all duration-300 hover:scale-105 group cyber-border ${
+                    userWonInRoom(room)
+                      ? "border-yellow-500/50 shadow-lg shadow-yellow-500/20"
+                      : "border-primary/20"
+                  }`}
                 >
                   {/* Winner Badge */}
                   {userWonInRoom(room) && (
@@ -971,7 +987,9 @@ const RoomsPage = () => {
                     {userWonInRoom(room) && (
                       <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-2 mt-2">
                         <div className="flex justify-between text-xs font-cyber">
-                          <span className="text-yellow-400">Your Position:</span>
+                          <span className="text-yellow-400">
+                            Your Position:
+                          </span>
                           <span className="text-yellow-300">
                             #{userWins[room.id].final_position}
                           </span>
@@ -1032,7 +1050,9 @@ const RoomsPage = () => {
                 {/* Page Info */}
                 <div className="text-center">
                   <p className="text-sm font-cyber text-muted-foreground">
-                    Showing {((currentPage - 1) * roomsPerPage) + 1} to {Math.min(currentPage * roomsPerPage, totalRooms)} of {totalRooms} rooms
+                    Showing {(currentPage - 1) * roomsPerPage + 1} to{" "}
+                    {Math.min(currentPage * roomsPerPage, totalRooms)} of{" "}
+                    {totalRooms} rooms
                   </p>
                   <p className="text-xs font-cyber text-muted-foreground mt-1">
                     Page {currentPage} of {totalPages}
@@ -1062,7 +1082,9 @@ const RoomsPage = () => {
                           1
                         </button>
                         {currentPage > 4 && (
-                          <span className="px-2 text-muted-foreground">...</span>
+                          <span className="px-2 text-muted-foreground">
+                            ...
+                          </span>
                         )}
                       </>
                     )}
@@ -1078,10 +1100,11 @@ const RoomsPage = () => {
                           <button
                             key={i}
                             onClick={() => goToPage(i)}
-                            className={`px-3 py-2 font-cyber font-bold text-sm border rounded-lg transition-all hover:scale-105 ${i === currentPage
-                              ? "bg-gradient-to-r from-primary to-accent text-background border-primary shadow-lg shadow-primary/30"
-                              : "bg-gradient-to-r from-secondary to-secondary/80 text-foreground border-primary/30 hover:border-primary/50"
-                              }`}
+                            className={`px-3 py-2 font-cyber font-bold text-sm border rounded-lg transition-all hover:scale-105 ${
+                              i === currentPage
+                                ? "bg-gradient-to-r from-primary to-accent text-background border-primary shadow-lg shadow-primary/30"
+                                : "bg-gradient-to-r from-secondary to-secondary/80 text-foreground border-primary/30 hover:border-primary/50"
+                            }`}
                           >
                             {i}
                           </button>
@@ -1095,7 +1118,9 @@ const RoomsPage = () => {
                     {currentPage < totalPages - 2 && (
                       <>
                         {currentPage < totalPages - 3 && (
-                          <span className="px-2 text-muted-foreground">...</span>
+                          <span className="px-2 text-muted-foreground">
+                            ...
+                          </span>
                         )}
                         <button
                           onClick={() => goToPage(totalPages)}
@@ -1119,7 +1144,9 @@ const RoomsPage = () => {
 
                 {/* Quick Navigation */}
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-cyber text-muted-foreground">Go to:</span>
+                  <span className="text-xs font-cyber text-muted-foreground">
+                    Go to:
+                  </span>
                   <input
                     type="number"
                     min="1"
@@ -1133,7 +1160,9 @@ const RoomsPage = () => {
                     }}
                     className="w-16 px-2 py-1 bg-secondary/50 border border-primary/30 rounded text-center text-xs font-cyber text-foreground focus:border-primary focus:outline-none"
                   />
-                  <span className="text-xs font-cyber text-muted-foreground">of {totalPages}</span>
+                  <span className="text-xs font-cyber text-muted-foreground">
+                    of {totalPages}
+                  </span>
                 </div>
               </div>
             )}
@@ -1221,8 +1250,8 @@ const RoomsPage = () => {
                     />
                     {!formData.isSponsored && formData.entryFee > 0 && (
                       <p className="text-xs font-cyber text-yellow-400 mt-1">
-                        You'll pay {formData.entryFee}{" "}
-                        {formData.currency || ""} to join your own room
+                        You'll pay {formData.entryFee} {formData.currency || ""}{" "}
+                        to join your own room
                       </p>
                     )}
                     {formData.isSponsored && formData.sponsorAmount > 0 && (
@@ -1239,13 +1268,18 @@ const RoomsPage = () => {
                     </label>
                     <input
                       type="datetime-local"
-                      value={formData.startTime.toISOString().slice(0, 16)}
+                      value={new Date(
+                        formData.startTime.getTime() -
+                          formData.startTime.getTimezoneOffset() * 60000
+                      )
+                        .toISOString()
+                        .slice(0, 16)}
                       onChange={(e) => {
                         const newStartTime = new Date(e.target.value);
 
-                        // Calculate the minimum end time (start time + 10 minutes)
+                        // Calculate the minimum end time (start time + 15 minutes)
                         const minEndTime = new Date(
-                          newStartTime.getTime() + 10 * 60 * 1000
+                          newStartTime.getTime() + 15 * 60 * 1000
                         );
 
                         // If current end time is before the new minimum, adjust it
@@ -1263,7 +1297,12 @@ const RoomsPage = () => {
                         });
                       }}
                       className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
-                      min={new Date().toISOString().slice(0, 16)}
+                      min={new Date(
+                        new Date().getTime() -
+                          new Date().getTimezoneOffset() * 60000
+                      )
+                        .toISOString()
+                        .slice(0, 16)}
                     />
                     <p className="text-xs font-cyber text-muted-foreground mt-1">
                       Game will start at this time
@@ -1300,7 +1339,17 @@ const RoomsPage = () => {
                       onChange={(e) =>
                         setFormData({
                           ...formData,
-                          winnerSplitRule: e.target.value as "winner_takes_all" | "top_2" | "top_3" | "top_4" | "top_5" | "top_6" | "top_7" | "top_8" | "top_9" | "top_10",
+                          winnerSplitRule: e.target.value as
+                            | "winner_takes_all"
+                            | "top_2"
+                            | "top_3"
+                            | "top_4"
+                            | "top_5"
+                            | "top_6"
+                            | "top_7"
+                            | "top_8"
+                            | "top_9"
+                            | "top_10",
                         })
                       }
                       className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
@@ -1319,7 +1368,12 @@ const RoomsPage = () => {
                     </label>
                     <input
                       type="datetime-local"
-                      value={formData.endTime.toISOString().slice(0, 16)}
+                      value={new Date(
+                        formData.endTime.getTime() -
+                          formData.endTime.getTimezoneOffset() * 60000
+                      )
+                        .toISOString()
+                        .slice(0, 16)}
                       onChange={(e) => {
                         const newEndTime = new Date(e.target.value);
 
@@ -1333,15 +1387,15 @@ const RoomsPage = () => {
                           return;
                         }
 
-                        // Check minimum duration (10 minutes)
-                        const minDuration = 10 * 60 * 1000; // 10 minutes in milliseconds
+                        // Check minimum duration (15 minutes)
+                        const minDuration = 15 * 60 * 1000; // 15 minutes in milliseconds
                         if (
                           newEndTime.getTime() - formData.startTime.getTime() <
                           minDuration
                         ) {
                           toast({
                             title: "Invalid Duration",
-                            description: "Game must last at least 10 minutes",
+                            description: "Game must last at least 15 minutes",
                             variant: "destructive",
                           });
                           return;
@@ -1352,7 +1406,7 @@ const RoomsPage = () => {
                       className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
                     />
                     <p className="text-xs font-cyber text-muted-foreground mt-1">
-                      Game will end at this time (minimum 10 minutes after
+                      Game will end at this time (minimum 15 minutes after
                       start)
                     </p>
                     {formData.startTime &&
@@ -1363,7 +1417,7 @@ const RoomsPage = () => {
                           {Math.round(
                             (formData.endTime.getTime() -
                               formData.startTime.getTime()) /
-                            (1000 * 60)
+                              (1000 * 60)
                           )}{" "}
                           minutes
                         </p>
@@ -1461,9 +1515,9 @@ const RoomsPage = () => {
                     {selectedRoom.is_sponsored
                       ? "FREE (Sponsored)"
                       : formatCurrency(
-                        selectedRoom.entry_fee,
-                        selectedRoom.currency
-                      )}
+                          selectedRoom.entry_fee,
+                          selectedRoom.currency
+                        )}
                   </p>
                 </div>
 

@@ -25,7 +25,7 @@ const GamesPage = () => {
       players: 2150,
       status: "LIVE",
       image: "🏃",
-      gameUrl: "https://cheerful-entremet-2dbb07.netlify.app/",
+      gameUrl: "https://endless-runner-nexuz.netlify.app/",
       instructions: "Press SPACE or Click to jump. Hold for higher jumps. Collect gems for bonus points! Difficulty increases every 100 points."
     },
     {
@@ -34,7 +34,7 @@ const GamesPage = () => {
       players: 1840,
       status: "LIVE",
       image: "🐦",
-      gameUrl: "https://stirring-unicorn-441851.netlify.app/",
+      gameUrl: "https://flappy-bird-nexuz.netlify.app/",
       instructions: "Tap or click to flap. Navigate through pipes without hitting them! How far can you fly?"
     },
     {
@@ -43,7 +43,7 @@ const GamesPage = () => {
       players: 890,
       status: "LIVE",
       image: "🏎️",
-      gameUrl: "https://ornate-lamington-115e41.netlify.app/", // Replace with actual URL
+      gameUrl: "https://doodle-jump-nexuz.netlify.app/", // Replace with actual URL
       instructions: "Jump over obstacles and collect coins to score points. Use arrow keys to move left/right."
     },
   ];
