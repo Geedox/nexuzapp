@@ -751,7 +751,7 @@ export const GameRoomProvider = ({
       };
 
       // Store session
-      setActiveGameSessions(prev => new Map(prev.set(sessionToken, gameSession)));
+      setActiveGameSessions(prev => (prev.set(sessionToken, gameSession)));
 
       // Construct game URL with parameters
       const gameUrl = new URL(room.game?.game_url || "");
