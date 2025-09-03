@@ -101,7 +101,10 @@ const WalletPage = () => {
         filter: { FromAddress: address },
         limit: limit,
         order: "descending",
-        cursor: isLoadMore ? blockchainTransactions[blockchainTransactions.length - 1]?.transaction_hash : undefined,
+        cursor: isLoadMore
+          ? blockchainTransactions[blockchainTransactions.length - 1]
+              ?.transaction_hash
+          : undefined,
       });
 
       // Get transactions where user received tokens
@@ -109,7 +112,10 @@ const WalletPage = () => {
         filter: { ToAddress: address },
         limit: limit,
         order: "descending",
-        cursor: isLoadMore ? blockchainTransactions[blockchainTransactions.length - 1]?.transaction_hash : undefined,
+        cursor: isLoadMore
+          ? blockchainTransactions[blockchainTransactions.length - 1]
+              ?.transaction_hash
+          : undefined,
       });
 
       // Combine and deduplicate
@@ -196,9 +202,9 @@ const WalletPage = () => {
                   currency = fromCurrency;
                   amount = fromAmount;
                   description = `Swapped ${fromAmount.toFixed(
-                    fromCurrency === "SUI" ? 4 : 2
+                    fromCurrency === "SUI" ? 4 : 4
                   )} ${fromCurrency} for ${toAmount.toFixed(
-                    toCurrency === "SUI" ? 4 : 2
+                    toCurrency === "SUI" ? 4 : 4
                   )} ${toCurrency}`;
                 }
               } else if (userBalanceChanges.length === 1) {
@@ -214,12 +220,12 @@ const WalletPage = () => {
                 if (changeAmount > 0) {
                   transactionType = "deposit";
                   description = `Received ${amount.toFixed(
-                    currency === "SUI" ? 4 : 2
+                    currency === "SUI" ? 4 : 4
                   )} ${currency}`;
                 } else {
                   transactionType = "withdrawal";
                   description = `Sent ${amount.toFixed(
-                    currency === "SUI" ? 4 : 2
+                    currency === "SUI" ? 4 : 4
                   )} ${currency}`;
                 }
               }
@@ -258,9 +264,9 @@ const WalletPage = () => {
 
       if (isLoadMore) {
         // Append new transactions for load more
-        setBlockchainTransactions(prev => [...prev, ...validTransactions]);
+        setBlockchainTransactions((prev) => [...prev, ...validTransactions]);
         setHasMoreTransactions(validTransactions.length === 10);
-        setCurrentPage(prev => prev + 1);
+        setCurrentPage((prev) => prev + 1);
       } else {
         // Set initial transactions
         setBlockchainTransactions(validTransactions);
@@ -306,8 +312,9 @@ const WalletPage = () => {
       amount: Number(swapData.fromAmount),
       currency: swapData.fromCurrency,
       transaction_hash: swapData.transactionHash,
-      description: `${swapData.type === "cetus" ? "Cetus" : "Direct"} Swap: ${swapData.fromAmount
-        } ${swapData.fromCurrency} → ${swapData.toAmount} ${swapData.toCurrency}`,
+      description: `${swapData.type === "cetus" ? "Cetus" : "Direct"} Swap: ${
+        swapData.fromAmount
+      } ${swapData.fromCurrency} → ${swapData.toAmount} ${swapData.toCurrency}`,
       status: "completed",
     });
 
@@ -367,7 +374,7 @@ const WalletPage = () => {
     if (isNaN(amount) || amount === null || amount === undefined) {
       return "0.00 " + (currency || "Unknown");
     }
-    return `${amount.toFixed(currency === "SUI" ? 4 : 2)} ${currency}`;
+    return `${amount.toFixed(currency === "SUI" ? 4 : 4)} ${currency}`;
   };
 
   const copyToClipboard = (text: string, label: string) => {
@@ -397,7 +404,10 @@ const WalletPage = () => {
   );
 
   // Get paginated transactions
-  const paginatedTransactions = allTransactions.slice(0, currentPage * transactionsPerPage);
+  const paginatedTransactions = allTransactions.slice(
+    0,
+    currentPage * transactionsPerPage
+  );
 
   if (!profile?.sui_wallet_data) {
     return (
@@ -617,7 +627,9 @@ const WalletPage = () => {
                   className="flex items-center justify-between p-4 bg-secondary/20 rounded-lg hover:bg-secondary/30 transition-all duration-300"
                 >
                   <div className="flex items-center space-x-4">
-                    <div className="text-2xl">{getTransactionIcon(tx.type)}</div>
+                    <div className="text-2xl">
+                      {getTransactionIcon(tx.type)}
+                    </div>
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="font-cyber font-bold text-foreground">
@@ -632,8 +644,8 @@ const WalletPage = () => {
                       <div className="text-sm text-muted-foreground font-cyber">
                         {tx.created_at
                           ? formatDistanceToNow(new Date(tx.created_at), {
-                            addSuffix: true,
-                          })
+                              addSuffix: true,
+                            })
                           : "Unknown time"}
                       </div>
                       {tx.transaction_hash && tx.source === "blockchain" && (
@@ -653,10 +665,11 @@ const WalletPage = () => {
                   </div>
                   <div className="text-right">
                     <div
-                      className={`font-cyber font-bold text-lg ${tx.type === "deposit" || tx.type === "win"
-                        ? "text-green-400"
-                        : "text-red-400"
-                        }`}
+                      className={`font-cyber font-bold text-lg ${
+                        tx.type === "deposit" || tx.type === "win"
+                          ? "text-green-400"
+                          : "text-red-400"
+                      }`}
                     >
                       {tx.type === "deposit" || tx.type === "win" ? "+" : "-"}
                       {formatAmount(tx.amount, tx.currency)}
@@ -701,7 +714,8 @@ const WalletPage = () => {
 
               {/* Transaction Count Info */}
               <div className="text-center pt-2 text-xs text-muted-foreground font-cyber">
-                Showing {paginatedTransactions.length} of {allTransactions.length} transactions
+                Showing {paginatedTransactions.length} of{" "}
+                {allTransactions.length} transactions
                 {currentPage > 1 && ` • Page ${currentPage}`}
               </div>
             </>
