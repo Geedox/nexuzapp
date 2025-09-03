@@ -1304,12 +1304,6 @@ const RoomsPage = () => {
                         value={formData.startTime.toISOString().slice(0, 16)}
                         onChange={(e) => {
                           const newStartTime = new Date(e.target.value);
-
-                          // Calculate the minimum end time (start time + 10 minutes)
-                          const minEndTime = new Date(
-                            newStartTime.getTime() + 10 * 60 * 1000
-                          );
-
                           // If current end time is before the new minimum, adjust it
                           let newEndTime = formData.endTime;
                           if (formData.endTime <= newStartTime) {
