@@ -11,7 +11,9 @@
     "preview": "vite preview",
     "pull": "supabase db pull",
     "test:game-room": "tsx scripts/game-room-tests/index.ts",
-    "transfer": "tsx scripts/game-room-tests/transfer.ts"
+    "test:game-room-completion": "tsx scripts/test-game-room-completion.ts",
+    "transfer": "tsx scripts/game-room-tests/transfer.ts",
+    "recent-winners": "tsx scripts/supabase.ts"
   },
   "dependencies": {
     "@cetusprotocol/common-sdk": "^1.1.6",

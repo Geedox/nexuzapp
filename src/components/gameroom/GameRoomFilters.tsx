@@ -88,7 +88,6 @@ const GameRoomFiltersComponent: React.FC<GameRoomFiltersProps> = ({
       filters.minPlayers !== undefined ||
       filters.maxPlayers !== undefined ||
       filters.gameId ||
-      filters.searchQuery ||
       (filters.sortBy && filters.sortBy !== "created_at") ||
       (filters.sortOrder && filters.sortOrder !== "desc")
     );
@@ -130,20 +129,6 @@ const GameRoomFiltersComponent: React.FC<GameRoomFiltersProps> = ({
             )}
             {isExpanded ? "Collapse" : "Expand"}
           </button>
-        </div>
-      </div>
-
-      {/* Search Bar - Always Visible */}
-      <div className="mb-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search rooms and games..."
-            value={filters.searchQuery || ""}
-            onChange={(e) => handleFilterChange("searchQuery", e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-secondary/50 border border-primary/30 rounded-lg font-cyber text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-          />
         </div>
       </div>
 
@@ -388,18 +373,17 @@ const GameRoomFiltersComponent: React.FC<GameRoomFiltersProps> = ({
               </select>
             </div>
           </div>
+          {/* Apply Filters Button */}
+          <div className="mt-4 pt-4 border-t border-primary/20">
+            <button
+              onClick={applyFilters}
+              className="w-full bg-gradient-to-r from-primary to-accent text-background font-cyber font-bold py-2 rounded-lg hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-primary/50"
+            >
+              Apply Filters
+            </button>
+          </div>
         </div>
       )}
-
-      {/* Apply Filters Button */}
-      <div className="mt-4 pt-4 border-t border-primary/20">
-        <button
-          onClick={applyFilters}
-          className="w-full bg-gradient-to-r from-primary to-accent text-background font-cyber font-bold py-2 rounded-lg hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-primary/50"
-        >
-          Apply Filters
-        </button>
-      </div>
     </div>
   );
 };
