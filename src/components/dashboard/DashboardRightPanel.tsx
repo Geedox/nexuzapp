@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import { useLeaderboard } from "@/contexts/LeaderboardContext";
 import { useGameRoom } from "@/contexts/GameRoomContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
+import { logger } from "@/utils";
 
 interface RecentWinner {
   name: string;
@@ -30,46 +31,46 @@ const DashboardRightPanel = () => {
   const navigate = useNavigate();
 
   // Fetch recent winners from transactions
-  const fetchRecentWinners = useCallback(async () => {
+  const fetchRecentWinners = async () => {
     try {
-      // Fetch recent winning transactions with user and room details
+      // Use game_room_winners -> game_room_participants for proper relationships
       const { data, error } = await supabase
-        .from("transactions")
+        .from("game_room_winners")
         .select(
           `
           *,
-          user:profiles(username, display_name),
-          room:game_rooms(
-            name,
-            currency,
-            game:games(name)
+          participant:game_room_participants(
+            user:profiles(username, display_name),
+            room:game_rooms(
+              name,
+              currency,
+              game:games(name)
+            )
           )
         `
         )
-        .eq("type", "win")
-        .eq("status", "completed")
         .order("created_at", { ascending: false })
         .limit(3);
 
       if (error) throw error;
 
-      const winners: RecentWinner[] = (data || []).map((transaction: any) => {
-        const timeAgo = getTimeAgo(new Date(transaction.created_at));
+      const winners: RecentWinner[] = (data || []).map((winner: any) => {
+        const timeAgo = getTimeAgo(new Date(winner.created_at));
         const userName =
-          transaction.user?.display_name ||
-          transaction.user?.username ||
+          winner.participant?.user?.display_name ||
+          winner.participant?.user?.username ||
           "Anonymous";
         const gameName =
-          transaction.room?.game?.name ||
-          transaction.room?.name ||
+          winner.participant?.room?.game?.name ||
+          winner.participant?.room?.name ||
           "Unknown Game";
 
         return {
           name: userName,
           game: gameName,
-          prize: `$${Number(transaction.amount).toFixed(2)}`,
+          prize: `$${Number(winner.prize_amount).toFixed(2)}`,
           time: timeAgo,
-          currency: transaction.currency || "USDC",
+          currency: winner.participant?.room?.currency || "USDC",
         };
       });
 
@@ -77,10 +78,10 @@ const DashboardRightPanel = () => {
     } catch (error) {
       console.error("Error fetching recent winners:", error);
     }
-  }, []);
+  };
 
   // Calculate live statistics
-  const calculateLiveStats = useCallback(async () => {
+  const calculateLiveStats = async () => {
     try {
       // Get active players (users who have been active in last 24 hours)
       const { data: activeUsers, error: activeError } = await supabase
@@ -91,24 +92,26 @@ const DashboardRightPanel = () => {
           new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
         );
 
-      // Get today's prize pool from completed transactions
+      // Get today's prize pool from game rooms that are waiting or ongoing
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      const { data: todayWinnings, error: winningsError } = await supabase
-        .from("transactions")
-        .select("amount")
-        .eq("type", "win")
-        .eq("status", "completed")
-        .gte("created_at", today.toISOString());
+      const { data: todaysPrizePool, error: prizePoolError } = await supabase
+        .from("game_rooms")
+        .select("total_prize_pool")
+        .in("status", ["ongoing", "waiting"]);
+
+      if (prizePoolError) {
+        logger.error("Error fetching today's prize pool:", prizePoolError);
+      }
 
       const activePlayers = activeUsers?.length || 0;
       const liveRooms = rooms.filter(
         (room) => room.status === "ongoing" || room.status === "waiting"
       ).length;
 
-      const prizePoolToday = (todayWinnings || []).reduce(
-        (sum, transaction) => sum + Number(transaction.amount),
+      const prizePoolToday = (todaysPrizePool || []).reduce(
+        (sum, rooms) => sum + Number(rooms.total_prize_pool),
         0
       );
 
@@ -118,9 +121,9 @@ const DashboardRightPanel = () => {
         prizePoolToday,
       });
     } catch (error) {
-      console.error("Error calculating live stats:", error);
+      logger.error("Error calculating live stats:", error);
     }
-  }, [rooms]);
+  };
 
   // Helper function to calculate time ago
   const getTimeAgo = (date: Date): string => {
@@ -171,12 +174,12 @@ const DashboardRightPanel = () => {
       clearInterval(winnersInterval);
       clearInterval(statsInterval);
     };
-  }, [fetchGlobalLeaderboard, fetchRecentWinners, calculateLiveStats]);
+  }, []);
 
   // Update live stats when rooms change
   useEffect(() => {
     calculateLiveStats();
-  }, [rooms, calculateLiveStats]);
+  }, [rooms]);
 
   const topGamers = globalLeaderboard.slice(0, 5).map((player, index) => ({
     rank: index + 1,
@@ -210,7 +213,7 @@ const DashboardRightPanel = () => {
                       ? "bg-gradient-to-r from-amber-600/20 to-amber-700/20 border-amber-600/50"
                       : "bg-secondary/20 border-primary/20 hover:border-primary/40"
                   }`}
-                  onClick={() => navigate("/leaderboards")}
+                  onClick={() => navigate("/dashboard/leaderboards")}
                 >
                   <div className="flex items-center space-x-2 lg:space-x-3">
                     <div
@@ -361,7 +364,7 @@ const DashboardRightPanel = () => {
                   $
                   {liveStats.prizePoolToday.toLocaleString(undefined, {
                     minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
+                    maximumFractionDigits: 3,
                   })}
                 </span>
               </div>

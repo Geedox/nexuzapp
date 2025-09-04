@@ -23,7 +23,7 @@ export class GameRoom {
         this.storeId = storeId;
 
         const sponsorPrivateKey = import.meta.env.VITE_PRIVATE_KEY;
-        logger.debug('Raw private key from env:', sponsorPrivateKey ? `${sponsorPrivateKey.substring(0, 8)}...` : 'NOT FOUND');
+        // logger.debug('Raw private key from env:', sponsorPrivateKey ? `${sponsorPrivateKey.substring(0, 8)}...` : 'NOT FOUND');
 
         if (!sponsorPrivateKey) {
             throw new Error("Sponsor private key is not set");
@@ -32,8 +32,8 @@ export class GameRoom {
         this.sponsorKeypair = this.getWalletKeypair(sponsorPrivateKey);
         this.sponsorAddress = this.sponsorKeypair?.getPublicKey().toSuiAddress();
 
-        logger.debug('Sponsor address derived:', this.sponsorAddress);
-        logger.debug('Sponsor keypair created successfully:', !!this.sponsorKeypair);
+        // logger.debug('Sponsor address derived:', this.sponsorAddress);
+        // logger.debug('Sponsor keypair created successfully:', !!this.sponsorKeypair);
     }
 
     private getWalletKeypair = (privateKey: string): Ed25519Keypair => {
@@ -48,7 +48,7 @@ export class GameRoom {
                 try {
                     // Decode the bech32 private key to get the raw bytes
                     const { secretKey } = decodeSuiPrivateKey(privateKey);
-                    logger.debug('Secret key decoded, length:', secretKey.length);
+                    // logger.debug('Secret key decoded, length:', secretKey.length);
 
                     // Ensure we have exactly 32 bytes
                     if (secretKey.length !== 32) {
@@ -72,7 +72,7 @@ export class GameRoom {
             let cleanKey = privateKey;
             if (privateKey.startsWith('0x')) {
                 cleanKey = privateKey.slice(2);
-                logger.debug('Removed 0x prefix, new length:', cleanKey.length);
+                // logger.debug('Removed 0x prefix, new length:', cleanKey.length);
             }
 
             // Check if key is valid hex and proper length
@@ -89,7 +89,7 @@ export class GameRoom {
                 throw new Error("Private key contains invalid hex characters");
             }
 
-            logger.debug('Private key validation passed for hex format');
+            // logger.debug('Private key validation passed for hex format');
 
             // Convert hex string to bytes
             const bytes = new Uint8Array(32);
@@ -123,7 +123,7 @@ export class GameRoom {
         }
 
         logger.info("Testing private key conversion...");
-        logger.debug('Original key format:', keyToTest.substring(0, 10) + '...');
+        // logger.debug('Original key format:', keyToTest.substring(0, 10) + '...');
         logger.debug('Key length:', keyToTest.length);
 
         try {
@@ -480,7 +480,6 @@ export class GameRoom {
 
     // Complete game and distribute prizes
     async completeGame(options: {
-        walletKeyPair: any;
         roomId: string;
         winnerAddresses: string[];
         scores: number[];
