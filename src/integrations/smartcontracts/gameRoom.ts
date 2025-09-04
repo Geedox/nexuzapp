@@ -324,12 +324,14 @@ export class GameRoom {
 
     // Join an existing room. Provide entryFee if required by the room (0 for sponsored rooms).
     async joinGameRoom(options: {
+        isSponsored: boolean;
         walletKeyPair: any; // Ed25519Keypair or compatible signer
         roomId: string;
         roomCode?: string; // empty for public rooms
         entryFee: number; // in USDC units; 0 if sponsored
     }) {
-        const { walletKeyPair, roomId, roomCode = "", entryFee } = options;
+        const { isSponsored, walletKeyPair, roomId, roomCode = "" } = options;
+        const entryFee = options.isSponsored ? 0 : options.entryFee;
 
         const txb = new TransactionBlock();
         const userAddress = walletKeyPair.getPublicKey().toSuiAddress();

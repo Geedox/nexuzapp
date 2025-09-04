@@ -602,6 +602,20 @@ const RoomsPage = () => {
       });
       return;
     }
+
+    // Check minimum duration (10 minutes)
+    const minDuration = 10 * 60 * 1000; // 10 minutes in milliseconds
+    if (
+      formData.endTime.getTime() - formData.startTime.getTime() <
+      minDuration
+    ) {
+      toast({
+        title: "Invalid Duration",
+        description: "Game must last at least 10 minutes",
+        variant: "destructive",
+      });
+      return;
+    }
     const balance =
       formData.currency === "USDC"
         ? usdcBalance
@@ -1304,18 +1318,9 @@ const RoomsPage = () => {
                         value={formData.startTime.toISOString().slice(0, 16)}
                         onChange={(e) => {
                           const newStartTime = new Date(e.target.value);
-                          // If current end time is before the new minimum, adjust it
-                          let newEndTime = formData.endTime;
-                          if (formData.endTime <= newStartTime) {
-                            newEndTime = new Date(
-                              newStartTime.getTime() + 60 * 60 * 1000
-                            ); // Default to 1 hour
-                          }
-
                           setFormData({
                             ...formData,
                             startTime: newStartTime,
-                            endTime: newEndTime,
                           });
                         }}
                         className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
@@ -1388,32 +1393,6 @@ const RoomsPage = () => {
                         value={formData.endTime.toISOString().slice(0, 16)}
                         onChange={(e) => {
                           const newEndTime = new Date(e.target.value);
-
-                          // Validate that end time is after start time
-                          if (newEndTime <= formData.startTime) {
-                            toast({
-                              title: "Invalid End Time",
-                              description: "End time must be after start time",
-                              variant: "destructive",
-                            });
-                            return;
-                          }
-
-                          // Check minimum duration (10 minutes)
-                          const minDuration = 10 * 60 * 1000; // 10 minutes in milliseconds
-                          if (
-                            newEndTime.getTime() -
-                              formData.startTime.getTime() <
-                            minDuration
-                          ) {
-                            toast({
-                              title: "Invalid Duration",
-                              description: "Game must last at least 10 minutes",
-                              variant: "destructive",
-                            });
-                            return;
-                          }
-
                           setFormData({ ...formData, endTime: newEndTime });
                         }}
                         className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"

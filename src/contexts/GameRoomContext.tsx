@@ -1628,6 +1628,7 @@ export const GameRoomProvider = ({
 
         logger.info(`Joining room on-chain: ${roomId}`);
         await onChainGameRoom.joinGameRoom({
+          isSponsored: room.is_sponsored,
           walletKeyPair: signer,
           roomId: room.on_chain_room_id,
           roomCode: roomCode || "",
