@@ -189,12 +189,12 @@ export const GameRoomProvider = ({
   >(new Map());
 
   const onChainGameRoom = useMemo(() => {
-    logger.debug("Creating onChainGameRoom instance...");
-    logger.debug("suiClient available:", !!suiClient);
-    logger.debug(
-      "suiClient details:",
-      suiClient ? "Connected" : "Not connected"
-    );
+    // logger.debug("Creating onChainGameRoom instance...");
+    // logger.debug("suiClient available:", !!suiClient);
+    // logger.debug(
+    //   "suiClient details:",
+    //   suiClient ? "Connected" : "Not connected"
+    // );
 
     try {
       if (!suiClient) {
@@ -202,12 +202,12 @@ export const GameRoomProvider = ({
         return null;
       }
 
-      logger.debug("Attempting to create OnChainGameRoom instance...");
+      // logger.debug("Attempting to create OnChainGameRoom instance...");
       const instance = new OnChainGameRoom(suiClient);
-      logger.debug(
-        "OnChainGameRoom instance created successfully:",
-        !!instance
-      );
+      // logger.debug(
+      //   "OnChainGameRoom instance created successfully:",
+      //   !!instance
+      // );
       return instance;
     } catch (error) {
       logger.error("[DEBUG] Error creating OnChainGameRoom:", error);
@@ -280,7 +280,15 @@ export const GameRoomProvider = ({
   };
 
   // Function to determine winners based on scores and split rule
-  const determineWinners = (participants: any[], splitRule: string) => {
+  const determineWinners = (
+    participants: Database["public"]["Tables"]["game_room_participants"]["Row"][],
+    splitRule: string
+  ) => {
+    // check if all participants have 0 score or do not have a score
+    if (participants.every((p) => p.score === 0 || p.score === null)) {
+      return [];
+    }
+
     // Sort participants by score in descending order
     const sortedParticipants = [...participants].sort(
       (a, b) => (b.score || 0) - (a.score || 0)
@@ -371,17 +379,21 @@ export const GameRoomProvider = ({
 
   // Updated distributePrizes function with profile updates and on-chain transaction mapping
   const distributePrizes = async (
-    room: any,
-    participants: any[],
-    winners: any[],
+    room: Database["public"]["Tables"]["game_rooms"]["Row"],
+    participants: Database["public"]["Tables"]["game_room_participants"]["Row"][],
+    winners: {
+      userId: string | null;
+      position: number;
+      participantId: string;
+    }[],
     onChainResult?: any
   ) => {
     try {
       logger.info(`Starting prize distribution for room ${room.id}`);
 
       // Calculate platform fee (10%)
-      const platformFee = room.total_prize_pool * 0.07;
-      const distributablePrize = room.total_prize_pool - platformFee;
+      const platformFee = (room.total_prize_pool ?? 0) * 0.07;
+      const distributablePrize = (room.total_prize_pool ?? 0) - platformFee;
 
       // Get prize split percentages
       const prizeSplits = getPrizeSplitPercentages(room.winner_split_rule);
@@ -428,62 +440,14 @@ export const GameRoomProvider = ({
           continue;
         }
 
-        // Create winning transaction with on-chain verification details
-        const transactionData: any = {
-          user_id: winner.userId,
-          room_id: room.id,
-          type: "win",
-          amount: earnings,
-          currency: room.currency,
-          status: "completed",
-          description: `Winnings from room: ${room.name} (Position: ${winner.position})`,
-        };
-
-        // Add on-chain transaction details if available
-        if (onChainResult?.digest) {
-          transactionData.on_chain_digest = onChainResult.digest;
-          transactionData.on_chain_room_id = room.on_chain_room_id;
-
-          // Add platform fee information from on-chain event if available
-          if (onChainResult.gameCompletedEvent?.platform_fee) {
-            transactionData.platform_fee =
-              onChainResult.gameCompletedEvent.platform_fee;
-          }
-
-          // Map on-chain transaction to this specific winner
-          const transactionMapping = mapOnChainTransactionToWinners(
-            onChainResult,
-            [winner],
-            room
-          );
-          if (transactionMapping?.winnerTransactions?.[0]) {
-            const winnerTx = transactionMapping.winnerTransactions[0];
-            transactionData.on_chain_transfer_event = JSON.stringify(
-              winnerTx.transferEvent
-            );
-            transactionData.on_chain_transfer_amount = winnerTx.amount;
-          }
-        }
-
-        const { data: transaction, error: txError } = await supabase
-          .from("transactions")
-          .insert(transactionData)
-          .select()
-          .single();
-
-        if (txError) {
-          logger.error("Error creating transaction:", txError);
-          continue;
-        }
-
         // Update payout transaction id
         await supabase
           .from("game_room_participants")
-          .update({ payout_transaction_id: transaction.id })
+          .update({ payout_transaction_id: onChainResult?.digest })
           .eq("room_id", room.id)
           .eq("user_id", winner.userId);
 
-        // Try to record in winners table (optional - if table exists)
+        // Record in winners table
         try {
           await supabase.from("game_room_winners").insert({
             room_id: room.id,
@@ -493,7 +457,7 @@ export const GameRoomProvider = ({
             prize_amount: earnings,
           });
         } catch (winnersTableError) {
-          logger.debug("Winners table might not exist:", winnersTableError);
+          logger.error("Error inserting winner record:", winnersTableError);
         }
 
         // Update game-specific leaderboard
@@ -831,7 +795,7 @@ export const GameRoomProvider = ({
       };
 
       // Store session
-      setActiveGameSessions(prev => (prev.set(sessionToken, gameSession)));
+      setActiveGameSessions((prev) => prev.set(sessionToken, gameSession));
 
       // Construct game URL with parameters
       const gameUrl = new URL(room.game?.game_url || "");
@@ -894,7 +858,8 @@ export const GameRoomProvider = ({
       return;
     }
 
-    const { type, score, userId, roomId, sessionToken, metadata } = event.data;
+    const { type, score, userId, roomId, gameId, sessionToken, metadata } =
+      event.data;
 
     logger.debug("Received message:", {
       type,
@@ -935,7 +900,7 @@ export const GameRoomProvider = ({
         }
 
         // Update score in database
-        const result = await updateGameScore(roomId, score, userId);
+        const result = await updateGameScore(roomId, score, userId, gameId);
 
         // KEEP session active - don't remove it here
 
@@ -1076,128 +1041,89 @@ export const GameRoomProvider = ({
 
   // Function to automatically complete a single game
   const autoCompleteGame = async (room: any) => {
+    // Call smart contract first to complete the game on-chain
+    let onChainResult = null;
     try {
-      logger.info(`Auto-completing game room: ${room.id} (${room.name})`);
-
-      // Call smart contract first to complete the game on-chain
-      let onChainResult = null;
-      try {
-        if (
-          room.currency === "USDC" &&
-          onChainGameRoom &&
-          room.on_chain_room_id
-        ) {
-          const signer = getWalletKeypair();
-          if (!signer) {
-            throw new Error(
-              `Cannot complete game ${room.id} on-chain: Missing wallet signer`
-            );
-            // Continue with database completion as fallback
-          } else {
-            logger.info(`Completing game on-chain for room ${room.id}`);
-
-            // Get all active participants with their scores for on-chain completion
-            const { data: participants } = await supabase
-              .from("game_room_participants")
-              .select("*, user:profiles(*)")
-              .eq("room_id", room.id)
-              .eq("is_active", true)
-              .order("score", { ascending: false });
-
-            if (participants && participants.length > 0) {
-              // Determine winners for on-chain completion
-              const winners = determineWinners(
-                participants,
-                room.winner_split_rule
-              );
-              const winnerAddresses: string[] = [];
-              const scores: number[] = [];
-
-              for (const winner of winners) {
-                const participant = participants.find(
-                  (p: any) => p.user_id === winner.userId
-                );
-                const addr = (
-                  participant?.user
-                    ?.sui_wallet_data as Profile["sui_wallet_data"]
-                )?.address;
-                if (addr) {
-                  winnerAddresses.push(addr);
-                  scores.push(Number(participant?.score || 0));
-                }
-              }
-
-              if (winnerAddresses.length > 0) {
-                onChainResult = await onChainGameRoom.completeGame({
-                  walletKeyPair: signer,
-                  roomId: room.on_chain_room_id,
-                  winnerAddresses,
-                  scores,
-                });
-                if (!onChainResult?.digest) {
-                  throw new Error(
-                    `Failed to complete game on-chain for room ${room.id}: Missing transaction digest`
-                  );
-                }
-                logger.success(
-                  `Successfully completed game on-chain for room ${room.id} with digest: ${onChainResult.digest}`
-                );
-              }
-            }
-          }
-        }
-      } catch (onChainError) {
-        logger.error(
-          `Failed to complete game on-chain for room ${room.id}:`,
-          onChainError
-        );
-        throw onChainError;
-      }
-
-      // Get all active participants with their scores
+      // Get all active participants with their scores for on-chain completion
       const { data: participants } = await supabase
         .from("game_room_participants")
-        .select("*")
+        .select("*, user:profiles(*)")
         .eq("room_id", room.id)
         .eq("is_active", true)
         .order("score", { ascending: false });
+      if (
+        room.currency === "USDC" &&
+        onChainGameRoom &&
+        room.on_chain_room_id
+      ) {
+        logger.info(`Completing game on-chain for room ${room.id}`);
 
-      if (!participants || participants.length === 0) {
-        // No participants - just mark as completed
-        await supabase
-          .from("game_rooms")
-          .update({
-            status: "completed",
-            actual_end_time: new Date().toISOString(),
-            platform_fee_collected: 0,
-          })
-          .eq("id", room.id);
+        if (participants && participants.length > 0) {
+          // Determine winners for on-chain completion
+          const winners = determineWinners(
+            participants,
+            room.winner_split_rule
+          );
+          const winnerAddresses: string[] = [];
+          const scores: number[] = [];
 
-        logger.info(`Room ${room.id} completed with no participants`);
-        return;
+          for (const winner of winners) {
+            const participant = participants.find(
+              (p: any) => p.user_id === winner.userId
+            );
+            const addr = (
+              participant?.user?.sui_wallet_data as Profile["sui_wallet_data"]
+            )?.address;
+            if (addr) {
+              winnerAddresses.push(addr);
+              scores.push(Number(participant?.score || 0));
+            }
+          }
+
+          if (winnerAddresses.length > 0) {
+            onChainResult = await onChainGameRoom.completeGame({
+              roomId: room.on_chain_room_id,
+              winnerAddresses,
+              scores,
+            });
+            if (!onChainResult?.digest) {
+              throw new Error(
+                `Failed to complete game on-chain for room ${room.id}: Missing transaction digest`
+              );
+            }
+            await distributePrizes(room, participants, winners, onChainResult);
+            logger.success(
+              `Successfully completed game on-chain for room ${room.id} with digest: ${onChainResult.digest}`
+            );
+          } else {
+            await onChainGameRoom.completeGame({
+              roomId: room.on_chain_room_id,
+              winnerAddresses: [],
+              scores: [],
+            });
+            logger.success(
+              `Successfully completed game on-chain for room ${room.id} with digest: ${onChainResult.digest}`
+            );
+          }
+          // Distribute prizes with on-chain transaction information
+        }
+        if (!participants || participants.length === 0) {
+          // No participants - just mark as completed
+          await supabase
+            .from("game_rooms")
+            .update({
+              status: "completed",
+              actual_end_time: new Date().toISOString(),
+              platform_fee_collected: 0,
+            })
+            .eq("id", room.id);
+
+          logger.info(`Room ${room.id} completed with no participants`);
+          return;
+        }
       }
-
-      // If only one participant, they win everything (minus platform fee)
-      if (participants.length === 1) {
-        const winners = [
-          {
-            userId: participants[0].user_id,
-            position: 1,
-            participantId: participants[0].id,
-          },
-        ];
-        await distributePrizes(room, participants, winners);
-        return;
-      }
-
-      // Determine winners based on winner split rule and scores
-      const winners = determineWinners(participants, room.winner_split_rule);
-
-      // Distribute prizes with on-chain transaction information
-      await distributePrizes(room, participants, winners, onChainResult);
     } catch (error) {
-      logger.error(`Error auto-completing game ${room.id}:`, error);
-
+      logger.error(`Failed to complete game for room ${room.id}:`, error);
       // If auto-completion fails, at least update the status
       try {
         await supabase
@@ -1211,6 +1137,7 @@ export const GameRoomProvider = ({
       } catch (statusError) {
         logger.error("Error updating room status as fallback:", statusError);
       }
+      throw error;
     }
   };
 
@@ -1363,13 +1290,6 @@ export const GameRoomProvider = ({
 
       if (filters.creatorId) {
         query = query.eq("creator_id", filters.creatorId);
-      }
-
-      // Apply search query (search in room name and game name)
-      if (filters.searchQuery) {
-        query = query.or(
-          `name.ilike.%${filters.searchQuery}%,game.name.ilike.%${filters.searchQuery}%`
-        );
       }
 
       // Apply sorting
@@ -1986,7 +1906,8 @@ export const GameRoomProvider = ({
   const updateGameScore = async (
     roomId: string,
     score: number,
-    userId?: string
+    userId?: string,
+    gameId?: string
   ) => {
     const userIdToUse = userId || user?.id;
 
@@ -2014,17 +1935,17 @@ export const GameRoomProvider = ({
 
       const currentScore = currentParticipant?.score || 0;
 
-      logger.debug(`Score comparison details:`);
-      logger.info(
-        `  - Current score: ${currentScore} (type: ${typeof currentScore})`
-      );
-      logger.info(`  - New score: ${score} (type: ${typeof score})`);
-      logger.info(`  - New score > current? ${score > currentScore}`);
-      logger.info(`  - New score as number: ${Number(score)}`);
-      logger.info(`  - Current score as number: ${Number(currentScore)}`);
-      logger.info(
-        `  - Number comparison: ${Number(score) > Number(currentScore)}`
-      );
+      // logger.debug(`Score comparison details:`);
+      // logger.info(
+      //   `  - Current score: ${currentScore} (type: ${typeof currentScore})`
+      // );
+      // logger.info(`  - New score: ${score} (type: ${typeof score})`);
+      // logger.info(`  - New score > current? ${score > currentScore}`);
+      // logger.info(`  - New score as number: ${Number(score)}`);
+      // logger.info(`  - Current score as number: ${Number(currentScore)}`);
+      // logger.info(
+      //   `  - Number comparison: ${Number(score) > Number(currentScore)}`
+      // );
 
       // Convert both to numbers to ensure proper comparison
       const currentScoreNum = Number(currentScore);
@@ -2035,6 +1956,13 @@ export const GameRoomProvider = ({
         logger.debug(
           `Updating score from ${currentScoreNum} to ${newScoreNum}`
         );
+        if (gameId) {
+          await supabase.from("game_scores").insert({
+            game_id: gameId,
+            player_id: user.id,
+            score,
+          });
+        }
 
         const { data: updateResult, error: updateError } = await supabase
           .from("game_room_participants")
@@ -2084,7 +2012,7 @@ export const GameRoomProvider = ({
   // Manual complete game function (for admin use)
   const completeGame = async (
     roomId: string,
-    winners: { userId: string; position: number }[]
+    winners: { userId: string; position: number; participantId: string }[]
   ) => {
     try {
       // Get room details
@@ -2119,7 +2047,7 @@ export const GameRoomProvider = ({
         logger.info(`Completing game on-chain for room ${roomId}`);
 
         const activeParticipants = (room.participants || []).filter(
-          (p: any) => p.is_active
+          (p) => p.is_active
         );
         const winnersSorted = winners.sort((a, b) => a.position - b.position);
         const winnerAddresses: string[] = [];
@@ -2127,7 +2055,7 @@ export const GameRoomProvider = ({
 
         for (const w of winnersSorted) {
           const participant = activeParticipants.find(
-            (p: any) => p.user_id === w.userId
+            (p) => p.user_id === w.userId
           );
           const addr = (
             participant?.user?.sui_wallet_data as Profile["sui_wallet_data"]
@@ -2139,7 +2067,6 @@ export const GameRoomProvider = ({
 
         // Call smart contract first - this must succeed
         onChainResult = await onChainGameRoom.completeGame({
-          walletKeyPair: signer,
           roomId: room.on_chain_room_id,
           winnerAddresses,
           scores,
@@ -2182,7 +2109,7 @@ export const GameRoomProvider = ({
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, currentPage, filters]);
+  }, [user, currentPage]);
 
   // Enhanced useEffect to periodically check for expired games
   useEffect(() => {

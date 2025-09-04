@@ -707,6 +707,7 @@ export type Database = {
           game_url: string | null
           id: string
           image_url: string | null
+          instructions: string | null
           is_active: boolean | null
           max_players: number | null
           min_players: number | null
@@ -720,6 +721,7 @@ export type Database = {
           game_url?: string | null
           id?: string
           image_url?: string | null
+          instructions?: string | null
           is_active?: boolean | null
           max_players?: number | null
           min_players?: number | null
@@ -733,6 +735,7 @@ export type Database = {
           game_url?: string | null
           id?: string
           image_url?: string | null
+          instructions?: string | null
           is_active?: boolean | null
           max_players?: number | null
           min_players?: number | null
@@ -1416,6 +1419,7 @@ export const Constants = {
     },
   },
 } as const
+
 
 
 // Gaming avatars for chat rooms
