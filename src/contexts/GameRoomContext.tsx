@@ -187,6 +187,9 @@ export const GameRoomProvider = ({
   const [activeGameSessions, setActiveGameSessions] = useState<
     Map<string, GameSession>
   >(new Map());
+  const [newGameSessions, setNewGameSessions] = useState<
+    Map<string, GameSession>
+  >(new Map());
 
   const onChainGameRoom = useMemo(() => {
     // logger.debug("Creating onChainGameRoom instance...");
@@ -795,8 +798,9 @@ export const GameRoomProvider = ({
       };
 
       // Store session
+      logger.debug("Storing game session:", gameSession);
       setActiveGameSessions((prev) => prev.set(sessionToken, gameSession));
-
+      setNewGameSessions((prev) => prev.set(sessionToken, gameSession));
       // Construct game URL with parameters
       const gameUrl = new URL(room.game?.game_url || "");
       gameUrl.searchParams.set("user_id", user.id);
@@ -876,7 +880,9 @@ export const GameRoomProvider = ({
     if (type === "SUBMIT_SCORE") {
       try {
         // Verify session
+        logger.debug("Active game sessions:", activeGameSessions);
         const session = activeGameSessions.get(sessionToken);
+        logger.debug("New game sessions:", session);
         if (!session) {
           logger.error("Invalid session token:", sessionToken);
           logger.debug(
@@ -934,7 +940,7 @@ export const GameRoomProvider = ({
         }
 
         // Refresh room data
-        await refreshRooms();
+        // await refreshRooms();
 
         logger.info("Score submission result:", {
           roomId,

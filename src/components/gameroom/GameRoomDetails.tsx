@@ -1,11 +1,17 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useGameRoom } from '@/contexts/GameRoomContext';
-import { useAuth } from '@/contexts/AuthContext';
-import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useGameRoom } from "@/contexts/GameRoomContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 const GameRoomDetails = ({ roomId, onBack }) => {
-  const { getRoomDetails, getRoomParticipants, updateGameScore, leaveRoom, cancelRoom, playGame } = useGameRoom();
+  const {
+    getRoomDetails,
+    getRoomParticipants,
+    leaveRoom,
+    cancelRoom,
+    playGame,
+  } = useGameRoom();
   const { user } = useAuth();
   const { toast } = useToast();
   const [room, setRoom] = useState(null);
@@ -25,53 +31,61 @@ const GameRoomDetails = ({ roomId, onBack }) => {
     const endTime = new Date(room.end_time);
 
     // If current time has passed end time and room is still ongoing/waiting
-    if (now >= endTime && (room.status === 'ongoing' || room.status === 'waiting')) {
-      console.log('Room should auto-complete, refreshing data...');
+    if (
+      now >= endTime &&
+      (room.status === "ongoing" || room.status === "waiting")
+    ) {
+      console.log("Room should auto-complete, refreshing data...");
       // Refresh room data to get the updated status after auto-completion
       await loadRoomData(false);
     }
   }, [room]);
 
   // Enhanced loadRoomData function
-  const loadRoomData = useCallback(async (showLoader = true) => {
-    if (showLoader) {
-      setLoading(true);
-    }
-    try {
-      const [roomData, participantsData] = await Promise.all([
-        getRoomDetails(roomId),
-        getRoomParticipants(roomId)
-      ]);
+  const loadRoomData = useCallback(
+    async (showLoader = true) => {
+      if (showLoader) {
+        setLoading(true);
+      }
+      try {
+        const [roomData, participantsData] = await Promise.all([
+          getRoomDetails(roomId),
+          getRoomParticipants(roomId),
+        ]);
 
-      if (roomData) {
-        setRoom(roomData);
+        if (roomData) {
+          setRoom(roomData);
 
-        // If room is completed, determine winners for display
-        if (roomData.status === 'completed') {
-          const activeParticipants = participantsData || [];
-          const sortedParticipants = activeParticipants.sort((a, b) => (b.score || 0) - (a.score || 0));
-          const winnersWithEarnings = sortedParticipants
-            .filter(p => p.final_position && p.earnings > 0)
-            .sort((a, b) => a.final_position - b.final_position);
-          setWinners(winnersWithEarnings);
+          // If room is completed, determine winners for display
+          if (roomData.status === "completed") {
+            const activeParticipants = participantsData || [];
+            const sortedParticipants = activeParticipants.sort(
+              (a, b) => (b.score || 0) - (a.score || 0)
+            );
+            const winnersWithEarnings = sortedParticipants
+              .filter((p) => p.final_position && p.earnings > 0)
+              .sort((a, b) => a.final_position - b.final_position);
+            setWinners(winnersWithEarnings);
+          }
+        }
+        if (participantsData) {
+          setParticipants(participantsData);
+        }
+      } catch (error) {
+        console.error("Error loading room data:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load room details",
+          variant: "destructive",
+        });
+      } finally {
+        if (showLoader) {
+          setLoading(false);
         }
       }
-      if (participantsData) {
-        setParticipants(participantsData);
-      }
-    } catch (error) {
-      console.error('Error loading room data:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load room details",
-        variant: "destructive",
-      });
-    } finally {
-      if (showLoader) {
-        setLoading(false);
-      }
-    }
-  }, [roomId, getRoomDetails, getRoomParticipants, toast]);
+    },
+    [roomId, getRoomDetails, getRoomParticipants, toast]
+  );
 
   useEffect(() => {
     loadRoomData();
@@ -101,24 +115,32 @@ const GameRoomDetails = ({ roomId, onBack }) => {
 
     const subscription = supabase
       .channel(`room_${roomId}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'game_rooms',
-        filter: `id=eq.${roomId}`
-      }, () => {
-        console.log('Room updated, refreshing data...');
-        loadRoomData(false);
-      })
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'game_room_participants',
-        filter: `room_id=eq.${roomId}`
-      }, () => {
-        console.log('Participants updated, refreshing data...');
-        loadRoomData(false);
-      })
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "game_rooms",
+          filter: `id=eq.${roomId}`,
+        },
+        () => {
+          console.log("Room updated, refreshing data...");
+          loadRoomData(false);
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "game_room_participants",
+          filter: `room_id=eq.${roomId}`,
+        },
+        () => {
+          console.log("Participants updated, refreshing data...");
+          loadRoomData(false);
+        }
+      )
       .subscribe();
 
     return () => {
@@ -128,24 +150,24 @@ const GameRoomDetails = ({ roomId, onBack }) => {
 
   // Determine actual room status based on time
   const getActualStatus = useCallback(() => {
-    if (!room) return 'waiting';
+    if (!room) return "waiting";
 
     const now = currentTime;
     const startTime = new Date(room.start_time);
     const endTime = new Date(room.end_time);
 
     // If room was manually cancelled or completed
-    if (room.status === 'cancelled' || room.status === 'completed') {
+    if (room.status === "cancelled" || room.status === "completed") {
       return room.status;
     }
 
     // Check time-based status
     if (now < startTime) {
-      return 'waiting';
+      return "waiting";
     } else if (now >= startTime && now < endTime) {
-      return 'ongoing';
+      return "ongoing";
     } else if (now >= endTime) {
-      return 'completed';
+      return "completed";
     }
 
     return room.status;
@@ -162,7 +184,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
         loadRoomData(false);
       }, 1000);
     } catch (error) {
-      console.error('Error launching game:', error);
+      console.error("Error launching game:", error);
     } finally {
       setIsLaunchingGame(false);
     }
@@ -177,7 +199,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
       });
       onBack();
     } catch (error) {
-      console.error('Error leaving room:', error);
+      console.error("Error leaving room:", error);
       toast({
         title: "Error",
         description: "Failed to leave room",
@@ -195,7 +217,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
       });
       onBack();
     } catch (error) {
-      console.error('Error cancelling room:', error);
+      console.error("Error cancelling room:", error);
       toast({
         title: "Error",
         description: "Failed to cancel room",
@@ -206,12 +228,12 @@ const GameRoomDetails = ({ roomId, onBack }) => {
 
   // Helper functions
   const formatDateTime = (date) => {
-    return new Date(date).toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+    return new Date(date).toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
 
@@ -219,7 +241,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
     const start = new Date(startTime);
     const diff = start.getTime() - currentTime.getTime();
 
-    if (diff <= 0) return 'Game can start now!';
+    if (diff <= 0) return "Game can start now!";
 
     const hours = Math.floor(diff / (1000 * 60 * 60));
     const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
@@ -232,23 +254,29 @@ const GameRoomDetails = ({ roomId, onBack }) => {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'waiting': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
-      case 'starting': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
-      case 'ongoing': return 'bg-green-500/20 text-green-400 border-green-500/30';
-      case 'completed': return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
-      case 'cancelled': return 'bg-red-500/20 text-red-400 border-red-500/30';
-      default: return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
+      case "waiting":
+        return "bg-yellow-500/20 text-yellow-400 border-yellow-500/30";
+      case "starting":
+        return "bg-blue-500/20 text-blue-400 border-blue-500/30";
+      case "ongoing":
+        return "bg-green-500/20 text-green-400 border-green-500/30";
+      case "completed":
+        return "bg-gray-500/20 text-gray-400 border-gray-500/30";
+      case "cancelled":
+        return "bg-red-500/20 text-red-400 border-red-500/30";
+      default:
+        return "bg-gray-500/20 text-gray-400 border-gray-500/30";
     }
   };
 
   const getWinnerSplitDisplay = (rule) => {
     const splits = {
-      'winner_takes_all': 'Winner Takes All (100%)',
-      'top_2': 'Top 2 Players (60% / 40%)',
-      'top_3': 'Top 3 Players (50% / 30% / 20%)',
-      'top_4': 'Top 4 Players (40% / 30% / 20% / 10%)',
-      'top_5': 'Top 5 Players',
-      'top_10': 'Top 10 Players'
+      winner_takes_all: "Winner Takes All (100%)",
+      top_2: "Top 2 Players (60% / 40%)",
+      top_3: "Top 3 Players (50% / 30% / 20%)",
+      top_4: "Top 4 Players (40% / 30% / 20% / 10%)",
+      top_5: "Top 5 Players",
+      top_10: "Top 10 Players",
     };
     return splits[rule] || rule;
   };
@@ -273,12 +301,17 @@ const GameRoomDetails = ({ roomId, onBack }) => {
   }
 
   const isCreator = room.creator_id === user?.id;
-  const isParticipant = participants.some(p => p.user_id === user?.id && p.is_active);
+  const isParticipant = participants.some(
+    (p) => p.user_id === user?.id && p.is_active
+  );
   const actualStatus = getActualStatus();
   const hasReachedStartTime = currentTime >= new Date(room.start_time);
   const hasEnoughPlayers = room.current_players >= room.min_players_to_start;
-  const canPlayGame = isParticipant && actualStatus === 'ongoing';
-  const canCancelRoom = isCreator && actualStatus === 'waiting' && currentTime < new Date(room.start_time);
+  const canPlayGame = isParticipant && actualStatus === "ongoing";
+  const canCancelRoom =
+    isCreator &&
+    actualStatus === "waiting" &&
+    currentTime < new Date(room.start_time);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -291,7 +324,11 @@ const GameRoomDetails = ({ roomId, onBack }) => {
           <span className="text-2xl">←</span>
           <span className="font-cyber">Back to Rooms</span>
         </button>
-        <div className={`px-4 py-2 rounded-full text-sm font-bold font-cyber border ${getStatusColor(actualStatus)}`}>
+        <div
+          className={`px-4 py-2 rounded-full text-sm font-bold font-cyber border ${getStatusColor(
+            actualStatus
+          )}`}
+        >
           {actualStatus.toUpperCase()}
         </div>
       </div>
@@ -304,7 +341,10 @@ const GameRoomDetails = ({ roomId, onBack }) => {
               {room.name}
             </h1>
             <p className="text-muted-foreground font-cyber">
-              Game: <span className="text-foreground">{room.game?.name || 'Unknown Game'}</span>
+              Game:{" "}
+              <span className="text-foreground">
+                {room.game?.name || "Unknown Game"}
+              </span>
             </p>
             {room.game?.game_url && (
               <p className="text-xs text-muted-foreground font-cyber mt-1">
@@ -316,7 +356,9 @@ const GameRoomDetails = ({ roomId, onBack }) => {
             {room.is_private && (
               <div className="bg-purple-500/20 border border-purple-500/30 rounded-lg px-4 py-2">
                 <p className="text-xs font-cyber text-purple-400">ROOM CODE</p>
-                <p className="font-cyber text-xl text-purple-300">{room.room_code}</p>
+                <p className="font-cyber text-xl text-purple-300">
+                  {room.room_code}
+                </p>
               </div>
             )}
             {room.on_chain_create_digest && (
@@ -329,7 +371,9 @@ const GameRoomDetails = ({ roomId, onBack }) => {
                 }
                 className="bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 rounded-lg px-4 py-2 hover:from-cyan-500/30 hover:to-blue-500/30 transition-all duration-200 group"
               >
-                <p className="text-xs font-cyber text-cyan-400 mb-1">ON-CHAIN</p>
+                <p className="text-xs font-cyber text-cyan-400 mb-1">
+                  ON-CHAIN
+                </p>
                 <p className="font-cyber text-sm text-cyan-300 group-hover:text-cyan-200 transition-colors">
                   View Transaction
                 </p>
@@ -352,13 +396,16 @@ const GameRoomDetails = ({ roomId, onBack }) => {
               {room.total_prize_pool} {room.currency}
             </p>
             {room.is_sponsored && (
-              <p className="text-xs font-cyber text-green-300 mt-1">Sponsored</p>
-            )}
-            {actualStatus === 'completed' && room.platform_fee_collected > 0 && (
               <p className="text-xs font-cyber text-green-300 mt-1">
-                Platform Fee: {room.platform_fee_collected} {room.currency}
+                Sponsored
               </p>
             )}
+            {actualStatus === "completed" &&
+              room.platform_fee_collected > 0 && (
+                <p className="text-xs font-cyber text-green-300 mt-1">
+                  Platform Fee: {room.platform_fee_collected} {room.currency}
+                </p>
+              )}
           </div>
 
           {/* Players */}
@@ -376,33 +423,53 @@ const GameRoomDetails = ({ roomId, onBack }) => {
           <div className="bg-gradient-to-br from-yellow-500/20 to-orange-500/20 border border-yellow-500/30 rounded-xl p-4">
             <p className="text-sm font-cyber text-yellow-400 mb-1">Entry Fee</p>
             <p className="text-2xl font-cyber font-bold text-white">
-              {room.is_sponsored ? 'FREE' : `${room.entry_fee} ${room.currency}`}
+              {room.is_sponsored
+                ? "FREE"
+                : `${room.entry_fee} ${room.currency}`}
             </p>
             <p className="text-xs font-cyber text-yellow-300 mt-1">
-              {room.is_sponsored ? 'Sponsored Entry' : 'Per Player'}
+              {room.is_sponsored ? "Sponsored Entry" : "Per Player"}
             </p>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
           <div className="bg-secondary/30 rounded-lg p-4 border border-primary/20">
-            <p className="text-sm font-cyber text-muted-foreground mb-1">Winner Split</p>
-            <p className="font-cyber text-foreground">{getWinnerSplitDisplay(room.winner_split_rule)}</p>
+            <p className="text-sm font-cyber text-muted-foreground mb-1">
+              Winner Split
+            </p>
+            <p className="font-cyber text-foreground">
+              {getWinnerSplitDisplay(room.winner_split_rule)}
+            </p>
           </div>
           <div className="bg-secondary/30 rounded-lg p-4 border border-primary/20">
-            <p className="text-sm font-cyber text-muted-foreground mb-1">Host</p>
-            <p className="font-cyber text-foreground">{room.creator?.username || 'Unknown'}</p>
+            <p className="text-sm font-cyber text-muted-foreground mb-1">
+              Host
+            </p>
+            <p className="font-cyber text-foreground">
+              {room.creator?.username || "Unknown"}
+            </p>
           </div>
           <div className="bg-secondary/30 rounded-lg p-4 border border-primary/20">
-            <p className="text-sm font-cyber text-muted-foreground mb-1">Start Time</p>
-            <p className="font-cyber text-foreground">{formatDateTime(room.start_time)}</p>
-            {actualStatus === 'waiting' && (
-              <p className="text-xs font-cyber text-accent mt-1">{getTimeRemaining(room.start_time)}</p>
+            <p className="text-sm font-cyber text-muted-foreground mb-1">
+              Start Time
+            </p>
+            <p className="font-cyber text-foreground">
+              {formatDateTime(room.start_time)}
+            </p>
+            {actualStatus === "waiting" && (
+              <p className="text-xs font-cyber text-accent mt-1">
+                {getTimeRemaining(room.start_time)}
+              </p>
             )}
           </div>
           <div className="bg-secondary/30 rounded-lg p-4 border border-primary/20">
-            <p className="text-sm font-cyber text-muted-foreground mb-1">End Time</p>
-            <p className="font-cyber text-foreground">{formatDateTime(room.end_time)}</p>
+            <p className="text-sm font-cyber text-muted-foreground mb-1">
+              End Time
+            </p>
+            <p className="font-cyber text-foreground">
+              {formatDateTime(room.end_time)}
+            </p>
             {room.actual_end_time && (
               <p className="text-xs font-cyber text-green-400 mt-1">
                 Completed: {formatDateTime(room.actual_end_time)}
@@ -413,32 +480,35 @@ const GameRoomDetails = ({ roomId, onBack }) => {
       </div>
 
       {/* Winners Section - Only show if game is completed and there are winners */}
-      {actualStatus === 'completed' && winners.length > 0 && (
+      {actualStatus === "completed" && winners.length > 0 && (
         <div className="bg-gradient-to-br from-card to-secondary/20 border-2 border-primary/30 rounded-2xl p-6 cyber-border">
-          <h2 className="font-cyber text-xl font-bold text-primary mb-4">🏆 Winners</h2>
+          <h2 className="font-cyber text-xl font-bold text-primary mb-4">
+            🏆 Winners
+          </h2>
           <div className="space-y-3">
             {winners.map((winner, index) => (
               <div
                 key={winner.id}
-                className={`flex items-center justify-between rounded-lg p-4 border ${winner.final_position === 1
-                  ? 'bg-gradient-to-r from-yellow-500/20 to-amber-500/20 border-yellow-500/30'
-                  : winner.final_position === 2
-                    ? 'bg-gradient-to-r from-gray-300/20 to-gray-400/20 border-gray-400/30'
+                className={`flex items-center justify-between rounded-lg p-4 border ${
+                  winner.final_position === 1
+                    ? "bg-gradient-to-r from-yellow-500/20 to-amber-500/20 border-yellow-500/30"
+                    : winner.final_position === 2
+                    ? "bg-gradient-to-r from-gray-300/20 to-gray-400/20 border-gray-400/30"
                     : winner.final_position === 3
-                      ? 'bg-gradient-to-r from-amber-600/20 to-orange-600/20 border-amber-600/30'
-                      : 'bg-secondary/30 border-primary/20'
-                  }`}
+                    ? "bg-gradient-to-r from-amber-600/20 to-orange-600/20 border-amber-600/30"
+                    : "bg-secondary/30 border-primary/20"
+                }`}
               >
                 <div className="flex items-center gap-4">
                   <div className="text-2xl">
-                    {winner.final_position === 1 && '🥇'}
-                    {winner.final_position === 2 && '🥈'}
-                    {winner.final_position === 3 && '🥉'}
+                    {winner.final_position === 1 && "🥇"}
+                    {winner.final_position === 2 && "🥈"}
+                    {winner.final_position === 3 && "🥉"}
                     {winner.final_position > 3 && `#${winner.final_position}`}
                   </div>
                   <div>
                     <p className="font-cyber text-foreground font-bold">
-                      {winner.user?.username || 'Unknown Player'}
+                      {winner.user?.username || "Unknown Player"}
                       {winner.user_id === user?.id && (
                         <span className="text-xs text-accent ml-2">(You)</span>
                       )}
@@ -464,10 +534,14 @@ const GameRoomDetails = ({ roomId, onBack }) => {
 
       {/* Participants */}
       <div className="bg-gradient-to-br from-card to-secondary/20 border-2 border-primary/30 rounded-2xl p-6 cyber-border">
-        <h2 className="font-cyber text-xl font-bold text-primary mb-4">Participants</h2>
+        <h2 className="font-cyber text-xl font-bold text-primary mb-4">
+          Participants
+        </h2>
         <div className="space-y-2">
           {participants.length === 0 ? (
-            <p className="text-muted-foreground text-center py-4">No participants yet</p>
+            <p className="text-muted-foreground text-center py-4">
+              No participants yet
+            </p>
           ) : (
             participants
               .sort((a, b) => (b.score || 0) - (a.score || 0)) // Sort by score descending
@@ -477,31 +551,44 @@ const GameRoomDetails = ({ roomId, onBack }) => {
                   className="flex items-center justify-between bg-secondary/30 rounded-lg p-3 border border-primary/20"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="font-cyber text-lg text-primary">#{index + 1}</span>
+                    <span className="font-cyber text-lg text-primary">
+                      #{index + 1}
+                    </span>
                     <div>
                       <p className="font-cyber text-foreground">
-                        {participant.user?.username || 'Unknown Player'}
+                        {participant.user?.username || "Unknown Player"}
                         {participant.user_id === user?.id && (
-                          <span className="text-xs text-accent ml-2">(You)</span>
+                          <span className="text-xs text-accent ml-2">
+                            (You)
+                          </span>
                         )}
                         {participant.user_id === room.creator_id && (
-                          <span className="text-xs text-yellow-400 ml-2">(Host)</span>
+                          <span className="text-xs text-yellow-400 ml-2">
+                            (Host)
+                          </span>
                         )}
                       </p>
                       <p className="text-xs font-cyber text-muted-foreground">
-                        Joined: {new Date(participant.joined_at).toLocaleTimeString()}
+                        Joined:{" "}
+                        {new Date(participant.joined_at).toLocaleTimeString()}
                       </p>
                     </div>
                   </div>
-                  {(actualStatus === 'ongoing' || actualStatus === 'completed') && (
+                  {(actualStatus === "ongoing" ||
+                    actualStatus === "completed") && (
                     <div className="text-right">
-                      <p className="font-cyber text-sm text-muted-foreground">Score</p>
-                      <p className="font-cyber text-lg text-accent">{participant.score || 0}</p>
-                      {actualStatus === 'completed' && participant.earnings > 0 && (
-                        <p className="text-xs font-cyber text-green-400">
-                          Won: {participant.earnings} {room.currency}
-                        </p>
-                      )}
+                      <p className="font-cyber text-sm text-muted-foreground">
+                        Score
+                      </p>
+                      <p className="font-cyber text-lg text-accent">
+                        {participant.score || 0}
+                      </p>
+                      {actualStatus === "completed" &&
+                        participant.earnings > 0 && (
+                          <p className="text-xs font-cyber text-green-400">
+                            Won: {participant.earnings} {room.currency}
+                          </p>
+                        )}
                     </div>
                   )}
                 </div>
@@ -525,48 +612,56 @@ const GameRoomDetails = ({ roomId, onBack }) => {
                 Launching Game...
               </span>
             ) : (
-              '🎮 Play Game'
+              "🎮 Play Game"
             )}
           </button>
         )}
 
         {/* Waiting for players message */}
-        {actualStatus === 'waiting' && hasReachedStartTime && !hasEnoughPlayers && (
-          <div className="flex-1 bg-yellow-600/20 border border-yellow-500/30 text-yellow-400 font-cyber font-bold py-3 rounded-xl text-center">
-            ⏳ Waiting for minimum {room.min_players_to_start} players (Currently: {room.current_players})
-          </div>
-        )}
+        {actualStatus === "waiting" &&
+          hasReachedStartTime &&
+          !hasEnoughPlayers && (
+            <div className="flex-1 bg-yellow-600/20 border border-yellow-500/30 text-yellow-400 font-cyber font-bold py-3 rounded-xl text-center">
+              ⏳ Waiting for minimum {room.min_players_to_start} players
+              (Currently: {room.current_players})
+            </div>
+          )}
 
         {/* Waiting for start time */}
-        {actualStatus === 'waiting' && !hasReachedStartTime && isParticipant && (
-          <div className="flex-1 bg-blue-600/20 border border-blue-500/30 text-blue-400 font-cyber font-bold py-3 rounded-xl text-center">
-            ⏰ Game starts {getTimeRemaining(room.start_time)}
-          </div>
-        )}
+        {actualStatus === "waiting" &&
+          !hasReachedStartTime &&
+          isParticipant && (
+            <div className="flex-1 bg-blue-600/20 border border-blue-500/30 text-blue-400 font-cyber font-bold py-3 rounded-xl text-center">
+              ⏰ Game starts {getTimeRemaining(room.start_time)}
+            </div>
+          )}
 
         {/* Game Completed */}
-        {actualStatus === 'completed' && (
+        {actualStatus === "completed" && (
           <div className="flex-1 bg-gray-600/50 text-gray-300 font-cyber font-bold py-3 rounded-xl text-center">
             🏁 Game Completed - Prizes Distributed
           </div>
         )}
 
         {/* Game Cancelled */}
-        {actualStatus === 'cancelled' && (
+        {actualStatus === "cancelled" && (
           <div className="flex-1 bg-red-600/50 text-red-300 font-cyber font-bold py-3 rounded-xl text-center">
             ❌ Game Cancelled - Participants Refunded
           </div>
         )}
 
         {/* Leave Room - Only before game starts */}
-        {actualStatus === 'waiting' && isParticipant && !isCreator && !hasReachedStartTime && (
-          <button
-            onClick={() => setShowLeaveConfirm(true)}
-            className="flex-1 bg-gradient-to-r from-red-500 to-red-600 text-white font-cyber font-bold py-3 rounded-xl hover:scale-105 transition-all shadow-lg hover:shadow-red-500/50"
-          >
-            Leave Room
-          </button>
-        )}
+        {actualStatus === "waiting" &&
+          isParticipant &&
+          !isCreator &&
+          !hasReachedStartTime && (
+            <button
+              onClick={() => setShowLeaveConfirm(true)}
+              className="flex-1 bg-gradient-to-r from-red-500 to-red-600 text-white font-cyber font-bold py-3 rounded-xl hover:scale-105 transition-all shadow-lg hover:shadow-red-500/50"
+            >
+              Leave Room
+            </button>
+          )}
 
         {/* Cancel Room - Only before start time */}
         {canCancelRoom && (
@@ -579,7 +674,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
         )}
 
         {/* Disabled Cancel - After start time */}
-        {isCreator && actualStatus === 'waiting' && hasReachedStartTime && (
+        {isCreator && actualStatus === "waiting" && hasReachedStartTime && (
           <div className="flex-1 bg-gray-600/30 text-gray-500 font-cyber font-bold py-3 rounded-xl text-center cursor-not-allowed">
             Cannot Cancel - Game Time Reached
           </div>
@@ -590,9 +685,12 @@ const GameRoomDetails = ({ roomId, onBack }) => {
       {showLeaveConfirm && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-card border-2 border-primary/50 rounded-2xl p-6 max-w-md w-full mx-4">
-            <h3 className="font-cyber text-xl font-bold text-primary mb-4">Leave Room?</h3>
+            <h3 className="font-cyber text-xl font-bold text-primary mb-4">
+              Leave Room?
+            </h3>
             <p className="text-muted-foreground mb-6">
-              Are you sure you want to leave this room? You will forfeit your entry fee.
+              Are you sure you want to leave this room? You will forfeit your
+              entry fee.
             </p>
             <div className="flex gap-3">
               <button
@@ -616,9 +714,12 @@ const GameRoomDetails = ({ roomId, onBack }) => {
       {showCancelConfirm && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-card border-2 border-primary/50 rounded-2xl p-6 max-w-md w-full mx-4">
-            <h3 className="font-cyber text-xl font-bold text-primary mb-4">Cancel Room?</h3>
+            <h3 className="font-cyber text-xl font-bold text-primary mb-4">
+              Cancel Room?
+            </h3>
             <p className="text-muted-foreground mb-6">
-              Are you sure you want to cancel this room? All participants will receive full refunds (no platform fee charged).
+              Are you sure you want to cancel this room? All participants will
+              receive full refunds (no platform fee charged).
             </p>
             <div className="flex gap-3">
               <button
