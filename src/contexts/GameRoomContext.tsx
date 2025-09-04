@@ -43,12 +43,14 @@ interface GameRoom {
   participants?: GameRoomParticipant[];
 }
 
+const SESSION_STORAGE_KEY = 'nexuz_game_sessions';
 interface GameSession {
   roomId: string;
   userId: string;
   sessionToken: string;
   gameUrl: string;
   startTime: Date;
+  expiresAt: Date; // Add expiration
 }
 
 interface GameRoomParticipant {
@@ -745,236 +747,360 @@ export const GameRoomProvider = ({
     }
   };
 
-  const generateSessionToken = (): string => {
-    return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  };
+const saveSessionToStorage = (sessionToken: string, session: GameSession) => {
+  try {
+    const existingSessions = getSessionsFromStorage();
+    existingSessions[sessionToken] = session;
+    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(existingSessions));
+  } catch (error) {
+    logger.error('Failed to save session to storage:', error);
+  }
+};
 
-  const playGame = async (roomId: string): Promise<void> => {
-    if (!user) throw new Error("User not authenticated");
+const getSessionsFromStorage = (): Record<string, GameSession> => {
+  try {
+    const stored = localStorage.getItem(SESSION_STORAGE_KEY);
+    if (!stored) return {};
+    
+    const sessions = JSON.parse(stored);
+    const now = new Date();
+    
+    // Clean up expired sessions
+    const validSessions: Record<string, GameSession> = {};
+    Object.entries(sessions).forEach(([token, session]: [string, any]) => {
+      if (new Date(session.expiresAt) > now) {
+        validSessions[token] = {
+          ...session,
+          startTime: new Date(session.startTime),
+          expiresAt: new Date(session.expiresAt)
+        };
+      }
+    });
+    
+    // Save cleaned sessions back
+    if (Object.keys(validSessions).length !== Object.keys(sessions).length) {
+      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(validSessions));
+    }
+    
+    return validSessions;
+  } catch (error) {
+    logger.error('Failed to get sessions from storage:', error);
+    return {};
+  }
+};
 
-    try {
-      // Get room details
-      const { data: room, error: roomError } = await supabase
-        .from("game_rooms")
-        .select(
-          `
+const removeSessionFromStorage = (sessionToken: string) => {
+  try {
+    const sessions = getSessionsFromStorage();
+    delete sessions[sessionToken];
+    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessions));
+  } catch (error) {
+    logger.error('Failed to remove session from storage:', error);
+  }
+};
+
+const generateSessionToken = (): string => {
+  return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+};
+
+// Updated playGame function
+const playGame = async (roomId: string): Promise<void> => {
+  if (!user) throw new Error("User not authenticated");
+
+  try {
+    // Get room details
+    const { data: room, error: roomError } = await supabase
+      .from("game_rooms")
+      .select(`
         *,
         game:games(*),
         participants:game_room_participants(*)
-      `
-        )
-        .eq("id", roomId)
-        .single();
+      `)
+      .eq("id", roomId)
+      .single();
 
-      if (roomError) throw roomError;
+    if (roomError) throw roomError;
 
-      // Check if user is in the room
-      const userParticipant = room.participants?.find(
-        (p: any) => p.user_id === user.id && p.is_active
-      );
+    // Check if user is in the room
+    const userParticipant = room.participants?.find(
+      (p: any) => p.user_id === user.id && p.is_active
+    );
 
-      if (!userParticipant) {
-        throw new Error("You must join the room before playing");
-      }
-
-      // Check if room is ongoing
-      if (room.status !== "ongoing") {
-        throw new Error("Room is not currently active for playing");
-      }
-
-      // Generate session token
-      const sessionToken = generateSessionToken();
-
-      // Create game session
-      const gameSession: GameSession = {
-        roomId: room.id,
-        userId: user.id,
-        sessionToken,
-        gameUrl: room.game?.game_url || "",
-        startTime: new Date(),
-      };
-
-      // Store session
-      setActiveGameSessions((prev) => prev.set(sessionToken, gameSession));
-
-      // Construct game URL with parameters
-      const gameUrl = new URL(room.game?.game_url || "");
-      gameUrl.searchParams.set("user_id", user.id);
-      gameUrl.searchParams.set("room_id", room.id);
-      gameUrl.searchParams.set("on_chain_room_id", room.on_chain_room_id || "");
-      gameUrl.searchParams.set("session_token", sessionToken);
-      gameUrl.searchParams.set("game_name", room.game?.name || "Game");
-      gameUrl.searchParams.set("game_id", room.game_id);
-      gameUrl.searchParams.set("currency", room.currency);
-      gameUrl.searchParams.set("entry_fee", room.entry_fee.toString());
-      gameUrl.searchParams.set(
-        "total_prize_pool",
-        room.total_prize_pool.toString()
-      );
-      gameUrl.searchParams.set("max_players", room.max_players.toString());
-      gameUrl.searchParams.set(
-        "current_players",
-        room.current_players.toString()
-      );
-      gameUrl.searchParams.set("winner_split_rule", room.winner_split_rule);
-      // gameUrl.searchParams.set('instructions', room.game?.instructions || '');
-      gameUrl.searchParams.set("instructions", room.game?.description || "");
-      gameUrl.searchParams.set("status", room.status);
-      gameUrl.searchParams.set("players", room.current_players.toString());
-
-      // Open game in new tab
-      const gameWindow = window.open(gameUrl.toString(), "_blank");
-
-      if (!gameWindow) {
-        throw new Error("Please allow popups to play the game");
-      }
-
-      toast({
-        title: "Game Launched",
-        description: "Game opened in new tab. Play and submit your score!",
-      });
-    } catch (error: any) {
-      logger.error("Error launching game:", error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to launch game",
-        variant: "destructive",
-      });
-      throw error;
+    if (!userParticipant) {
+      throw new Error("You must join the room before playing");
     }
-  };
+
+    // Check if room is ongoing
+    if (room.status !== "ongoing") {
+      throw new Error("Room is not currently active for playing");
+    }
+
+    // Generate session token
+    const sessionToken = generateSessionToken();
+
+    // Create game session with expiration (24 hours)
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 24);
+
+    const gameSession: GameSession = {
+      roomId: room.id,
+      userId: user.id,
+      sessionToken,
+      gameUrl: room.game?.game_url || "",
+      startTime: new Date(),
+      expiresAt,
+    };
+
+    // Store session in both state and localStorage
+    setActiveGameSessions(prev => new Map(prev).set(sessionToken, gameSession));
+    saveSessionToStorage(sessionToken, gameSession);
+
+    // Rest of your URL construction code remains the same...
+    const gameUrl = new URL(room.game?.game_url || "");
+    gameUrl.searchParams.set("user_id", user.id);
+    gameUrl.searchParams.set("room_id", room.id);
+    gameUrl.searchParams.set("on_chain_room_id", room.on_chain_room_id || "");
+    gameUrl.searchParams.set("session_token", sessionToken);
+    gameUrl.searchParams.set("game_name", room.game?.name || "Game");
+    gameUrl.searchParams.set("game_id", room.game_id);
+    gameUrl.searchParams.set("currency", room.currency);
+    gameUrl.searchParams.set("entry_fee", room.entry_fee.toString());
+    gameUrl.searchParams.set("total_prize_pool", room.total_prize_pool.toString());
+    gameUrl.searchParams.set("max_players", room.max_players.toString());
+    gameUrl.searchParams.set("current_players", room.current_players.toString());
+    gameUrl.searchParams.set("winner_split_rule", room.winner_split_rule);
+    gameUrl.searchParams.set("instructions", room.game?.description || "");
+    gameUrl.searchParams.set("status", room.status);
+    gameUrl.searchParams.set("players", room.current_players.toString());
+
+    // Open game in new tab
+    const gameWindow = window.open(gameUrl.toString(), "_blank");
+
+    if (!gameWindow) {
+      throw new Error("Please allow popups to play the game");
+    }
+
+    toast({
+      title: "Game Launched",
+      description: "Game opened in new tab. Play and submit your score!",
+    });
+  } catch (error: any) {
+    logger.error("Error launching game:", error);
+    toast({
+      title: "Error",
+      description: error.message || "Failed to launch game",
+      variant: "destructive",
+    });
+    throw error;
+  }
+};
 
   // Updated handleGameMessage - DON'T remove session after score submission
-  // Updated handleGameMessage - Don't delete session on EXIT_GAME
   const handleGameMessage = async (event: MessageEvent) => {
-    // Verify the origin
-    const allowedOrigins = [
-      "https://flappy-bird-nexuz.netlify.app",
-      "https://doodle-jump-nexuz.netlify.app",
-      "https://endless-runner-nexuz.netlify.app",
-    ];
-    if (!allowedOrigins.includes(event.origin)) {
-      logger.debug("Message from unauthorized origin:", event.origin);
-      return;
-    }
+  const allowedOrigins = [
+    "https://flappy-bird-nexuz.netlify.app",
+    "https://doodle-jump-nexuz.netlify.app",
+    "https://endless-runner-nexuz.netlify.app",
+  ];
+  
+  if (!allowedOrigins.includes(event.origin)) {
+    logger.debug("Message from unauthorized origin:", event.origin);
+    return;
+  }
 
-    const { type, score, userId, roomId, gameId, sessionToken, metadata } =
-      event.data;
+  const { type, score, userId, roomId, gameId, sessionToken, metadata } = event.data;
 
-    logger.debug("Received message:", {
-      type,
-      score,
-      userId,
-      roomId,
-      sessionToken,
-    });
-    logger.debug("Available sessions:", Array.from(activeGameSessions.keys()));
+  logger.debug("Received message:", { type, score, userId, roomId, sessionToken });
 
-    if (type === "SUBMIT_SCORE") {
-      try {
-        // Verify session
-        const session = activeGameSessions.get(sessionToken);
-        if (!session) {
-          logger.error("Invalid session token:", sessionToken);
-          logger.debug(
-            "Available sessions:",
-            Array.from(activeGameSessions.keys())
-          );
-
-          // Send error back to game
-          if (event.source) {
-            event.source.postMessage(
-              {
-                type: "SCORE_SUBMISSION_ERROR",
-                error: "Invalid session token",
-              },
-              event.origin
-            );
-          }
-          return;
+  if (type === "SUBMIT_SCORE") {
+    try {
+      // Try to get session from state first, then fallback to localStorage
+      let session = activeGameSessions.get(sessionToken);
+      
+      if (!session) {
+        const storedSessions = getSessionsFromStorage();
+        session = storedSessions[sessionToken];
+        
+        // If found in storage, restore to state
+        if (session) {
+          setActiveGameSessions(prev => new Map(prev).set(sessionToken, session));
+          logger.debug("Restored session from localStorage:", sessionToken);
         }
+      }
 
-        if (session.userId !== userId || session.roomId !== roomId) {
-          logger.error("Session validation failed");
-          return;
-        }
-
-        // Update score in database
-        const result = await updateGameScore(roomId, score, userId, gameId);
-
-        // KEEP session active - don't remove it here
-
-        // Send success response back to game
-        if (event.source) {
-          event.source.postMessage(
-            {
-              type: "SCORE_SUBMISSION_SUCCESS",
-              updated: result.updated,
-              previousScore: result.previousScore,
-              newScore: result.newScore,
-            },
-            event.origin
-          );
-        }
-
-        // Show appropriate message
-        if (result.updated) {
-          toast({
-            title: "New High Score! 🎉",
-            description: `Your score improved from ${result.previousScore.toLocaleString()} to ${result.newScore.toLocaleString()}!`,
-          });
-        } else {
-          toast({
-            title: "Score Submitted",
-            description: `Score: ${result.newScore.toLocaleString()} (Current best: ${result.previousScore.toLocaleString()})`,
-          });
-        }
-
-        // Refresh room data
-        await refreshRooms();
-
-        logger.info("Score submission result:", {
-          roomId,
-          userId,
-          scoreSubmitted: score,
-          previousScore: result.previousScore,
-          newScore: result.newScore,
-          wasUpdated: result.updated,
-          sessionToken,
-          metadata,
-        });
-      } catch (error) {
-        logger.error("Error handling score submission:", error);
+      if (!session) {
+        logger.error("Invalid session token:", sessionToken);
+        logger.debug("Available sessions in state:", Array.from(activeGameSessions.keys()));
+        logger.debug("Available sessions in storage:", Object.keys(getSessionsFromStorage()));
 
         // Send error back to game
         if (event.source) {
-          event.source.postMessage(
-            {
-              type: "SCORE_SUBMISSION_ERROR",
-              error: error.message,
-            },
-            event.origin
-          );
+          event.source.postMessage({
+            type: "SCORE_SUBMISSION_ERROR",
+            error: "Invalid session token",
+          }, event.origin);
         }
+        return;
+      }
 
+      if (session.userId !== userId || session.roomId !== roomId) {
+        logger.error("Session validation failed");
+        return;
+      }
+
+      // Update score in database
+      const result = await updateGameScore(roomId, score, userId, gameId);
+
+      // Send success response back to game
+      if (event.source) {
+        event.source.postMessage({
+          type: "SCORE_SUBMISSION_SUCCESS",
+          updated: result.updated,
+          previousScore: result.previousScore,
+          newScore: result.newScore,
+        }, event.origin);
+      }
+
+      // Show appropriate message
+      if (result.updated) {
         toast({
-          title: "Score Submission Failed",
-          description:
-            "There was an error recording your score. Please try again.",
-          variant: "destructive",
+          title: "New High Score! 🎉",
+          description: `Your score improved from ${result.previousScore.toLocaleString()} to ${result.newScore.toLocaleString()}!`,
+        });
+      } else {
+        toast({
+          title: "Score Submitted",
+          description: `Score: ${result.newScore.toLocaleString()} (Current best: ${result.previousScore.toLocaleString()})`,
         });
       }
-    } else if (type === "EXIT_GAME") {
-      // DON'T clean up session on exit - keep it for when user returns
-      logger.debug(
-        "User exited game, but keeping session active:",
-        sessionToken
-      );
-    } else if (type === "GAME_READY") {
-      // Game is ready, session should still be active
-      logger.debug("Game ready, session:", sessionToken);
+
+      // Refresh room data
+      await refreshRooms();
+
+      logger.info("Score submission result:", {
+        roomId, userId, scoreSubmitted: score,
+        previousScore: result.previousScore,
+        newScore: result.newScore,
+        wasUpdated: result.updated,
+        sessionToken, metadata,
+      });
+
+    } catch (error) {
+      logger.error("Error handling score submission:", error);
+
+      // Send error back to game
+      if (event.source) {
+        event.source.postMessage({
+          type: "SCORE_SUBMISSION_ERROR",
+          error: error.message,
+        }, event.origin);
+      }
+
+      toast({
+        title: "Score Submission Failed",
+        description: "There was an error recording your score. Please try again.",
+        variant: "destructive",
+      });
     }
-  };
+  } else if (type === "EXIT_GAME") {
+    logger.debug("User exited game, keeping session active:", sessionToken);
+  } else if (type === "GAME_READY") {
+    logger.debug("Game ready, session:", sessionToken);
+  }
+};
+
+    // Updated updateGameScore with extensive debugging
+  const updateGameScore = async (
+  roomId: string,
+  score: number,
+  userId?: string,
+  gameId?: string
+) => {
+  const userIdToUse = userId || user?.id;
+
+  if (!userIdToUse) throw new Error("User not authenticated");
+
+  try {
+    logger.debug(
+      `Starting score update for user ${userIdToUse}, room ${roomId}, new score: ${score}`
+    );
+
+    // First, get the current participant data
+    const { data: currentParticipant, error: fetchError } = await supabase
+      .from("game_room_participants")
+      .select("*")
+      .eq("room_id", roomId)
+      .eq("user_id", userIdToUse)
+      .single();
+
+    if (fetchError) {
+      logger.debug("Error fetching current participant:", fetchError);
+      throw fetchError;
+    }
+
+    logger.debug("Current participant data:", currentParticipant);
+
+    const currentScore = currentParticipant?.score || 0;
+    const currentScoreNum = Number(currentScore);
+    const newScoreNum = Number(score);
+
+    // Only update if new score is higher
+    if (newScoreNum > currentScoreNum) {
+      logger.debug(`Updating score from ${currentScoreNum} to ${newScoreNum}`);
+      
+      // FIX: Use userIdToUse instead of user.id which might be null
+      if (gameId) {
+        await supabase.from("game_scores").insert({
+          game_id: gameId,
+          player_id: userIdToUse, // Changed from user.id to userIdToUse
+          score,
+        });
+      }
+
+      const { data: updateResult, error: updateError } = await supabase
+        .from("game_room_participants")
+        .update({ score: newScoreNum })
+        .eq("room_id", roomId)
+        .eq("user_id", userIdToUse)
+        .select();
+
+      if (updateError) {
+        logger.debug("Error updating score:", updateError);
+        throw updateError;
+      }
+
+      logger.debug("Update result:", updateResult);
+
+      // Verify the update worked
+      const { data: verifyData } = await supabase
+        .from("game_room_participants")
+        .select("score")
+        .eq("room_id", roomId)
+        .eq("user_id", userIdToUse)
+        .single();
+
+      logger.debug("Verified updated score:", verifyData?.score);
+
+      return {
+        updated: true,
+        previousScore: currentScoreNum,
+        newScore: newScoreNum,
+      };
+    } else {
+      logger.debug(
+        `Score ${newScoreNum} not higher than current ${currentScoreNum}, no update needed`
+      );
+      return {
+        updated: false,
+        previousScore: currentScoreNum,
+        newScore: newScoreNum,
+      };
+    }
+  } catch (error) {
+    logger.error("Error in updateGameScore:", error);
+    throw error;
+  }
+};
 
   // Add message listener in useEffect
   useEffect(() => {
@@ -986,58 +1112,77 @@ export const GameRoomProvider = ({
     };
   }, []);
 
-  useEffect(() => {
-    const cleanupExpiredSessions = () => {
-      const now = new Date();
-      const sessionsToDelete = [];
+useEffect(() => {
+  // Restore sessions from localStorage on component mount
+  const storedSessions = getSessionsFromStorage();
+  const sessionsMap = new Map();
+  
+  Object.entries(storedSessions).forEach(([token, session]) => {
+    sessionsMap.set(token, session);
+  });
+  
+  if (sessionsMap.size > 0) {
+    setActiveGameSessions(sessionsMap);
+    logger.debug("Restored sessions on mount:", Object.keys(storedSessions));
+  }
+}, []); // Empty dependency array - only runs on mount
 
-      for (const [sessionToken, session] of activeGameSessions.entries()) {
-        // Find the corresponding room
-        const room = rooms.find((r) => r.id === session.roomId);
+// 2. UPDATED existing useEffect - Keep your current cleanup logic but add localStorage cleanup
+useEffect(() => {
+  const cleanupExpiredSessions = () => {
+    const now = new Date();
+    const sessionsToDelete = [];
 
-        if (room) {
-          const roomEndTime = new Date(room.end_time);
+    for (const [sessionToken, session] of activeGameSessions.entries()) {
+      // Find the corresponding room
+      const room = rooms.find((r) => r.id === session.roomId);
 
-          // Clean up sessions for rooms that have ended
-          if (
-            now > roomEndTime ||
-            room.status === "completed" ||
-            room.status === "cancelled"
-          ) {
-            sessionsToDelete.push(sessionToken);
-            logger.debug(
-              `Cleaning up expired session for completed room: ${sessionToken}`
-            );
-          }
-        } else {
-          // Room doesn't exist anymore, clean up session
+      if (room) {
+        const roomEndTime = new Date(room.end_time);
+
+        // Clean up sessions for rooms that have ended
+        if (
+          now > roomEndTime ||
+          room.status === "completed" ||
+          room.status === "cancelled"
+        ) {
           sessionsToDelete.push(sessionToken);
           logger.debug(
-            `Cleaning up session for non-existent room: ${sessionToken}`
+            `Cleaning up expired session for completed room: ${sessionToken}`
           );
         }
+      } else {
+        // Room doesn't exist anymore, clean up session
+        sessionsToDelete.push(sessionToken);
+        logger.debug(
+          `Cleaning up session for non-existent room: ${sessionToken}`
+        );
       }
+    }
 
-      // Remove expired sessions
-      if (sessionsToDelete.length > 0) {
-        setActiveGameSessions((prev) => {
-          const newMap = new Map(prev);
-          sessionsToDelete.forEach((token) => newMap.delete(token));
-          return newMap;
+    // Remove expired sessions from both state and localStorage
+    if (sessionsToDelete.length > 0) {
+      setActiveGameSessions((prev) => {
+        const newMap = new Map(prev);
+        sessionsToDelete.forEach((token) => {
+          newMap.delete(token);
+          removeSessionFromStorage(token); // ADD THIS LINE - cleanup localStorage too
         });
+        return newMap;
+      });
 
-        logger.debug(`Cleaned up ${sessionsToDelete.length} expired sessions`);
-      }
-    };
+      logger.debug(`Cleaned up ${sessionsToDelete.length} expired sessions`);
+    }
+  };
 
-    // Run cleanup every 30 seconds
-    const cleanupInterval = setInterval(cleanupExpiredSessions, 30000);
+  // Run cleanup every 30 seconds
+  const cleanupInterval = setInterval(cleanupExpiredSessions, 30000);
 
-    // Run initial cleanup
-    cleanupExpiredSessions();
+  // Run initial cleanup
+  cleanupExpiredSessions();
 
-    return () => clearInterval(cleanupInterval);
-  }, [rooms, activeGameSessions]);
+  return () => clearInterval(cleanupInterval);
+}, [rooms, activeGameSessions]);
 
   // Function to automatically complete a single game
   const autoCompleteGame = async (room: any) => {
@@ -1899,113 +2044,6 @@ export const GameRoomProvider = ({
     } catch (error) {
       logger.error("Error fetching participants:", error);
       return [];
-    }
-  };
-
-  // Updated updateGameScore with extensive debugging
-  const updateGameScore = async (
-    roomId: string,
-    score: number,
-    userId?: string,
-    gameId?: string
-  ) => {
-    const userIdToUse = userId || user?.id;
-
-    if (!userIdToUse) throw new Error("User not authenticated");
-
-    try {
-      logger.debug(
-        `Starting score update for user ${userIdToUse}, room ${roomId}, new score: ${score}`
-      );
-
-      // First, get the current participant data
-      const { data: currentParticipant, error: fetchError } = await supabase
-        .from("game_room_participants")
-        .select("*")
-        .eq("room_id", roomId)
-        .eq("user_id", userIdToUse)
-        .single();
-
-      if (fetchError) {
-        logger.debug("Error fetching current participant:", fetchError);
-        throw fetchError;
-      }
-
-      logger.debug("Current participant data:", currentParticipant);
-
-      const currentScore = currentParticipant?.score || 0;
-
-      // logger.debug(`Score comparison details:`);
-      // logger.info(
-      //   `  - Current score: ${currentScore} (type: ${typeof currentScore})`
-      // );
-      // logger.info(`  - New score: ${score} (type: ${typeof score})`);
-      // logger.info(`  - New score > current? ${score > currentScore}`);
-      // logger.info(`  - New score as number: ${Number(score)}`);
-      // logger.info(`  - Current score as number: ${Number(currentScore)}`);
-      // logger.info(
-      //   `  - Number comparison: ${Number(score) > Number(currentScore)}`
-      // );
-
-      // Convert both to numbers to ensure proper comparison
-      const currentScoreNum = Number(currentScore);
-      const newScoreNum = Number(score);
-
-      // Only update if new score is higher
-      if (newScoreNum > currentScoreNum) {
-        logger.debug(
-          `Updating score from ${currentScoreNum} to ${newScoreNum}`
-        );
-        if (gameId) {
-          await supabase.from("game_scores").insert({
-            game_id: gameId,
-            player_id: user.id,
-            score,
-          });
-        }
-
-        const { data: updateResult, error: updateError } = await supabase
-          .from("game_room_participants")
-          .update({ score: newScoreNum })
-          .eq("room_id", roomId)
-          .eq("user_id", userIdToUse)
-          .select();
-
-        if (updateError) {
-          logger.debug("Error updating score:", updateError);
-          throw updateError;
-        }
-
-        logger.debug("Update result:", updateResult);
-
-        // Verify the update worked
-        const { data: verifyData } = await supabase
-          .from("game_room_participants")
-          .select("score")
-          .eq("room_id", roomId)
-          .eq("user_id", userIdToUse)
-          .single();
-
-        logger.debug("Verified updated score:", verifyData?.score);
-
-        return {
-          updated: true,
-          previousScore: currentScoreNum,
-          newScore: newScoreNum,
-        };
-      } else {
-        logger.debug(
-          `Score ${newScoreNum} not higher than current ${currentScoreNum}, no update needed`
-        );
-        return {
-          updated: false,
-          previousScore: currentScoreNum,
-          newScore: newScoreNum,
-        };
-      }
-    } catch (error) {
-      logger.error("Error in updateGameScore:", error);
-      throw error;
     }
   };
 
