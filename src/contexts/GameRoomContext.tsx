@@ -43,12 +43,14 @@ interface GameRoom {
   participants?: GameRoomParticipant[];
 }
 
+const SESSION_STORAGE_KEY = "nexuz_game_sessions";
 interface GameSession {
   roomId: string;
   userId: string;
   sessionToken: string;
   gameUrl: string;
   startTime: Date;
+  expiresAt: Date; // Add expiration
 }
 
 interface GameRoomParticipant {
@@ -748,10 +750,69 @@ export const GameRoomProvider = ({
     }
   };
 
+  const saveSessionToStorage = (sessionToken: string, session: GameSession) => {
+    try {
+      const existingSessions = getSessionsFromStorage();
+      existingSessions[sessionToken] = session;
+      localStorage.setItem(
+        SESSION_STORAGE_KEY,
+        JSON.stringify(existingSessions)
+      );
+    } catch (error) {
+      logger.error("Failed to save session to storage:", error);
+    }
+  };
+
+  const getSessionsFromStorage = (): Record<string, GameSession> => {
+    try {
+      const stored = localStorage.getItem(SESSION_STORAGE_KEY);
+      if (!stored) return {};
+
+      const sessions = JSON.parse(stored);
+      const now = new Date();
+
+      // Clean up expired sessions
+      const validSessions: Record<string, GameSession> = {};
+      Object.entries(sessions).forEach(([token, session]: [string, any]) => {
+        if (new Date(session.expiresAt) > now) {
+          validSessions[token] = {
+            ...session,
+            startTime: new Date(session.startTime),
+            expiresAt: new Date(session.expiresAt),
+          };
+        }
+      });
+
+      // Save cleaned sessions back
+      if (Object.keys(validSessions).length !== Object.keys(sessions).length) {
+        localStorage.setItem(
+          SESSION_STORAGE_KEY,
+          JSON.stringify(validSessions)
+        );
+      }
+
+      return validSessions;
+    } catch (error) {
+      logger.error("Failed to get sessions from storage:", error);
+      return {};
+    }
+  };
+
+  const removeSessionFromStorage = (sessionToken: string) => {
+    try {
+      const sessions = getSessionsFromStorage();
+      delete sessions[sessionToken];
+      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessions));
+    } catch (error) {
+      logger.error("Failed to remove session from storage:", error);
+    }
+  };
+
   const generateSessionToken = (): string => {
     return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   };
 
+  // Updated playGame function
   const playGame = async (roomId: string): Promise<void> => {
     if (!user) throw new Error("User not authenticated");
 
@@ -788,20 +849,26 @@ export const GameRoomProvider = ({
       // Generate session token
       const sessionToken = generateSessionToken();
 
-      // Create game session
+      // Create game session with expiration (24 hours)
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 24);
+
       const gameSession: GameSession = {
         roomId: room.id,
         userId: user.id,
         sessionToken,
         gameUrl: room.game?.game_url || "",
         startTime: new Date(),
+        expiresAt,
       };
 
-      // Store session
-      logger.debug("Storing game session:", gameSession);
-      setActiveGameSessions((prev) => prev.set(sessionToken, gameSession));
-      setNewGameSessions((prev) => prev.set(sessionToken, gameSession));
-      // Construct game URL with parameters
+      // Store session in both state and localStorage
+      setActiveGameSessions((prev) =>
+        new Map(prev).set(sessionToken, gameSession)
+      );
+      saveSessionToStorage(sessionToken, gameSession);
+
+      // Rest of your URL construction code remains the same...
       const gameUrl = new URL(room.game?.game_url || "");
       gameUrl.searchParams.set("user_id", user.id);
       gameUrl.searchParams.set("room_id", room.id);
@@ -821,7 +888,6 @@ export const GameRoomProvider = ({
         room.current_players.toString()
       );
       gameUrl.searchParams.set("winner_split_rule", room.winner_split_rule);
-      // gameUrl.searchParams.set('instructions', room.game?.instructions || '');
       gameUrl.searchParams.set("instructions", room.game?.description || "");
       gameUrl.searchParams.set("status", room.status);
       gameUrl.searchParams.set("players", room.current_players.toString());
@@ -849,17 +915,13 @@ export const GameRoomProvider = ({
   };
 
   // Updated handleGameMessage - DON'T remove session after score submission
-  // Updated handleGameMessage - Don't delete session on EXIT_GAME
   const handleGameMessage = async (event: MessageEvent) => {
-    // Verify the origin
     const allowedOrigins = [
-      "https://cheerful-entremet-2dbb07.netlify.app",
-      "https://stirring-unicorn-441851.netlify.app",
-      "https://ornate-lamington-115e41.netlify.app",
       "https://flappy-bird-nexuz.netlify.app",
       "https://doodle-jump-nexuz.netlify.app",
       "https://endless-runner-nexuz.netlify.app",
     ];
+
     if (!allowedOrigins.includes(event.origin)) {
       logger.debug("Message from unauthorized origin:", event.origin);
       return;
@@ -875,19 +937,34 @@ export const GameRoomProvider = ({
       roomId,
       sessionToken,
     });
-    logger.debug("Available sessions:", Array.from(activeGameSessions.keys()));
 
     if (type === "SUBMIT_SCORE") {
       try {
-        // Verify session
-        logger.debug("Active game sessions:", activeGameSessions);
-        const session = activeGameSessions.get(sessionToken);
-        logger.debug("New game sessions:", session);
+        // Try to get session from state first, then fallback to localStorage
+        let session = activeGameSessions.get(sessionToken);
+
+        if (!session) {
+          const storedSessions = getSessionsFromStorage();
+          session = storedSessions[sessionToken];
+
+          // If found in storage, restore to state
+          if (session) {
+            setActiveGameSessions((prev) =>
+              new Map(prev).set(sessionToken, session)
+            );
+            logger.debug("Restored session from localStorage:", sessionToken);
+          }
+        }
+
         if (!session) {
           logger.error("Invalid session token:", sessionToken);
           logger.debug(
-            "Available sessions:",
+            "Available sessions in state:",
             Array.from(activeGameSessions.keys())
+          );
+          logger.debug(
+            "Available sessions in storage:",
+            Object.keys(getSessionsFromStorage())
           );
 
           // Send error back to game
@@ -910,8 +987,6 @@ export const GameRoomProvider = ({
 
         // Update score in database
         const result = await updateGameScore(roomId, score, userId, gameId);
-
-        // KEEP session active - don't remove it here
 
         // Send success response back to game
         if (event.source) {
@@ -940,7 +1015,7 @@ export const GameRoomProvider = ({
         }
 
         // Refresh room data
-        // await refreshRooms();
+        await refreshRooms();
 
         logger.info("Score submission result:", {
           roomId,
@@ -974,14 +1049,104 @@ export const GameRoomProvider = ({
         });
       }
     } else if (type === "EXIT_GAME") {
-      // DON'T clean up session on exit - keep it for when user returns
-      logger.debug(
-        "User exited game, but keeping session active:",
-        sessionToken
-      );
+      logger.debug("User exited game, keeping session active:", sessionToken);
     } else if (type === "GAME_READY") {
-      // Game is ready, session should still be active
       logger.debug("Game ready, session:", sessionToken);
+    }
+  };
+
+  // Updated updateGameScore with extensive debugging
+  const updateGameScore = async (
+    roomId: string,
+    score: number,
+    userId?: string,
+    gameId?: string
+  ) => {
+    const userIdToUse = userId || user?.id;
+
+    if (!userIdToUse) throw new Error("User not authenticated");
+
+    try {
+      logger.debug(
+        `Starting score update for user ${userIdToUse}, room ${roomId}, new score: ${score}`
+      );
+
+      // First, get the current participant data
+      const { data: currentParticipant, error: fetchError } = await supabase
+        .from("game_room_participants")
+        .select("*")
+        .eq("room_id", roomId)
+        .eq("user_id", userIdToUse)
+        .single();
+
+      if (fetchError) {
+        logger.debug("Error fetching current participant:", fetchError);
+        throw fetchError;
+      }
+
+      logger.debug("Current participant data:", currentParticipant);
+
+      const currentScore = currentParticipant?.score || 0;
+      const currentScoreNum = Number(currentScore);
+      const newScoreNum = Number(score);
+
+      // Only update if new score is higher
+      if (newScoreNum > currentScoreNum) {
+        logger.debug(
+          `Updating score from ${currentScoreNum} to ${newScoreNum}`
+        );
+
+        // FIX: Use userIdToUse instead of user.id which might be null
+        if (gameId) {
+          await supabase.from("game_scores").insert({
+            game_id: gameId,
+            player_id: userIdToUse, // Changed from user.id to userIdToUse
+            score,
+          });
+        }
+
+        const { data: updateResult, error: updateError } = await supabase
+          .from("game_room_participants")
+          .update({ score: newScoreNum })
+          .eq("room_id", roomId)
+          .eq("user_id", userIdToUse)
+          .select();
+
+        if (updateError) {
+          logger.debug("Error updating score:", updateError);
+          throw updateError;
+        }
+
+        logger.debug("Update result:", updateResult);
+
+        // Verify the update worked
+        const { data: verifyData } = await supabase
+          .from("game_room_participants")
+          .select("score")
+          .eq("room_id", roomId)
+          .eq("user_id", userIdToUse)
+          .single();
+
+        logger.debug("Verified updated score:", verifyData?.score);
+
+        return {
+          updated: true,
+          previousScore: currentScoreNum,
+          newScore: newScoreNum,
+        };
+      } else {
+        logger.debug(
+          `Score ${newScoreNum} not higher than current ${currentScoreNum}, no update needed`
+        );
+        return {
+          updated: false,
+          previousScore: currentScoreNum,
+          newScore: newScoreNum,
+        };
+      }
+    } catch (error) {
+      logger.error("Error in updateGameScore:", error);
+      throw error;
     }
   };
 
@@ -995,6 +1160,22 @@ export const GameRoomProvider = ({
     };
   }, []);
 
+  useEffect(() => {
+    // Restore sessions from localStorage on component mount
+    const storedSessions = getSessionsFromStorage();
+    const sessionsMap = new Map();
+
+    Object.entries(storedSessions).forEach(([token, session]) => {
+      sessionsMap.set(token, session);
+    });
+
+    if (sessionsMap.size > 0) {
+      setActiveGameSessions(sessionsMap);
+      logger.debug("Restored sessions on mount:", Object.keys(storedSessions));
+    }
+  }, []); // Empty dependency array - only runs on mount
+
+  // 2. UPDATED existing useEffect - Keep your current cleanup logic but add localStorage cleanup
   useEffect(() => {
     const cleanupExpiredSessions = () => {
       const now = new Date();
@@ -1027,11 +1208,14 @@ export const GameRoomProvider = ({
         }
       }
 
-      // Remove expired sessions
+      // Remove expired sessions from both state and localStorage
       if (sessionsToDelete.length > 0) {
         setActiveGameSessions((prev) => {
           const newMap = new Map(prev);
-          sessionsToDelete.forEach((token) => newMap.delete(token));
+          sessionsToDelete.forEach((token) => {
+            newMap.delete(token);
+            removeSessionFromStorage(token); // ADD THIS LINE - cleanup localStorage too
+          });
           return newMap;
         });
 
@@ -1909,113 +2093,6 @@ export const GameRoomProvider = ({
     } catch (error) {
       logger.error("Error fetching participants:", error);
       return [];
-    }
-  };
-
-  // Updated updateGameScore with extensive debugging
-  const updateGameScore = async (
-    roomId: string,
-    score: number,
-    userId?: string,
-    gameId?: string
-  ) => {
-    const userIdToUse = userId || user?.id;
-
-    if (!userIdToUse) throw new Error("User not authenticated");
-
-    try {
-      logger.debug(
-        `Starting score update for user ${userIdToUse}, room ${roomId}, new score: ${score}`
-      );
-
-      // First, get the current participant data
-      const { data: currentParticipant, error: fetchError } = await supabase
-        .from("game_room_participants")
-        .select("*")
-        .eq("room_id", roomId)
-        .eq("user_id", userIdToUse)
-        .single();
-
-      if (fetchError) {
-        logger.debug("Error fetching current participant:", fetchError);
-        throw fetchError;
-      }
-
-      logger.debug("Current participant data:", currentParticipant);
-
-      const currentScore = currentParticipant?.score || 0;
-
-      // logger.debug(`Score comparison details:`);
-      // logger.info(
-      //   `  - Current score: ${currentScore} (type: ${typeof currentScore})`
-      // );
-      // logger.info(`  - New score: ${score} (type: ${typeof score})`);
-      // logger.info(`  - New score > current? ${score > currentScore}`);
-      // logger.info(`  - New score as number: ${Number(score)}`);
-      // logger.info(`  - Current score as number: ${Number(currentScore)}`);
-      // logger.info(
-      //   `  - Number comparison: ${Number(score) > Number(currentScore)}`
-      // );
-
-      // Convert both to numbers to ensure proper comparison
-      const currentScoreNum = Number(currentScore);
-      const newScoreNum = Number(score);
-
-      // Only update if new score is higher
-      if (newScoreNum > currentScoreNum) {
-        logger.debug(
-          `Updating score from ${currentScoreNum} to ${newScoreNum}`
-        );
-        if (gameId) {
-          await supabase.from("game_scores").insert({
-            game_id: gameId,
-            player_id: user.id,
-            score,
-          });
-        }
-
-        const { data: updateResult, error: updateError } = await supabase
-          .from("game_room_participants")
-          .update({ score: newScoreNum })
-          .eq("room_id", roomId)
-          .eq("user_id", userIdToUse)
-          .select();
-
-        if (updateError) {
-          logger.debug("Error updating score:", updateError);
-          throw updateError;
-        }
-
-        logger.debug("Update result:", updateResult);
-
-        // Verify the update worked
-        const { data: verifyData } = await supabase
-          .from("game_room_participants")
-          .select("score")
-          .eq("room_id", roomId)
-          .eq("user_id", userIdToUse)
-          .single();
-
-        logger.debug("Verified updated score:", verifyData?.score);
-
-        return {
-          updated: true,
-          previousScore: currentScoreNum,
-          newScore: newScoreNum,
-        };
-      } else {
-        logger.debug(
-          `Score ${newScoreNum} not higher than current ${currentScoreNum}, no update needed`
-        );
-        return {
-          updated: false,
-          previousScore: currentScoreNum,
-          newScore: newScoreNum,
-        };
-      }
-    } catch (error) {
-      logger.error("Error in updateGameScore:", error);
-      throw error;
     }
   };
 
