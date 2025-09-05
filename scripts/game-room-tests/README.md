@@ -4,7 +4,7 @@ This comprehensive test suite validates the complete lifecycle of game rooms usi
 
 ## Overview
 
-The test suite consists of 7 individual test scenarios that validate different aspects of the game room smart contract:
+The test suite consists of 8 individual test scenarios that validate different aspects of the game room smart contract:
 
 1. **Room Creation → Join → Cancel → Refund** - Tests full refunds when rooms are cancelled
 2. **Room Creation → Join → Leave → Cancel** - Tests user leaving and creator cancellation
@@ -13,6 +13,7 @@ The test suite consists of 7 individual test scenarios that validate different a
 5. **Game Completion with No Winners** - Tests refunds minus platform fees
 6. **Game Completion with Single Winner** - Tests winner getting full prize minus platform fee
 7. **Game Completion with Top 2 Winners** - Tests 60%/40% split rule enforcement
+8. **Sponsored Game Room with No Winner** - Tests sponsor refund minus platform fee
 
 ## Prerequisites
 
@@ -133,6 +134,13 @@ All tests use the following standardized parameters to minimize costs:
 - 2nd place: 40% of 93% prize pool
 - Room status: completed
 
+### Test 8: Sponsored Game Room with No Winner
+
+- Platform fee: 7% of sponsor amount
+- Sponsor gets refund: 93% of sponsor amount
+- Joiner balance unchanged (no entry fee paid)
+- Room status: completed
+
 ## File Structure
 
 ```
@@ -147,7 +155,8 @@ scripts/game-room-tests/
 ├── test-4-sponsored-cancel.ts # Test 4: Sponsored room cancel
 ├── test-5-no-winners.ts     # Test 5: No winners completion
 ├── test-6-single-winner.ts  # Test 6: Single winner
-└── test-7-top-2-winners.ts # Test 7: Top 2 winners
+├── test-7-top-2-winners.ts # Test 7: Top 2 winners
+└── test-8-sponsored-no-winner.ts # Test 8: Sponsored room no winner
 ```
 
 ## Smart Contract Integration

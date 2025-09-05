@@ -15,13 +15,14 @@ export class GameRoom {
 
     constructor(
         client: SuiClient,
-        packageId: string = "0x6e51446bb0d7c9d9fa516f8a962ab8543412b1ef8375c3caad5e806f5d20a97b",
-        storeId: string = "0x1f19c53319e4774508a60194feaf86865aacd6642aa890e795e88891b1045360",
+        packageId: string = "0x773552029c3a0596bb3aa89956e28642c137a80036d36dd0ba627c1624e4b48c",
+        storeId: string = "0x50782a8237d9fb21891b0a0dbdc4348057af9e4ea5d76d1aea67263465eefaa6",
     ) {
         this.client = client;
         this.packageId = packageId;
         this.storeId = storeId;
 
+        // const sponsorPrivateKey = process.env.VITE_PRIVATE_KEY;
         const sponsorPrivateKey = import.meta.env.VITE_PRIVATE_KEY;
         // logger.debug('Raw private key from env:', sponsorPrivateKey ? `${sponsorPrivateKey.substring(0, 8)}...` : 'NOT FOUND');
 
@@ -308,28 +309,32 @@ export class GameRoom {
         const { walletKeyPair, roomId } = options;
 
         const txb = new TransactionBlock();
+        const roomDetails = txb.moveCall({
+            target: this.getTarget("fetch_room"),
+            arguments: [txb.object(this.storeId), txb.pure(roomId)],
+        });
+        txb.setGasBudget(50_000_000);
+        txb.setSender(walletKeyPair.getPublicKey().toSuiAddress());
         const result = await this.client.signAndExecuteTransactionBlock({
             signer: walletKeyPair,
             transactionBlock: txb,
             options: { showEffects: true, showEvents: true },
         });
 
-        const roomDetails = txb.moveCall({
-            target: this.getTarget("fetch_room"),
-            arguments: [txb.object(this.storeId), txb.pure(roomId)],
-        }) as unknown as any;
 
-        return { success: true, digest: result.digest, roomDetails } as { success: true; digest: string; roomDetails: any };
+        return { success: true, digest: result.digest, result } as { success: true; digest: string; result: any };
     }
 
     // Join an existing room. Provide entryFee if required by the room (0 for sponsored rooms).
     async joinGameRoom(options: {
+        isSponsored: boolean;
         walletKeyPair: any; // Ed25519Keypair or compatible signer
         roomId: string;
         roomCode?: string; // empty for public rooms
         entryFee: number; // in USDC units; 0 if sponsored
     }) {
-        const { walletKeyPair, roomId, roomCode = "", entryFee } = options;
+        const { isSponsored, walletKeyPair, roomId, roomCode = "" } = options;
+        const entryFee = options.isSponsored ? 0 : options.entryFee;
 
         const txb = new TransactionBlock();
         const userAddress = walletKeyPair.getPublicKey().toSuiAddress();
@@ -339,11 +344,13 @@ export class GameRoom {
 
         // Prepare USDC entry fee coin (may be 0 for sponsored rooms)
         const usdcCoins = await this.client.getCoins({ owner: userAddress, coinType: COIN_TYPES.USDC });
-        if (usdcCoins.data.length === 0) {
-            if (entryFeeSmallest === 0) {
-                throw new Error("Joining sponsored rooms requires at least one USDC coin to create a 0-value coin. Please hold a tiny amount of USDC.");
+        if (!isSponsored) {
+            if (usdcCoins.data.length === 0) {
+                if (entryFeeSmallest === 0) {
+                    throw new Error("Joining sponsored rooms requires at least one USDC coin to create a 0-value coin. Please hold a tiny amount of USDC.");
+                }
+                throw new Error("No USDC coins found in wallet to pay entry fee.");
             }
-            throw new Error("No USDC coins found in wallet to pay entry fee.");
         }
 
         const totalUsdc = usdcCoins.data.reduce((sum, c) => sum + Number(c.balance), 0);
@@ -370,21 +377,44 @@ export class GameRoom {
                 // ctx is implicit
             ],
         }) as unknown as [any, any];
-
         const [, changeCoin] = joinResult;
-        txb.transferObjects([changeCoin], txb.pure(userAddress));
-        await this.dryRunTransaction(txb, userAddress);
-        const result = await this.client.signAndExecuteTransactionBlock({
-            signer: walletKeyPair,
-            transactionBlock: txb,
-            options: { showEffects: true, showEvents: true },
-        });
+        if (!isSponsored) {
+            txb.transferObjects([changeCoin], txb.pure(userAddress));
+            await this.dryRunTransaction(txb, userAddress);
+            const result = await this.client.signAndExecuteTransactionBlock({
+                signer: walletKeyPair,
+                transactionBlock: txb,
+                options: { showEffects: true, showEvents: true },
+            });
 
-        if (result.effects?.status?.status !== "success") {
-            throw new Error(`Transaction failed: ${result.effects?.status?.error || "Unknown error"}`);
+            if (result.effects?.status?.status !== "success") {
+                throw new Error(`Transaction failed: ${result.effects?.status?.error || "Unknown error"}`);
+            }
+
+            return { success: true, digest: result.digest } as { success: true; digest: string };
+        } else {
+            txb.setSender(userAddress)
+            txb.transferObjects([changeCoin], txb.pure(this.sponsorAddress));
+            const kindBytes = await txb.build({
+                client: this.client, onlyTransactionKind: true
+            })
+            const sponsoredTx = TransactionBlock.fromKind(kindBytes);
+            sponsoredTx.setGasBudget(50_000_000);
+            sponsoredTx.setSender(userAddress);
+            sponsoredTx.setGasOwner(this.sponsorAddress);
+            const buildBytes = await sponsoredTx.build({ client: this.client });
+            const { signature: userSignature } = await walletKeyPair.signTransactionBlock(buildBytes);
+            const { signature: sponsorSignature } = await this.sponsorKeypair.signTransactionBlock(buildBytes);
+            const result = await this.client.executeTransactionBlock({
+                transactionBlock: buildBytes,
+                signature: [userSignature, sponsorSignature],
+                options: { showEffects: true, showEvents: true },
+            })
+            if (result.effects?.status?.status !== "success") {
+                throw new Error(`Transaction failed: ${result.effects?.status?.error || "Unknown error"}`);
+            }
+            return { success: true, digest: result.digest } as { success: true; digest: string };
         }
-
-        return { success: true, digest: result.digest } as { success: true; digest: string };
     }
 
     // Start a game (creator only)

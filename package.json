@@ -12,6 +12,7 @@
     "pull": "supabase db pull",
     "test:game-room": "tsx scripts/game-room-tests/index.ts",
     "test:game-room-completion": "tsx scripts/test-game-room-completion.ts",
+    "test:fetch-room": "tsx scripts/game-room.ts",
     "transfer": "tsx scripts/game-room-tests/transfer.ts",
     "recent-winners": "tsx scripts/supabase.ts"
   },
