@@ -508,12 +508,13 @@ const RoomsPage = () => {
           .eq("user_id", user.id)
           .in("room_id", completedRoomIds)
           .not("final_position", "is", null)
-          .gt("earnings", 0);
+          .gt("final_position", 0); // Only show actual winners (position > 0)
 
         const winsMap = {};
         wins?.forEach((win) => {
           winsMap[win.room_id] = win;
         });
+        logger.log("Fetched user wins:", wins, "winsMap:", winsMap);
         setUserWins(winsMap);
       } catch (error) {
         logger.error("Error fetching user wins:", error);
@@ -553,7 +554,16 @@ const RoomsPage = () => {
   // Function to show win celebration for a specific room
   const showWinCelebration = (room) => {
     const win = userWins[room.id];
-    if (!win) return;
+    logger.log(
+      "showWinCelebration called for room:",
+      room.id,
+      "win data:",
+      win
+    );
+    if (!win) {
+      console.log("No win data found for room:", room.id);
+      return;
+    }
 
     const celebration = {
       position: win.final_position,
@@ -567,6 +577,7 @@ const RoomsPage = () => {
       roomId: room.id,
     };
 
+    logger.info("Setting celebration data:", celebration);
     setWinnerData(celebration);
     setShowCelebration(true);
   };
@@ -740,8 +751,17 @@ const RoomsPage = () => {
   };
 
   const handleRoomAction = (room) => {
+    logger.log(
+      "handleRoomAction called for room:",
+      room.id,
+      "status:",
+      room.status,
+      "userWonInRoom:",
+      userWonInRoom(room)
+    );
     // If user won in this completed room, show celebration
     if (room.status === "completed" && userWonInRoom(room)) {
+      logger.info("User won in room, showing celebration");
       showWinCelebration(room);
       return;
     }
@@ -813,6 +833,18 @@ const RoomsPage = () => {
     const hours = String(d.getHours()).padStart(2, "0");
     const minutes = String(d.getMinutes()).padStart(2, "0");
     return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
+  // Helper function to create a new Date from datetime-local input (handles timezone correctly)
+  const createDateFromInput = (inputValue: string) => {
+    // datetime-local input gives us YYYY-MM-DDTHH:MM in local time
+    // We need to create a Date object that represents the local time correctly
+    const [datePart, timePart] = inputValue.split("T");
+    const [year, month, day] = datePart.split("-").map(Number);
+    const [hours, minutes] = timePart.split(":").map(Number);
+
+    // Create date in local timezone
+    return new Date(year, month - 1, day, hours, minutes);
   };
 
   const formatCurrency = (amount, currency) => {
@@ -1315,16 +1347,18 @@ const RoomsPage = () => {
                       </label>
                       <input
                         type="datetime-local"
-                        value={formData.startTime.toISOString().slice(0, 16)}
+                        value={formatDateForInput(formData.startTime)}
                         onChange={(e) => {
-                          const newStartTime = new Date(e.target.value);
+                          const newStartTime = createDateFromInput(
+                            e.target.value
+                          );
                           setFormData({
                             ...formData,
                             startTime: newStartTime,
                           });
                         }}
                         className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
-                        min={new Date().toISOString().slice(0, 16)}
+                        min={formatDateForInput(new Date())}
                       />
                       <p className="text-xs font-cyber text-muted-foreground mt-1">
                         Game will start at this time
@@ -1390,9 +1424,11 @@ const RoomsPage = () => {
                       </label>
                       <input
                         type="datetime-local"
-                        value={formData.endTime.toISOString().slice(0, 16)}
+                        value={formatDateForInput(formData.endTime)}
                         onChange={(e) => {
-                          const newEndTime = new Date(e.target.value);
+                          const newEndTime = createDateFromInput(
+                            e.target.value
+                          );
                           setFormData({ ...formData, endTime: newEndTime });
                         }}
                         className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"

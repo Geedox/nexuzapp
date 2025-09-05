@@ -413,6 +413,24 @@ export const GameRoomProvider = ({
       // Track users who need profile updates
       const usersToUpdateProfile = new Set<string>();
 
+      // Handle case where there are no winners - set all participants as non-winners
+      if (winners.length === 0) {
+        logger.info(
+          `No winners found for room ${room.id}, marking all participants as non-winners`
+        );
+        for (const participant of participants) {
+          // Set final_position to 0 to indicate participation without winning
+          await supabase
+            .from("game_room_participants")
+            .update({
+              final_position: 0,
+              earnings: 0,
+            })
+            .eq("room_id", room.id)
+            .eq("user_id", participant.user_id);
+        }
+      }
+
       // Update participant positions and distribute prizes
       for (const winner of winners) {
         const split = prizeSplits.find((s) => s.position === winner.position);
@@ -974,7 +992,7 @@ export const GameRoomProvider = ({
                 type: "SCORE_SUBMISSION_ERROR",
                 error: "Invalid session token",
               },
-              event.origin
+              { targetOrigin: event.origin }
             );
           }
           return;
@@ -997,7 +1015,7 @@ export const GameRoomProvider = ({
               previousScore: result.previousScore,
               newScore: result.newScore,
             },
-            event.origin
+            { targetOrigin: event.origin }
           );
         }
 
@@ -1037,7 +1055,7 @@ export const GameRoomProvider = ({
               type: "SCORE_SUBMISSION_ERROR",
               error: error.message,
             },
-            event.origin
+            { targetOrigin: event.origin }
           );
         }
 
@@ -1158,6 +1176,7 @@ export const GameRoomProvider = ({
     return () => {
       window.removeEventListener("message", handleGameMessage);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -1230,6 +1249,7 @@ export const GameRoomProvider = ({
     cleanupExpiredSessions();
 
     return () => clearInterval(cleanupInterval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rooms, activeGameSessions]);
 
   // Function to automatically complete a single game
@@ -1289,11 +1309,13 @@ export const GameRoomProvider = ({
               `Successfully completed game on-chain for room ${room.id} with digest: ${onChainResult.digest}`
             );
           } else {
-            await onChainGameRoom.completeGame({
+            onChainResult = await onChainGameRoom.completeGame({
               roomId: room.on_chain_room_id,
               winnerAddresses: [],
               scores: [],
             });
+            // Still call distributePrizes even with no winners to update participant records
+            await distributePrizes(room, participants, [], onChainResult);
             logger.success(
               `Successfully completed game on-chain for room ${room.id} with digest: ${onChainResult.digest}`
             );
@@ -1430,19 +1452,17 @@ export const GameRoomProvider = ({
 
       const start = (currentPage - 1) * roomsPerPage;
 
-      // Build the base query
-      let query = supabase
-        .from("game_rooms")
-        .select(
-          `
+      // Build the base query - Show all rooms (public and private) to all users
+      // Access control is handled at the join level with room codes
+      let query = supabase.from("game_rooms").select(
+        `
           *,
           game:games(*),
           creator:profiles(*),
           participants:game_room_participants(*)
         `,
-          { count: "exact" }
-        )
-        .or("is_private.eq.false,creator_id.eq." + user?.id);
+        { count: "exact" }
+      );
 
       // Apply filters
       if (filters.status && filters.status.length > 0) {

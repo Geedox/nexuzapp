@@ -150,6 +150,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({ children }) => {
     return () => {
       window.removeEventListener("message", handleGameMessage);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Submit game score
@@ -304,7 +305,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({ children }) => {
                 type: "SCORE_SUBMISSION_ERROR",
                 error: "Invalid session token",
               },
-              event.origin
+              { targetOrigin: event.origin }
             );
           }
           return;
@@ -329,7 +330,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({ children }) => {
               previousScore: result.previousScore,
               newScore: result.newScore,
             },
-            event.origin
+            { targetOrigin: event.origin }
           );
         }
 
@@ -366,7 +367,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({ children }) => {
               type: "SCORE_SUBMISSION_ERROR",
               error: error.message,
             },
-            event.origin
+            { targetOrigin: event.origin }
           );
         }
 

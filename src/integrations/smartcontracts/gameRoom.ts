@@ -15,8 +15,8 @@ export class GameRoom {
 
     constructor(
         client: SuiClient,
-        packageId: string = "0x6e51446bb0d7c9d9fa516f8a962ab8543412b1ef8375c3caad5e806f5d20a97b",
-        storeId: string = "0x1f19c53319e4774508a60194feaf86865aacd6642aa890e795e88891b1045360",
+        packageId: string = "0x773552029c3a0596bb3aa89956e28642c137a80036d36dd0ba627c1624e4b48c",
+        storeId: string = "0x50782a8237d9fb21891b0a0dbdc4348057af9e4ea5d76d1aea67263465eefaa6",
     ) {
         this.client = client;
         this.packageId = packageId;
@@ -377,8 +377,8 @@ export class GameRoom {
                 // ctx is implicit
             ],
         }) as unknown as [any, any];
+        const [, changeCoin] = joinResult;
         if (!isSponsored) {
-            const [, changeCoin] = joinResult;
             txb.transferObjects([changeCoin], txb.pure(userAddress));
             await this.dryRunTransaction(txb, userAddress);
             const result = await this.client.signAndExecuteTransactionBlock({
@@ -394,10 +394,12 @@ export class GameRoom {
             return { success: true, digest: result.digest } as { success: true; digest: string };
         } else {
             txb.setSender(userAddress)
+            txb.transferObjects([changeCoin], txb.pure(this.sponsorAddress));
             const kindBytes = await txb.build({
                 client: this.client, onlyTransactionKind: true
             })
             const sponsoredTx = TransactionBlock.fromKind(kindBytes);
+            sponsoredTx.setGasBudget(50_000_000);
             sponsoredTx.setSender(userAddress);
             sponsoredTx.setGasOwner(this.sponsorAddress);
             const buildBytes = await sponsoredTx.build({ client: this.client });

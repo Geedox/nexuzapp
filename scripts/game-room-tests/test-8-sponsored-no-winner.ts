@@ -183,12 +183,12 @@ async function testSponsoredGameRoomNoWinner(): Promise<void> {
 
         // Calculate expected outcomes
         const totalPrizePool = sponsorAmount; // Only sponsor amount (no entry fees)
-        const platformFee = calculatePlatformFee(totalPrizePool); // 7% of sponsor amount
-        const refundableAmount = calculateRefundableAmount(totalPrizePool); // 93% of sponsor amount
+        // const platformFee = calculatePlatformFee(totalPrizePool); // 7% of sponsor amount
+        const refundableAmount = sponsorAmount;
 
         console.log("\nPrize Pool Distribution:");
         console.log(`  Total Prize Pool: ${formatUSDC(totalPrizePool)} USDC`);
-        console.log(`  Platform Fee (7%): ${formatUSDC(platformFee)} USDC`);
+        // console.log(`  Platform Fee (7%): ${formatUSDC(platformFee)} USDC`);
         console.log(`  Refundable Amount: ${formatUSDC(refundableAmount)} USDC`);
         console.log(`  Sponsor Refund: ${formatUSDC(refundableAmount)} USDC`);
 
@@ -219,7 +219,7 @@ async function testSponsoredGameRoomNoWinner(): Promise<void> {
             balanceAfterJoin: balanceAfterJoin2,
             sponsorAmountDeducted: sponsorAmount,
             sponsorAmountRefunded: refundableAmount,
-            platformFee,
+            // platformFee,
             totalPrizePool,
             expectedBalance1,
             expectedBalance2

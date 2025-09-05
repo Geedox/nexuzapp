@@ -23,24 +23,6 @@ const GameRoomDetails = ({ roomId, onBack }) => {
   const [isLaunchingGame, setIsLaunchingGame] = useState(false);
   const [winners, setWinners] = useState([]);
 
-  // Function to check if room should auto-complete
-  const checkForAutoCompletion = useCallback(async () => {
-    if (!room) return;
-
-    const now = new Date();
-    const endTime = new Date(room.end_time);
-
-    // If current time has passed end time and room is still ongoing/waiting
-    if (
-      now >= endTime &&
-      (room.status === "ongoing" || room.status === "waiting")
-    ) {
-      console.log("Room should auto-complete, refreshing data...");
-      // Refresh room data to get the updated status after auto-completion
-      await loadRoomData(false);
-    }
-  }, [room]);
-
   // Enhanced loadRoomData function
   const loadRoomData = useCallback(
     async (showLoader = true) => {
@@ -86,6 +68,23 @@ const GameRoomDetails = ({ roomId, onBack }) => {
     },
     [roomId, getRoomDetails, getRoomParticipants, toast]
   );
+  // Function to check if room should auto-complete
+  const checkForAutoCompletion = useCallback(async () => {
+    if (!room) return;
+
+    const now = new Date();
+    const endTime = new Date(room.end_time);
+
+    // If current time has passed end time and room is still ongoing/waiting
+    if (
+      now >= endTime &&
+      (room.status === "ongoing" || room.status === "waiting")
+    ) {
+      console.log("Room should auto-complete, refreshing data...");
+      // Refresh room data to get the updated status after auto-completion
+      await loadRoomData(false);
+    }
+  }, [loadRoomData, room]);
 
   useEffect(() => {
     loadRoomData();
