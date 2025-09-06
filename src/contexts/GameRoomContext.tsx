@@ -192,15 +192,9 @@ export const GameRoomProvider = ({
   const [isTabVisible, setIsTabVisible] = useState(true);
   const [isFetching, setIsFetching] = useState(false);
   const [lastFetchTime, setLastFetchTime] = useState<number>(0); // state for caching
-  const CACHE_DURATION = 30000;
+  const CACHE_DURATION = 60000;
 
   const onChainGameRoom = useMemo(() => {
-    // logger.debug("Creating onChainGameRoom instance...");
-    // logger.debug("suiClient available:", !!suiClient);
-    // logger.debug(
-    //   "suiClient details:",
-    //   suiClient ? "Connected" : "Not connected"
-    // );
 
     try {
       if (!suiClient) {
@@ -210,10 +204,7 @@ export const GameRoomProvider = ({
 
       // logger.debug("Attempting to create OnChainGameRoom instance...");
       const instance = new OnChainGameRoom(suiClient);
-      // logger.debug(
-      //   "OnChainGameRoom instance created successfully:",
-      //   !!instance
-      // );
+
       return instance;
     } catch (error) {
       logger.error("[DEBUG] Error creating OnChainGameRoom:", error);
