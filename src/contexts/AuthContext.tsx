@@ -79,7 +79,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const signInWithGoogle = async () => {
     try {
       // const redirectUrl = `${window.location.origin}/dashboard`;
-      const redirectUrl = `nexuz.xyz/dashboard`;
+      const redirectUrl = `nexuz.xyz/auth/callback`;
 
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
