@@ -19,6 +19,7 @@ import {
 import Banner from "@/components/Banner";
 import { useWallet } from "@/contexts/WalletContext";
 import { logger } from "@/utils";
+import { getUserTimezone, convertTimezone } from "@/lib/utils";
 
 const WinnerCelebrationModal = ({ isOpen, onClose, winner }) => {
   const [showFireworks, setShowFireworks] = useState(false);
@@ -457,6 +458,7 @@ const RoomsPage = () => {
     maxPlayers: 10,
     isPrivate: false,
     winnerSplitRule: "winner_takes_all",
+    timezone: getUserTimezone(),
     startTime: new Date(Date.now() + 3600000), // 1 hour from now
     endTime: new Date(Date.now() + 7200000), // 2 hours from now
     isSponsored: false,
@@ -514,7 +516,7 @@ const RoomsPage = () => {
         wins?.forEach((win) => {
           winsMap[win.room_id] = win;
         });
-        logger.log("Fetched user wins:", wins, "winsMap:", winsMap);
+        logger.success("Fetched user wins");
         setUserWins(winsMap);
       } catch (error) {
         logger.error("Error fetching user wins:", error);
@@ -670,6 +672,7 @@ const RoomsPage = () => {
         maxPlayers: 10,
         isPrivate: false,
         winnerSplitRule: "winner_takes_all",
+        timezone: getUserTimezone(),
         startTime: new Date(Date.now() + 3600000),
         endTime: new Date(Date.now() + 7200000),
         isSponsored: false,
@@ -815,13 +818,8 @@ const RoomsPage = () => {
     return "bg-gray-600 text-gray-400 cursor-not-allowed";
   };
 
-  const formatDateTime = (date) => {
-    return new Date(date).toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+  const formatDateTime = (date, timezone: string) => {
+    return convertTimezone(date, getUserTimezone(), timezone);
   };
 
   // Helper function to format date for datetime-local input (local timezone)
@@ -969,11 +967,12 @@ const RoomsPage = () => {
               {safeRooms.map((room) => (
                 <div
                   key={room.id}
-                  className={`relative bg-gradient-to-br from-card to-secondary/20 border rounded-xl p-6 hover:border-primary/40 transition-all duration-300 hover:scale-105 group cyber-border ${
+                  className={`relative bg-gradient-to-br from-card to-secondary/20 border rounded-xl p-6 hover:border-primary/40 transition-all duration-300 hover:scale-105 group cyber-border cursor-pointer ${
                     userWonInRoom(room)
                       ? "border-yellow-500/50 shadow-lg shadow-yellow-500/20"
                       : "border-primary/20"
                   }`}
+                  onClick={() => setSelectedRoomId(room.id)}
                 >
                   {/* Winner Badge */}
                   {userWonInRoom(room) && (
@@ -1052,7 +1051,10 @@ const RoomsPage = () => {
                         Start:
                       </span>
                       <span className="text-xs font-cyber text-foreground">
-                        {formatDateTime(room.start_time)}
+                        {formatDateTime(
+                          room.start_time,
+                          room.timezone ?? getUserTimezone()
+                        )}
                       </span>
                     </div>
 
@@ -1349,13 +1351,20 @@ const RoomsPage = () => {
                         type="datetime-local"
                         value={formatDateForInput(formData.startTime)}
                         onChange={(e) => {
-                          const newStartTime = createDateFromInput(
-                            e.target.value
-                          );
-                          setFormData({
-                            ...formData,
-                            startTime: newStartTime,
-                          });
+                          try {
+                            const newStartTime = createDateFromInput(
+                              e.target.value
+                            );
+                            setFormData({
+                              ...formData,
+                              startTime: newStartTime,
+                            });
+                          } catch (error) {
+                            logger.error(
+                              "Error creating date from input",
+                              error
+                            );
+                          }
                         }}
                         className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
                         min={formatDateForInput(new Date())}

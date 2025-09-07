@@ -15,8 +15,8 @@ export class GameRoom {
 
     constructor(
         client: SuiClient,
-        packageId: string = "0x773552029c3a0596bb3aa89956e28642c137a80036d36dd0ba627c1624e4b48c",
-        storeId: string = "0x50782a8237d9fb21891b0a0dbdc4348057af9e4ea5d76d1aea67263465eefaa6",
+        packageId: string = "0x613b8f9cde43d62b8c55ac3daab37ed0904d0f40fb8c4c4ae3a6423f44471bcd",
+        storeId: string = "0x884eeb877e7aaa7aaf98afe8f4509848502812631c2b70e56bcb518720c76ef6",
     ) {
         this.client = client;
         this.packageId = packageId;
