@@ -878,14 +878,6 @@ const RoomsPage = () => {
   return (
     <>
       <div className="space-y-8 animate-fade-in">
-        <div className="bg-gradient-to-r from-blue-500/20 to-cyan-500/20 border border-blue-500/30 rounded-2xl p-6">
-          <h1 className="font-cyber text-3xl font-bold text-blue-400 mb-2 glow-text">
-            🏠 Game Rooms
-          </h1>
-          <p className="text-muted-foreground">
-            Join existing rooms or create your own gaming session
-          </p>
-        </div>
         <Banner pathname="rooms" />
         {/* Room Statistics */}
         {!loadingStats && safeRooms.length > 0 && (
