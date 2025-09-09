@@ -573,7 +573,7 @@ const WalletPage = () => {
           className="bg-gradient-to-r from-green-500 to-emerald-500 text-background font-cyber font-bold py-4 px-6 rounded-xl hover:scale-105 transition-all duration-300 flex items-center justify-center gap-2"
         >
           <DollarSign className="w-5 h-5" />
-          <span>Receive</span>
+          <span>Buy SUI</span>
         </button>
         <button
           onClick={() => setShowSwapModal(true)}

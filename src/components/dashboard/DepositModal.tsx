@@ -1,5 +1,3 @@
-import { useState } from 'react';
-import { useTransaction } from '@/contexts/TransactionContext';
 import {
   Dialog,
   DialogContent,
@@ -7,245 +5,172 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Loader2, CreditCard, Coins, DollarSign } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
 
 interface DepositModalProps {
   open: boolean;
   onClose: () => void;
+  mode?: 'deposit' | 'support';
 }
 
-type DepositMethod = 'select' | 'NGN' | 'USDC' | 'USDT';
+export const DepositModal = ({ open, onClose, mode = 'deposit' }: DepositModalProps) => {
+  const whatsappNumber = '+2348139289312';
+  const discordLink = 'https://discord.gg/U7RmVJPGwq';
 
-export const DepositModal = ({ open, onClose }: DepositModalProps) => {
-  const [method, setMethod] = useState<DepositMethod>('select');
-  const [amount, setAmount] = useState('');
-  const [processing, setProcessing] = useState(false);
-  const { initiateNGNDeposit } = useTransaction();
-  const { toast } = useToast();
-
-  const handleMethodSelect = (selectedMethod: DepositMethod) => {
-    setMethod(selectedMethod);
-    setAmount('');
+  // Content based on mode
+  const content = {
+    deposit: {
+      title: '💰 Buy SUI Tokens',
+      description: 'Contact our support team to purchase SUI tokens with multiple payment options',
+      whatsappMessage: 'Hi! I want to buy SUI tokens. Can you help me with the process?',
+      whatsappTitle: 'WhatsApp Support',
+      whatsappDesc: 'Chat directly with our team • Fast response • Secure payment',
+      discordTitle: 'Discord Community',
+      discordDesc: 'Join our server • Community support • Trading discussions',
+      benefitsTitle: 'Why Choose Us?',
+      benefitsIcon: '💎',
+      benefits: [
+        'Instant delivery',
+        'Secure transactions',
+        '24/7 support',
+        'Multiple payment methods'
+      ],
+      quickStartTitle: '🚀 Quick Start:',
+      quickStartSteps: [
+        '1. Click WhatsApp or Discord above',
+        '2. Tell us how much SUI you want to buy',
+        '3. Choose your payment method (Bank transfer, Card, etc.)',
+        '4. Receive SUI tokens directly in your wallet'
+      ]
+    },
+    support: {
+      title: '💬 Live Support',
+      description: 'Get instant help from our support team via WhatsApp or Discord',
+      whatsappMessage: 'Hi! I need help with the platform. Can you assist me?',
+      whatsappTitle: 'WhatsApp Live Chat',
+      whatsappDesc: 'Get instant help • Quick responses • Real-time support',
+      discordTitle: 'Discord Live Support',
+      discordDesc: 'Join our server • Community help • Expert guidance',
+      benefitsTitle: 'Support Features',
+      benefitsIcon: '🛟',
+      benefits: [
+        '24/7 availability',
+        'Expert assistance',
+        'Quick response time',
+        'Step-by-step guidance'
+      ],
+      quickStartTitle: '🆘 Get Help:',
+      quickStartSteps: [
+        '1. Click WhatsApp or Discord above',
+        '2. Describe your issue or question',
+        '3. Our team will assist you immediately',
+        '4. Get step-by-step guidance and solutions'
+      ]
+    }
   };
 
-  const handleBack = () => {
-    setMethod('select');
-    setAmount('');
+  const currentContent = content[mode];
+
+  const handleWhatsAppClick = () => {
+    const message = encodeURIComponent(currentContent.whatsappMessage);
+    window.open(`https://wa.me/${whatsappNumber.replace('+', '')}?text=${message}`, '_blank');
   };
 
-  const handleDeposit = async () => {
-    const numAmount = parseFloat(amount);
-    
-    if (!numAmount || numAmount <= 0) {
-      toast({
-        title: "Invalid Amount",
-        description: "Please enter a valid amount",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (method === 'NGN') {
-      // Minimum NGN deposit
-      if (numAmount < 1000) {
-        toast({
-          title: "Minimum Deposit",
-          description: "Minimum deposit amount is ₦1,000",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      setProcessing(true);
-      try {
-        const paymentLink = await initiateNGNDeposit(numAmount);
-        
-        // Open payment in new window
-        const paymentWindow = window.open(
-          paymentLink,
-          'FlutterwavePayment',
-          'width=800,height=600,top=100,left=100,scrollbars=yes,resizable=yes'
-        );
-
-        // Check if window was blocked
-        if (!paymentWindow) {
-          toast({
-            title: "Popup Blocked",
-            description: "Please allow popups for this site to complete payment",
-            variant: "destructive",
-          });
-          setProcessing(false);
-          return;
-        }
-
-        // Poll to check if window is closed
-        const pollTimer = setInterval(() => {
-          if (paymentWindow.closed) {
-            clearInterval(pollTimer);
-            setProcessing(false);
-            onClose();
-            
-            // Refresh wallet and transactions after a delay
-            setTimeout(async () => {
-              toast({
-                title: "Payment Complete",
-                description: "Checking payment status...",
-              });
-              
-              // Refresh data
-              window.location.reload();
-            }, 1000);
-          }
-        }, 1000);
-
-      } catch (error) {
-        // Error is handled in the context
-        setProcessing(false);
-      }
-    } else {
-      // Handle crypto deposits (USDC/USDT) - implement later
-      toast({
-        title: "Coming Soon",
-        description: `${method} deposits will be available soon`,
-      });
-    }
+  const handleDiscordClick = () => {
+    window.open(discordLink, '_blank');
   };
 
   return (
-    <Dialog open={open} onOpenChange={() => !processing && onClose()}>
+    <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[500px] bg-gradient-to-br from-background via-card to-secondary/20 border-primary/30">
         <DialogHeader>
           <DialogTitle className="font-gaming text-2xl text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent">
-            {method === 'select' ? '💰 Select Deposit Method' : `💸 Deposit ${method}`}
+            {currentContent.title}
           </DialogTitle>
           <DialogDescription className="text-muted-foreground font-cyber">
-            {method === 'select' 
-              ? 'Choose your preferred deposit method'
-              : `Enter the amount to deposit in ${method}`
-            }
+            {currentContent.description}
           </DialogDescription>
         </DialogHeader>
 
-        {method === 'select' ? (
-          <div className="space-y-3 mt-4">
+        <div className="mt-6 space-y-4">
+          {/* Contact Options */}
+          <div className="grid grid-cols-1 gap-4">
+            {/* WhatsApp Button */}
             <button
-              onClick={() => handleMethodSelect('NGN')}
-              className="w-full p-4 bg-black/40 border border-green-500/30 rounded-xl hover:border-green-500/60 transition-all duration-300 group"
+              onClick={handleWhatsAppClick}
+              className="flex items-center gap-4 p-6 bg-gradient-to-r from-green-500/20 to-green-600/20 border border-green-500/30 rounded-xl hover:border-green-500/60 hover:scale-[1.02] transition-all duration-300 group"
             >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-500 rounded-lg flex items-center justify-center text-2xl">
-                    🇳🇬
-                  </div>
-                  <div className="text-left">
-                    <p className="font-cyber text-lg text-green-400">Nigerian Naira (NGN)</p>
-                    <p className="text-xs text-muted-foreground">Deposit via Flutterwave</p>
-                  </div>
-                </div>
-                <DollarSign className="w-5 h-5 text-green-400 group-hover:translate-x-1 transition-transform" />
+              <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center text-2xl">
+                📱
+              </div>
+              <div className="flex-1 text-left">
+                <p className="font-cyber text-xl text-green-400 mb-1">
+                  {currentContent.whatsappTitle}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {currentContent.whatsappDesc}
+                </p>
+                <p className="text-xs text-green-300 font-mono mt-1">
+                  {whatsappNumber}
+                </p>
+              </div>
+              <div className="text-green-400 group-hover:translate-x-1 transition-transform">
+                →
               </div>
             </button>
 
+            {/* Discord Button */}
             <button
-              onClick={() => handleMethodSelect('USDC')}
-              className="w-full p-4 bg-black/40 border border-blue-500/30 rounded-xl hover:border-blue-500/60 transition-all duration-300 group"
+              onClick={handleDiscordClick}
+              className="flex items-center gap-4 p-6 bg-gradient-to-r from-indigo-500/20 to-purple-600/20 border border-indigo-500/30 rounded-xl hover:border-indigo-500/60 hover:scale-[1.02] transition-all duration-300 group"
             >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-lg flex items-center justify-center text-2xl">
-                    💎
-                  </div>
-                  <div className="text-left">
-                    <p className="font-cyber text-lg text-blue-400">USD Coin (USDC)</p>
-                    <p className="text-xs text-muted-foreground">Deposit crypto directly</p>
-                  </div>
-                </div>
-                <Coins className="w-5 h-5 text-blue-400 group-hover:translate-x-1 transition-transform" />
+              <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center text-2xl">
+                🎮
               </div>
-            </button>
-
-            <button
-              onClick={() => handleMethodSelect('USDT')}
-              className="w-full p-4 bg-black/40 border border-accent/30 rounded-xl hover:border-accent/60 transition-all duration-300 group"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-gradient-to-br from-green-400 to-green-600 rounded-lg flex items-center justify-center text-2xl">
-                    🟢
-                  </div>
-                  <div className="text-left">
-                    <p className="font-cyber text-lg text-accent">Tether (USDT)</p>
-                    <p className="text-xs text-muted-foreground">Deposit stablecoin</p>
-                  </div>
-                </div>
-                <Coins className="w-5 h-5 text-accent group-hover:translate-x-1 transition-transform" />
+              <div className="flex-1 text-left">
+                <p className="font-cyber text-xl text-indigo-400 mb-1">
+                  {currentContent.discordTitle}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {currentContent.discordDesc}
+                </p>
+                <p className="text-xs text-indigo-300 font-mono mt-1">
+                  discord.gg/U7RmVJPGwq
+                </p>
+              </div>
+              <div className="text-indigo-400 group-hover:translate-x-1 transition-transform">
+                →
               </div>
             </button>
           </div>
-        ) : (
-          <form onSubmit={(e) => { e.preventDefault(); handleDeposit(); }} className="space-y-4 mt-4">
-            <div className="space-y-2">
-              <Label htmlFor="amount" className="font-cyber text-primary">
-                Amount {method === 'NGN' ? '(₦)' : `(${method})`}
-              </Label>
-              <div className="relative">
-                <Input
-                  id="amount"
-                  type="number"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder={method === 'NGN' ? 'Enter amount (min ₦1,000)' : `Enter ${method} amount`}
-                  className="font-cyber bg-black/40 border-primary/30 focus:border-primary text-lg pl-12"
-                  disabled={processing}
-                  autoFocus
-                  step={method === 'NGN' ? '100' : '0.01'}
-                  min={method === 'NGN' ? '1000' : '1'}
-                />
-                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-2xl">
-                  {method === 'NGN' ? '₦' : method === 'USDC' ? '💎' : '🟢'}
-                </div>
-              </div>
-              {method === 'NGN' && (
-                <p className="text-xs text-muted-foreground">
-                  Minimum deposit: ₦1,000 • Fee: 1.4%
-                </p>
-              )}
-            </div>
 
-            <div className="flex gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleBack}
-                disabled={processing}
-                className="flex-1 font-cyber"
-              >
-                Back
-              </Button>
-              <Button
-                type="submit"
-                disabled={!amount || processing}
-                className="flex-1 bg-gradient-to-r from-primary to-accent text-background font-cyber font-bold"
-              >
-                {processing ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    <CreditCard className="mr-2 h-4 w-4" />
-                    Deposit
-                  </>
-                )}
-              </Button>
+          {/* Benefits Section */}
+          <div className="mt-6 p-4 bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border border-blue-500/20 rounded-lg">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="text-2xl">{currentContent.benefitsIcon}</div>
+              <h4 className="font-cyber text-lg text-blue-400">{currentContent.benefitsTitle}</h4>
             </div>
-          </form>
-        )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-muted-foreground font-cyber">
+              {currentContent.benefits.map((benefit, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <span className="text-green-400">✓</span>
+                  <span>{benefit}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Quick Start Guide */}
+          <div className="p-4 bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20 rounded-lg">
+            <h5 className="font-cyber text-sm font-bold text-primary mb-2">
+              {currentContent.quickStartTitle}
+            </h5>
+            <ol className="text-xs text-muted-foreground space-y-1 font-cyber">
+              {currentContent.quickStartSteps.map((step, index) => (
+                <li key={index}>{step}</li>
+              ))}
+            </ol>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );
