@@ -1,6 +1,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
+import { logger } from '@/utils';
 
 type Profile = Database['public']['Tables']['profiles']['Row'];
 type Game = Database['public']['Tables']['games']['Row'];
@@ -18,7 +19,7 @@ export const profileService = {
       .select('*')
       .eq('id', userId)
       .single();
-    
+
     if (error) throw error;
     return data;
   },
@@ -30,7 +31,7 @@ export const profileService = {
       .eq('id', userId)
       .select()
       .single();
-    
+
     if (error) throw error;
     return data;
   },
@@ -41,7 +42,7 @@ export const profileService = {
       .select('*')
       .order('total_earnings', { ascending: false })
       .limit(limit);
-    
+
     if (error) throw error;
     return data;
   },
@@ -52,7 +53,7 @@ export const profileService = {
       .select('*')
       .order('current_win_streak', { ascending: false })
       .limit(limit);
-    
+
     if (error) throw error;
     return data;
   }
@@ -65,7 +66,7 @@ export const gameService = {
       .from('games')
       .select('*')
       .eq('is_active', true);
-    
+
     if (error) throw error;
     return data;
   },
@@ -76,7 +77,7 @@ export const gameService = {
       .select('*')
       .eq('id', gameId)
       .single();
-    
+
     if (error) throw error;
     return data;
   }
@@ -93,34 +94,7 @@ export const roomService = {
         profiles(username, display_name, avatar_url)
       `)
       .order('created_at', { ascending: false });
-    
-    if (error) throw error;
-    return data;
-  },
 
-  async createRoom(roomData: {
-    name: string;
-    game_id: string;
-    host_id: string;
-    entry_fee: number;
-    max_players: number;
-    currency?: Database['public']['Enums']['currency_type'];
-    is_private?: boolean;
-  }) {
-    const { data, error } = await supabase
-      .from('game_rooms')
-      .insert({
-        name: roomData.name,
-        game_id: roomData.game_id,
-        host_id: roomData.host_id,
-        entry_fee: roomData.entry_fee,
-        max_players: roomData.max_players,
-        currency: roomData.currency || 'USDC',
-        is_private: roomData.is_private || false
-      })
-      .select()
-      .single();
-    
     if (error) throw error;
     return data;
   },
@@ -134,7 +108,7 @@ export const roomService = {
       })
       .select()
       .single();
-    
+
     if (error) throw error;
     return data;
   },
@@ -147,7 +121,7 @@ export const roomService = {
         profiles(username, display_name, avatar_url)
       `)
       .eq('room_id', roomId);
-    
+
     if (error) throw error;
     return data;
   }
@@ -160,7 +134,7 @@ export const walletService = {
       .from('wallets')
       .select('*')
       .eq('user_id', userId);
-    
+
     if (error) throw error;
     return data;
   },
@@ -168,7 +142,7 @@ export const walletService = {
   async updateWalletBalance(userId: string, currency: Database['public']['Enums']['currency_type'], amount: number) {
     const { data, error } = await supabase
       .from('wallets')
-      .update({ 
+      .update({
         balance: amount,
         updated_at: new Date().toISOString()
       })
@@ -176,7 +150,7 @@ export const walletService = {
       .eq('currency', currency)
       .select()
       .single();
-    
+
     if (error) throw error;
     return data;
   },
@@ -184,7 +158,7 @@ export const walletService = {
   async connectWallet(userId: string, currency: Database['public']['Enums']['currency_type'], walletAddress: string) {
     const { data, error } = await supabase
       .from('wallets')
-      .update({ 
+      .update({
         wallet_address: walletAddress,
         is_connected: true,
         updated_at: new Date().toISOString()
@@ -193,7 +167,7 @@ export const walletService = {
       .eq('currency', currency)
       .select()
       .single();
-    
+
     if (error) throw error;
     return data;
   }
@@ -208,7 +182,7 @@ export const transactionService = {
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(limit);
-    
+
     if (error) throw error;
     return data;
   },
@@ -235,7 +209,7 @@ export const transactionService = {
       })
       .select()
       .single();
-    
+
     if (error) throw error;
     return data;
   }
@@ -253,7 +227,7 @@ export const friendService = {
       `)
       .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`)
       .eq('status', 'accepted');
-    
+
     if (error) throw error;
     return data;
   },
@@ -268,7 +242,7 @@ export const friendService = {
       })
       .select()
       .single();
-    
+
     if (error) throw error;
     return data;
   },
@@ -276,14 +250,14 @@ export const friendService = {
   async respondToFriendRequest(friendId: string, status: Database['public']['Enums']['friend_status']) {
     const { data, error } = await supabase
       .from('friends')
-      .update({ 
+      .update({
         status,
         updated_at: new Date().toISOString()
       })
       .eq('id', friendId)
       .select()
       .single();
-    
+
     if (error) throw error;
     return data;
   }
@@ -298,7 +272,7 @@ export const notificationService = {
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(limit);
-    
+
     if (error) throw error;
     return data;
   },
@@ -321,7 +295,7 @@ export const notificationService = {
       })
       .select()
       .single();
-    
+
     if (error) throw error;
     return data;
   },
@@ -333,7 +307,7 @@ export const notificationService = {
       .eq('id', notificationId)
       .select()
       .single();
-    
+
     if (error) throw error;
     return data;
   }
@@ -351,7 +325,7 @@ export const leaderboardService = {
       .eq('period', period)
       .order('rank', { ascending: true })
       .limit(limit);
-    
+
     if (error) throw error;
     return data;
   },
@@ -373,8 +347,105 @@ export const leaderboardService = {
       })
       .select()
       .single();
-    
+
     if (error) throw error;
     return data;
   }
+};
+
+// Avatar operations
+export const avatarService = {
+  checkSession: async () => {
+    const { data, error } = await supabase.auth.getSession();
+
+    if (error) {
+      logger.error("Error getting session:", error);
+      return;
+    }
+
+    if (!data.session) {
+      logger.info("No active session found. The user is not logged in.");
+    } else {
+      logger.info("Active session found:", data.session);
+      logger.info("User ID from session:", data.session.user.id);
+    }
+  },
+  async uploadAvatar(file: File): Promise<string> {
+    try {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        throw new Error('File must be an image');
+      }
+
+      // Validate file size (max 5MB)
+      if (file.size > 2 * 1024 * 1024) {
+        throw new Error('File size must be less than 2MB');
+      }
+      await this.checkSession();
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
+      // Generate unique filename
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}/avatar.${fileExt}`;
+      logger.info(`Uploading avatar to Supabase Storage: ${fileName}`);
+      // Upload file to Supabase Storage
+      const { data, error } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: true // This allows overwriting existing avatars
+        });
+
+      if (error) throw error;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(fileName);
+
+      return publicUrl;
+    } catch (error) {
+      console.error('Error uploading avatar:', error);
+      throw error;
+    }
+  },
+
+  async updateProfileAvatar(userId: string, file: File): Promise<string> {
+    try {
+      // Upload the new avatar
+      const avatarUrl = await this.uploadAvatar(file);
+
+      // Update the profile with the new avatar URL
+      await profileService.updateProfile(userId, { avatar_url: avatarUrl });
+
+      return avatarUrl;
+    } catch (error) {
+      console.error('Error updating profile avatar:', error);
+      throw error;
+    }
+  },
+
+  deleteAvatar: async (userId: string): Promise<void> => {
+    try {
+      const { data: files } = await supabase.storage.from('avatars').list(userId);
+      if (files && files.length > 0) {
+        const fileToDelete = files.find((f) => f.name.startsWith('avatar.'));
+        if (fileToDelete) {
+          const { error } = await supabase.storage.from('avatars').remove([`${userId}/${fileToDelete.name}`]);
+          if (error) {
+            logger.error('Error deleting avatar:', error);
+            throw error;
+          }
+        }
+      }
+    } catch (error) {
+      logger.error('Error deleting avatar:', error);
+      throw error;
+    }
+  }
+
 };

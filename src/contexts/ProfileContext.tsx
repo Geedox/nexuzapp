@@ -1,8 +1,9 @@
 /* eslint-disable no-useless-catch */
-import { createContext, useContext, useEffect, useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
+import { createContext, useContext, useEffect, useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { avatarService } from "@/lib/supabase";
 
 export interface Profile {
   id: string;
@@ -64,6 +65,8 @@ interface ProfileContextType {
   refreshProfile: () => Promise<void>;
   refreshStats: () => Promise<void>;
   refreshProfileStats: () => Promise<void>; // New function
+  uploadAvatar: (file: File) => Promise<string>; // New function
+  removeAvatar: () => Promise<void>; // New function
 }
 
 const ProfileContext = createContext<ProfileContextType | undefined>(undefined);
@@ -71,12 +74,16 @@ const ProfileContext = createContext<ProfileContextType | undefined>(undefined);
 export const useProfile = () => {
   const context = useContext(ProfileContext);
   if (context === undefined) {
-    throw new Error('useProfile must be used within a ProfileProvider');
+    throw new Error("useProfile must be used within a ProfileProvider");
   }
   return context;
 };
 
-export const ProfileProvider = ({ children }: { children: React.ReactNode }) => {
+export const ProfileProvider = ({
+  children,
+}: {
+  children: React.ReactNode;
+}) => {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [roomStats, setRoomStats] = useState<RoomStats | null>(null);
   const [gameStats, setGameStats] = useState<GameStats[]>([]);
@@ -89,12 +96,14 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
     try {
       // Get room statistics from game_room_participants and game_rooms
       const { data: participantData } = await supabase
-        .from('game_room_participants')
-        .select(`
+        .from("game_room_participants")
+        .select(
+          `
           *,
           room:game_rooms(*)
-        `)
-        .eq('user_id', userId);
+        `
+        )
+        .eq("user_id", userId);
 
       if (!participantData) {
         return {
@@ -104,22 +113,30 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
           completedRooms: 0,
           totalRoomWinnings: 0,
           roomWinRate: 0,
-          favoriteGame: null
+          favoriteGame: null,
         };
       }
 
       const totalRoomsJoined = participantData.length;
-      const activeRooms = participantData.filter(p => p.room?.status === 'ongoing' || p.room?.status === 'waiting').length;
-      const completedRooms = participantData.filter(p => p.room?.status === 'completed').length;
-      const wins = participantData.filter(p => p.final_position === 1).length;
-      const totalRoomWinnings = participantData.reduce((sum, p) => sum + (p.earnings || 0), 0);
-      const roomWinRate = completedRooms > 0 ? (wins / completedRooms) * 100 : 0;
+      const activeRooms = participantData.filter(
+        (p) => p.room?.status === "ongoing" || p.room?.status === "waiting"
+      ).length;
+      const completedRooms = participantData.filter(
+        (p) => p.room?.status === "completed"
+      ).length;
+      const wins = participantData.filter((p) => p.final_position === 1).length;
+      const totalRoomWinnings = participantData.reduce(
+        (sum, p) => sum + (p.earnings || 0),
+        0
+      );
+      const roomWinRate =
+        completedRooms > 0 ? (wins / completedRooms) * 100 : 0;
 
       // Get created rooms
       const { data: createdRooms } = await supabase
-        .from('game_rooms')
-        .select('*')
-        .eq('creator_id', userId);
+        .from("game_rooms")
+        .select("*")
+        .eq("creator_id", userId);
 
       const totalRoomsCreated = createdRooms?.length || 0;
 
@@ -130,10 +147,10 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
         completedRooms,
         totalRoomWinnings,
         roomWinRate,
-        favoriteGame: null // You can implement this based on most played game
+        favoriteGame: null, // You can implement this based on most played game
       };
     } catch (error) {
-      console.error('Error fetching room stats:', error);
+      console.error("Error fetching room stats:", error);
       return {
         totalRoomsJoined: 0,
         totalRoomsCreated: 0,
@@ -141,7 +158,7 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
         completedRooms: 0,
         totalRoomWinnings: 0,
         roomWinRate: 0,
-        favoriteGame: null
+        favoriteGame: null,
       };
     }
   };
@@ -150,30 +167,33 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
   const fetchGameStats = async (userId: string): Promise<GameStats[]> => {
     try {
       const { data: leaderboardData } = await supabase
-        .from('leaderboards')
-        .select(`
+        .from("leaderboards")
+        .select(
+          `
           *,
           game:games(name)
-        `)
-        .eq('user_id', userId)
-        .eq('period', 'all-time')
-        .not('game_id', 'is', null);
+        `
+        )
+        .eq("user_id", userId)
+        .eq("period", "all-time")
+        .not("game_id", "is", null);
 
       if (!leaderboardData) return [];
 
-      const gameStats: GameStats[] = leaderboardData.map(entry => ({
+      const gameStats: GameStats[] = leaderboardData.map((entry) => ({
         gameId: entry.game_id,
-        gameName: entry.game?.name || 'Unknown Game',
+        gameName: entry.game?.name || "Unknown Game",
         gamesPlayed: entry.games_played || 0,
         wins: entry.wins || 0,
         earnings: Number(entry.total_earnings || 0),
-        winRate: entry.games_played > 0 ? (entry.wins / entry.games_played) * 100 : 0,
-        averagePosition: 0 // You can calculate this from game_room_participants if needed
+        winRate:
+          entry.games_played > 0 ? (entry.wins / entry.games_played) * 100 : 0,
+        averagePosition: 0, // You can calculate this from game_room_participants if needed
       }));
 
       return gameStats;
     } catch (error) {
-      console.error('Error fetching game stats:', error);
+      console.error("Error fetching game stats:", error);
       return [];
     }
   };
@@ -182,9 +202,9 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
   const fetchProfile = async (userId: string) => {
     try {
       const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
+        .from("profiles")
+        .select("*")
+        .eq("id", userId)
         .single();
 
       if (error) throw error;
@@ -193,13 +213,13 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
       // Fetch room and game stats
       const [roomStatsData, gameStatsData] = await Promise.all([
         fetchRoomStats(userId),
-        fetchGameStats(userId)
+        fetchGameStats(userId),
       ]);
 
       setRoomStats(roomStatsData);
       setGameStats(gameStatsData);
     } catch (error) {
-      console.error('Error fetching profile:', error);
+      console.error("Error fetching profile:", error);
       toast({
         title: "Error",
         description: "Failed to fetch profile data",
@@ -223,13 +243,13 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
     try {
       const [roomStatsData, gameStatsData] = await Promise.all([
         fetchRoomStats(user.id),
-        fetchGameStats(user.id)
+        fetchGameStats(user.id),
       ]);
 
       setRoomStats(roomStatsData);
       setGameStats(gameStatsData);
     } catch (error) {
-      console.error('Error refreshing stats:', error);
+      console.error("Error refreshing stats:", error);
     }
   };
 
@@ -239,13 +259,13 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
 
     try {
       // Use the SQL function to update profile stats
-      await supabase.rpc('update_user_profile_stats', { p_user_id: user.id });
+      await supabase.rpc("update_user_profile_stats", { p_user_id: user.id });
 
       // Then refresh the profile data
       const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
         .single();
 
       if (error) throw error;
@@ -256,7 +276,7 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
         description: "Profile stats refreshed successfully",
       });
     } catch (error) {
-      console.error('Error refreshing profile stats:', error);
+      console.error("Error refreshing profile stats:", error);
       toast({
         title: "Error",
         description: "Failed to refresh profile stats",
@@ -271,12 +291,12 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
 
     try {
       const { data, error } = await supabase
-        .from('profiles')
+        .from("profiles")
         .update({
           ...updates,
           updated_at: new Date().toISOString(),
         })
-        .eq('id', user.id)
+        .eq("id", user.id)
         .select()
         .single();
 
@@ -288,7 +308,7 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
         description: "Profile updated successfully",
       });
     } catch (error) {
-      console.error('Error updating profile:', error);
+      console.error("Error updating profile:", error);
       toast({
         title: "Error",
         description: "Failed to update profile",
@@ -299,12 +319,14 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
   };
 
   // Check if username is available
-  const checkUsernameAvailability = async (username: string): Promise<boolean> => {
+  const checkUsernameAvailability = async (
+    username: string
+  ): Promise<boolean> => {
     try {
       const { data, error } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('username', username)
+        .from("profiles")
+        .select("id")
+        .eq("username", username)
         .maybeSingle();
 
       if (error) throw error;
@@ -312,7 +334,7 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
       // If data is null, username is available
       return data === null;
     } catch (error) {
-      console.error('Error checking username:', error);
+      console.error("Error checking username:", error);
       return false;
     }
   };
@@ -341,6 +363,56 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
     }
   };
 
+  // Upload avatar
+  const uploadAvatar = async (file: File): Promise<string> => {
+    if (!user) throw new Error("User not authenticated");
+
+    try {
+      const avatarUrl = await avatarService.updateProfileAvatar(user.id, file);
+
+      // Update local profile state
+      setProfile((prev) => (prev ? { ...prev, avatar_url: avatarUrl } : null));
+
+      toast({
+        title: "Success",
+        description: "Avatar updated successfully",
+      });
+
+      return avatarUrl;
+    } catch (error) {
+      console.error("Error uploading avatar:", error);
+      toast({
+        title: "Error",
+        description: "Failed to upload avatar. Please try again.",
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
+
+  // Remove avatar
+  const removeAvatar = async (): Promise<void> => {
+    if (!user) throw new Error("User not authenticated");
+
+    try {
+      await avatarService.deleteAvatar(user.id);
+      await updateProfile({ avatar_url: null });
+
+      toast({
+        title: "Success",
+        description: "Avatar removed successfully",
+      });
+    } catch (error) {
+      console.error("Error removing avatar:", error);
+      toast({
+        title: "Error",
+        description: "Failed to remove avatar. Please try again.",
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
+
   // Load profile when user changes
   useEffect(() => {
     if (user) {
@@ -358,15 +430,19 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
     if (!user) return;
 
     const subscription = supabase
-      .channel('profile_changes')
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'profiles',
-        filter: `id=eq.${user.id}`
-      }, (payload) => {
-        setProfile(payload.new as Profile);
-      })
+      .channel("profile_changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "profiles",
+          filter: `id=eq.${user.id}`,
+        },
+        (payload) => {
+          setProfile(payload.new as Profile);
+        }
+      )
       .subscribe();
 
     return () => {
@@ -384,8 +460,12 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
     setUsername,
     refreshProfile,
     refreshStats,
-    refreshProfileStats, // New function added
+    refreshProfileStats,
+    uploadAvatar,
+    removeAvatar,
   };
 
-  return <ProfileContext.Provider value={value}>{children}</ProfileContext.Provider>;
+  return (
+    <ProfileContext.Provider value={value}>{children}</ProfileContext.Provider>
+  );
 };
