@@ -32,6 +32,7 @@ interface GameRoom {
   end_time: string;
   actual_start_time: string | null;
   actual_end_time: string | null;
+  timezone: string | null;
   total_prize_pool: number;
   platform_fee_collected: number;
   on_chain_create_digest: string | null;
@@ -84,6 +85,7 @@ export interface CreateRoomData {
   winnerSplitRule: Database["public"]["Enums"]["winner_split_rule"];
   startTime: Date;
   endTime: Date;
+  timezone: string;
   isSponsored?: boolean;
   sponsorAmount?: number;
 }
@@ -1652,6 +1654,7 @@ export const GameRoomProvider = ({
             data.winnerSplitRule as Database["public"]["Enums"]["winner_split_rule"],
           start_time: data.startTime.toISOString(),
           end_time: data.endTime.toISOString(),
+          timezone: data.timezone,
           is_sponsored: data.isSponsored || false,
           sponsor_amount: data.sponsorAmount || 0,
           total_prize_pool: data.isSponsored ? data.sponsorAmount || 0 : 0,

@@ -530,6 +530,7 @@ export type Database = {
           sponsor_amount: number | null
           start_time: string
           status: Database["public"]["Enums"]["room_status"] | null
+          timezone: string | null
           total_prize_pool: number | null
           updated_at: string | null
           winner_split_rule: Database["public"]["Enums"]["winner_split_rule"]
@@ -558,6 +559,7 @@ export type Database = {
           sponsor_amount?: number | null
           start_time: string
           status?: Database["public"]["Enums"]["room_status"] | null
+          timezone?: string | null
           total_prize_pool?: number | null
           updated_at?: string | null
           winner_split_rule?: Database["public"]["Enums"]["winner_split_rule"]
@@ -586,6 +588,7 @@ export type Database = {
           sponsor_amount?: number | null
           start_time?: string
           status?: Database["public"]["Enums"]["room_status"] | null
+          timezone?: string | null
           total_prize_pool?: number | null
           updated_at?: string | null
           winner_split_rule?: Database["public"]["Enums"]["winner_split_rule"]
