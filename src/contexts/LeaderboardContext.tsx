@@ -165,6 +165,7 @@ export const LeaderboardProvider: React.FC<LeaderboardProviderProps> = ({
           `
             )
             .eq("period", "all-time")
+            .is("game_id", null)
             .order("wins", { ascending: false })
             .order("total_earnings", { ascending: false })
             .limit(limit);
@@ -176,27 +177,27 @@ export const LeaderboardProvider: React.FC<LeaderboardProviderProps> = ({
 
           result.data?.forEach((entry: any) => {
             const userId = entry.user_id;
-            if (userStats.has(userId)) {
-              const existing = userStats.get(userId);
-              existing.total_score = Math.max(
-                existing.total_score,
-                entry.total_score
-              );
-              existing.games_played += entry.games_played;
-              existing.wins += entry.wins || 0;
-              existing.total_earnings += entry.total_earnings || 0;
-            } else {
-              userStats.set(userId, {
-                user_id: userId,
-                username: entry.user?.username,
-                display_name: entry.user?.display_name,
-                avatar_url: entry.user?.avatar_url,
-                total_score: entry.total_score || 0,
-                total_games: entry.games_played || 0,
-                total_wins: entry.wins || 0,
-                total_earnings: entry.total_earnings || 0,
-              });
-            }
+            // if (userStats.has(userId)) {
+            //   const existing = userStats.get(userId);
+            //   existing.total_score = Math.max(
+            //     existing.total_score,
+            //     entry.total_score
+            //   );
+            //   existing.games_played += entry.games_played;
+            //   existing.wins += entry.wins || 0;
+            //   existing.total_earnings += entry.total_earnings || 0;
+            // } else {
+            userStats.set(userId, {
+              user_id: userId,
+              username: entry.user?.username,
+              display_name: entry.user?.display_name,
+              avatar_url: entry.user?.avatar_url,
+              total_score: entry.total_score || 0,
+              total_games: entry.games_played || 0,
+              total_wins: entry.wins || 0,
+              total_earnings: entry.total_earnings || 0,
+            });
+            // }
           });
 
           // Convert to array and sort

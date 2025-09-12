@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -84,10 +85,6 @@ const DashboardTopbar = () => {
   const handleLogout = async () => {
     await signOut();
     navigate("/");
-  };
-
-  const handleSupport = () => {
-    console.log("Opening support...");
   };
 
   const totalBalance = profile?.total_earnings || 0;
@@ -336,19 +333,18 @@ const DashboardTopbar = () => {
               </DropdownMenuLabel>
               <DropdownMenuSeparator className="bg-primary/20" />
               <DropdownMenuItem className="hover:bg-primary/20 font-cyber cursor-pointer">
-                <User className="mr-2 h-4 w-4" />
-                <span>Profile</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem className="hover:bg-primary/20 font-cyber cursor-pointer">
-                <Settings className="mr-2 h-4 w-4" />
-                <span>Settings</span>
+                <Link to="/dashboard/settings">
+                  <Settings className="mr-2 h-4 w-4" />
+                  <span>Settings</span>
+                </Link>
               </DropdownMenuItem>
               <DropdownMenuItem
-                onClick={handleSupport}
                 className="hover:bg-primary/20 font-cyber cursor-pointer"
               >
+                <Link to="/dashboard/support">
                 <HelpCircle className="mr-2 h-4 w-4" />
                 <span>Support</span>
+                </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator className="bg-primary/20" />
               <DropdownMenuItem
