@@ -99,7 +99,7 @@ export const CetusSwapModal = ({
 
   // Network configuration
 
-  // Initialize Cetus SDK for testnet
+  // Initialize Cetus SDK
   useEffect(() => {
     if (!open) return;
 
@@ -111,7 +111,7 @@ export const CetusSwapModal = ({
         sdk.setSenderAddress(profile.sui_wallet_data.address);
 
         setCetusSDK(sdk);
-        console.log("✅ Swap initialized successfully for testnet");
+        console.log("✅ Cetus Swap initialized successfully");
       } catch (error) {
         console.error("❌ Failed to initialize Swap:", error);
         toast({
@@ -161,9 +161,7 @@ export const CetusSwapModal = ({
 
     setIsCalculating(true);
     try {
-      console.log(
-        `🔄 Calculating real testnet swap: ${amount} ${from} → ${to}`
-      );
+      console.log(`🔄 Calculating swap: ${amount} ${from} → ${to}`);
 
       const fromTokenAddress = COIN_TYPES[from as keyof typeof COIN_TYPES];
       const toTokenAddress = COIN_TYPES[to as keyof typeof COIN_TYPES];
@@ -173,13 +171,13 @@ export const CetusSwapModal = ({
       const poolId = POOL_IDS[pairKey];
 
       if (!poolId) {
-        console.log("❌ No pool ID found for this pair on testnet");
+        console.log("❌ No pool ID found for this pair");
         setToAmount("");
         setPoolInfo(null);
         setPreSwapResult(null);
         toast({
           title: "Pool Not Found",
-          description: `No pool ID configured for ${from}/${to} pair on testnet`,
+          description: `No pool ID configured for ${from}/${to} pair`,
           variant: "destructive",
         });
         return;
@@ -301,7 +299,7 @@ export const CetusSwapModal = ({
 
     setIsSwapping(true);
     try {
-      console.log("🚀 Executing swap on testnet...");
+      console.log("🚀 Executing swap...");
 
       // ✅ Build proper Ed25519 keypair from hex private key
       const privateKey = profile.sui_wallet_data.privateKey;
@@ -343,7 +341,7 @@ export const CetusSwapModal = ({
         a2b,
         by_amount_in,
         amount: preSwapResult.amount.toString(), // string
-        amount_limit: amount_limit.toString(),   // string
+        amount_limit: amount_limit.toString(), // string
         swap_partner: undefined,
       });
 
@@ -516,7 +514,7 @@ export const CetusSwapModal = ({
                 <CheckCircle className="w-5 h-5 text-green-400 mt-0.5" />
                 <div className="flex-1">
                   <p className="text-green-400 font-cyber font-bold mb-1">
-                    Testnet Swap Completed!
+                    Swap Completed!
                   </p>
                   <Button
                     onClick={() =>
@@ -530,7 +528,7 @@ export const CetusSwapModal = ({
                     className="border-green-500/50 text-green-400 hover:bg-green-500/20 font-cyber"
                   >
                     <ExternalLink className="w-3 h-3 mr-1" />
-                    View on Testnet Explorer
+                    View on Explorer
                   </Button>
                 </div>
               </div>
@@ -649,7 +647,7 @@ export const CetusSwapModal = ({
             <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
               <div className="flex items-center justify-between mb-2">
                 <h4 className="text-blue-400 font-cyber font-bold">
-                  Live Testnet Pool Data
+                  Live Pool Data
                 </h4>
                 <Button
                   onClick={() =>
@@ -690,7 +688,7 @@ export const CetusSwapModal = ({
                   <span className="text-blue-300">
                     {Number(
                       preSwapResult.estimated_amount_out /
-                      Math.pow(10, getDecimals(toCurrency))
+                        Math.pow(10, getDecimals(toCurrency))
                     ).toFixed(4)}
                   </span>
                 </div>
