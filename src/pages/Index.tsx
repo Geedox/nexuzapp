@@ -6,7 +6,6 @@ import Features from '@/components/Features';
 import GameShowcase from '@/components/GameShowcase';
 import GameDashboard from '@/components/GameDashboard';
 import LeaderboardSection from '@/components/LeaderboardSection';
-import WalletsSection from '@/components/WalletsSection';
 import SecuritySection from '@/components/SecuritySection';
 import PayoutSection from '@/components/PayoutSection';
 import FAQSection from '@/components/FAQSection';
@@ -15,6 +14,7 @@ import twitter from "/twitter.svg";
 import reddit from "/reddit.svg";
 import discord from "/discord.svg";
 import facebook from "/facebook.svg";
+import PlatformAsService from '@/components/PlatformService';
 
 const Index = () => {
   const navigate = useNavigate();
@@ -67,7 +67,7 @@ const Index = () => {
       <GameDashboard />
       <GameShowcase />
       <LeaderboardSection />
-      <WalletsSection />
+      <PlatformAsService />
       <SecuritySection />
       <PayoutSection />
       <FAQSection />
