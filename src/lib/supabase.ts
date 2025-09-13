@@ -56,6 +56,97 @@ export const profileService = {
 
     if (error) throw error;
     return data;
+  },
+
+  async deleteAccount(userId: string) {
+    try {
+      // Start a transaction-like operation by deleting related data first
+      // Note: In Supabase, we need to handle foreign key constraints carefully
+
+      // 1. Delete notifications
+      await supabase
+        .from('notifications')
+        .delete()
+        .eq('user_id', userId);
+
+      // 2. Delete friends relationships
+      await supabase
+        .from('friends')
+        .delete()
+        .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`);
+
+      // 3. Delete leaderboard entries
+      await supabase
+        .from('leaderboards')
+        .delete()
+        .eq('user_id', userId);
+
+      // 4. Delete game room participants
+      await supabase
+        .from('game_room_participants')
+        .delete()
+        .eq('user_id', userId);
+
+      // 6. Delete game sessions
+      await supabase
+        .from('game_sessions')
+        .delete()
+        .eq('user_id', userId);
+
+      // 7. Delete game scores
+      await supabase
+        .from('game_scores')
+        .delete()
+        .eq('player_id', userId);
+
+      // 10. Delete chat room memberships
+      await supabase
+        .from('chat_room_members')
+        .delete()
+        .eq('user_id', userId);
+
+      // 11. Delete chat messages sent by user
+      await supabase
+        .from('chat_messages')
+        .delete()
+        .eq('sender_id', userId);
+
+      // 12. Delete chat rooms created by user
+      await supabase
+        .from('chat_rooms')
+        .delete()
+        .eq('creator_id', userId);
+
+      // 13. Delete email queue entries
+      await supabase
+        .from('email_queue')
+        .delete()
+        .eq('user_id', userId);
+
+      // 14. Finally, delete the profile
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', userId);
+
+      if (profileError) throw profileError;
+
+      // 15. Delete user's avatar from storage
+      try {
+        await avatarService.deleteAvatar(userId);
+      } catch (avatarError) {
+        // Log but don't fail the deletion if avatar deletion fails
+        console.warn('Failed to delete avatar:', avatarError);
+      }
+
+      // 16. Sign out the user
+      await supabase.auth.signOut();
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error deleting account:', error);
+      throw error;
+    }
   }
 };
 
@@ -350,6 +441,114 @@ export const leaderboardService = {
 
     if (error) throw error;
     return data;
+  }
+};
+
+// Analytics operations
+export const analyticsService = {
+  async getUserGameStats(userId: string) {
+    try {
+      // Get all game room participations for the user
+      const { data: participations, error } = await supabase
+        .from('game_room_participants')
+        .select(`
+          *,
+          room:game_rooms(
+            id,
+            name,
+            status,
+            created_at,
+            game:games(name, image_url)
+          )
+        `)
+        .eq('user_id', userId)
+        .order('joined_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Calculate statistics
+      const totalGames = participations?.length || 0;
+      const wins = participations?.filter(p => p.final_position === 1).length || 0;
+      const totalWinnings = participations?.reduce((sum, p) => sum + (p.earnings || 0), 0) || 0;
+      const winRate = totalGames > 0 ? (wins / totalGames) * 100 : 0;
+
+      // Get recent games (last 10)
+      const recentGames = participations?.slice(0, 10).map(p => ({
+        game: p.room?.game?.name || 'Unknown Game',
+        result: p.final_position === 1 ? 'WIN' : 'LOSS',
+        amount: p.earnings ? (p.earnings > 0 ? `+$${p.earnings.toFixed(2)}` : `-$${Math.abs(p.earnings).toFixed(2)}`) : '$0.00',
+        date: p.joined_at ? new Date(p.joined_at).toLocaleDateString() : 'Unknown',
+        roomId: p.room_id,
+        position: p.final_position
+      })) || [];
+
+      return {
+        totalGames,
+        wins,
+        totalWinnings,
+        winRate,
+        recentGames,
+        participations: participations || []
+      };
+    } catch (error) {
+      console.error('Error fetching user game stats:', error);
+      throw error;
+    }
+  },
+
+  async getUserGameStatsByPeriod(userId: string, period: 'week' | 'month' | 'year' | 'all') {
+    try {
+      let startDate: string;
+      const now = new Date();
+
+      switch (period) {
+        case 'week':
+          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+          break;
+        case 'month':
+          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+          break;
+        case 'year':
+          startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000).toISOString();
+          break;
+        default:
+          startDate = '1970-01-01T00:00:00.000Z';
+      }
+
+      const { data: participations, error } = await supabase
+        .from('game_room_participants')
+        .select(`
+          *,
+          room:game_rooms(
+            id,
+            name,
+            status,
+            created_at,
+            game:games(name, image_url)
+          )
+        `)
+        .eq('user_id', userId)
+        .gte('joined_at', startDate)
+        .order('joined_at', { ascending: false });
+
+      if (error) throw error;
+
+      const totalGames = participations?.length || 0;
+      const wins = participations?.filter(p => p.final_position === 1).length || 0;
+      const totalWinnings = participations?.reduce((sum, p) => sum + (p.earnings || 0), 0) || 0;
+      const winRate = totalGames > 0 ? (wins / totalGames) * 100 : 0;
+
+      return {
+        totalGames,
+        wins,
+        totalWinnings,
+        winRate,
+        period
+      };
+    } catch (error) {
+      console.error('Error fetching user game stats by period:', error);
+      throw error;
+    }
   }
 };
 

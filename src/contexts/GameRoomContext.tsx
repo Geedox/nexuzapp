@@ -456,6 +456,7 @@ export const GameRoomProvider = ({
           .update({
             final_position: winner.position,
             earnings: earnings,
+            payout_transaction_id: onChainResult?.digest,
           })
           .eq("room_id", room.id)
           .eq("user_id", winner.userId);
@@ -464,13 +465,6 @@ export const GameRoomProvider = ({
           logger.error("Error updating participant:", participantError);
           continue;
         }
-
-        // Update payout transaction id
-        await supabase
-          .from("game_room_participants")
-          .update({ payout_transaction_id: onChainResult?.digest })
-          .eq("room_id", room.id)
-          .eq("user_id", winner.userId);
 
         // Record in winners table
         try {
