@@ -462,7 +462,9 @@ const RoomsPage = () => {
     startTime: new Date(Date.now() + 3600000), // 1 hour from now
     endTime: new Date(Date.now() + 7200000), // 2 hours from now
     isSponsored: false,
+    isSpecial: false,
     sponsorAmount: 0,
+    gameName: "",
   });
 
   const winnerRules = [
@@ -585,10 +587,30 @@ const RoomsPage = () => {
   };
 
   const handleCreateRoom = async () => {
-    if (!formData.name || !formData.gameId) {
+    if (!formData.name) {
       toast({
         title: "Error",
-        description: "Please fill in all required fields",
+        description: "Please fill in room name",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // For non-special rooms, game selection is required
+    if (!formData.isSpecial && !formData.gameId) {
+      toast({
+        title: "Error",
+        description: "Please select a game",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // For special rooms, custom game name is required
+    if (formData.isSpecial && !formData.gameName.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a custom game name",
         variant: "destructive",
       });
       return;
@@ -606,28 +628,31 @@ const RoomsPage = () => {
       return;
     }
 
-    // Validate end time is after start time
-    if (formData.endTime <= formData.startTime) {
-      toast({
-        title: "Invalid End Time",
-        description: "End time must be after start time",
-        variant: "destructive",
-      });
-      return;
-    }
+    // For non-special rooms, validate end time
+    if (!formData.isSpecial) {
+      // Validate end time is after start time
+      if (formData.endTime <= formData.startTime) {
+        toast({
+          title: "Invalid End Time",
+          description: "End time must be after start time",
+          variant: "destructive",
+        });
+        return;
+      }
 
-    // Check minimum duration (10 minutes)
-    const minDuration = 10 * 60 * 1000; // 10 minutes in milliseconds
-    if (
-      formData.endTime.getTime() - formData.startTime.getTime() <
-      minDuration
-    ) {
-      toast({
-        title: "Invalid Duration",
-        description: "Game must last at least 10 minutes",
-        variant: "destructive",
-      });
-      return;
+      // Check minimum duration (10 minutes)
+      const minDuration = 10 * 60 * 1000; // 10 minutes in milliseconds
+      if (
+        formData.endTime.getTime() - formData.startTime.getTime() <
+        minDuration
+      ) {
+        toast({
+          title: "Invalid Duration",
+          description: "Game must last at least 10 minutes",
+          variant: "destructive",
+        });
+        return;
+      }
     }
     const balance =
       formData.currency === "USDC"
@@ -676,7 +701,9 @@ const RoomsPage = () => {
         startTime: new Date(Date.now() + 3600000),
         endTime: new Date(Date.now() + 7200000),
         isSponsored: false,
+        isSpecial: false,
         sponsorAmount: 0,
+        gameName: "",
       });
 
       // Show room code if private
@@ -992,7 +1019,9 @@ const RoomsPage = () => {
                         Game:
                       </span>
                       <span className="text-sm font-cyber text-foreground">
-                        {room.game?.name || "Unknown"}
+                        {room.is_special
+                          ? "Custom Game"
+                          : room.game?.name || "Unknown"}
                       </span>
                     </div>
                     <div className="flex justify-between">
@@ -1081,6 +1110,13 @@ const RoomsPage = () => {
                       <div className="flex justify-center mt-2">
                         <span className="text-xs font-cyber text-yellow-400">
                           💰 Sponsored
+                        </span>
+                      </div>
+                    )}
+                    {room.is_special && (
+                      <div className="flex justify-center mt-2">
+                        <span className="text-xs font-cyber text-purple-400">
+                          ⭐ Special Room
                         </span>
                       </div>
                     )}
@@ -1267,23 +1303,108 @@ const RoomsPage = () => {
                     </div>
 
                     <div>
-                      <label className="text-sm font-cyber text-primary mb-1 block">
-                        Select Game
+                      {formData.isSpecial ? (
+                        <>
+                          <label className="text-sm font-cyber text-primary mb-1 block">
+                            Game Name
+                          </label>
+                          <input
+                            type="text"
+                            value={formData.gameName}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                gameName: e.target.value,
+                              })
+                            }
+                            className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                            placeholder="Enter custom game name..."
+                          />
+                          <p className="text-xs font-cyber text-yellow-400 mt-1">
+                            Special rooms use custom games - enter your game
+                            name
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <label className="text-sm font-cyber text-primary mb-1 block">
+                            Select Game
+                          </label>
+                          <select
+                            value={formData.gameId}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                gameId: e.target.value,
+                              })
+                            }
+                            className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
+                          >
+                            <option value="">Choose a game...</option>
+                            {games.map((game) => (
+                              <option key={game.id} value={game.id}>
+                                {game.name}
+                              </option>
+                            ))}
+                          </select>
+                        </>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-cyber text-primary mb-3 block">
+                        💰 Select Coin for Room Creation
                       </label>
-                      <select
-                        value={formData.gameId}
-                        onChange={(e) =>
-                          setFormData({ ...formData, gameId: e.target.value })
-                        }
-                        className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
-                      >
-                        <option value="">Choose a game...</option>
-                        {games.map((game) => (
-                          <option key={game.id} value={game.id}>
-                            {game.name}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setFormData({
+                              ...formData,
+                              currency: "USDC" as "USDC" | "USDT",
+                            })
+                          }
+                          className={`p-4 rounded-xl border-2 transition-all duration-300 font-cyber font-bold ${
+                            formData.currency === "USDC"
+                              ? "border-blue-500 bg-blue-500/20 text-blue-400 shadow-lg shadow-blue-500/20"
+                              : "border-primary/30 bg-secondary/50 text-foreground hover:border-primary/50 hover:bg-secondary/70"
+                          }`}
+                        >
+                          <div className="flex flex-col items-center gap-2">
+                            <div className="text-2xl">💙</div>
+                            <div>USDC</div>
+                            <div className="text-xs opacity-75">
+                              Balance: {usdcBalance?.toFixed(2) || "0.00"}
+                            </div>
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setFormData({
+                              ...formData,
+                              currency: "USDT" as "USDC" | "USDT",
+                            })
+                          }
+                          className={`p-4 rounded-xl border-2 transition-all duration-300 font-cyber font-bold ${
+                            formData.currency === "USDT"
+                              ? "border-green-500 bg-green-500/20 text-green-400 shadow-lg shadow-green-500/20"
+                              : "border-primary/30 bg-secondary/50 text-foreground hover:border-primary/50 hover:bg-secondary/70"
+                          }`}
+                        >
+                          <div className="flex flex-col items-center gap-2">
+                            <div className="text-2xl">💚</div>
+                            <div>USDT</div>
+                            <div className="text-xs opacity-75">
+                              Balance: {usdtBalance?.toFixed(2) || "0.00"}
+                            </div>
+                          </div>
+                        </button>
+                      </div>
+                      <p className="text-xs font-cyber text-muted-foreground mt-2 text-center">
+                        Choose the coin you want to use for entry fees and
+                        prizes
+                      </p>
                     </div>
 
                     <div>
@@ -1422,6 +1543,11 @@ const RoomsPage = () => {
                     <div>
                       <label className="text-sm font-cyber text-primary mb-1 block">
                         End Time
+                        {formData.isSpecial && (
+                          <span className="text-xs text-muted-foreground ml-2">
+                            (Optional for Special Rooms)
+                          </span>
+                        )}
                       </label>
                       <input
                         type="datetime-local"
@@ -1434,10 +1560,17 @@ const RoomsPage = () => {
                         }}
                         className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
                       />
-                      <p className="text-xs font-cyber text-muted-foreground mt-1">
-                        Game will end at this time (minimum 10 minutes after
-                        start)
-                      </p>
+                      {formData.isSpecial ? (
+                        <p className="text-xs font-cyber text-yellow-400 mt-1">
+                          Special rooms can run indefinitely until manually
+                          completed by admin
+                        </p>
+                      ) : (
+                        <p className="text-xs font-cyber text-muted-foreground mt-1">
+                          Game will end at this time (minimum 10 minutes after
+                          start)
+                        </p>
+                      )}
                       {formData.startTime &&
                         formData.endTime &&
                         formData.endTime > formData.startTime && (
@@ -1487,6 +1620,39 @@ const RoomsPage = () => {
                         <span className="text-sm font-cyber text-foreground group-hover:text-primary transition-colors">
                           💰 Sponsored Room (Free Entry)
                         </span>
+                      </label>
+
+                      <label className="flex items-center gap-3 cursor-pointer group">
+                        <input
+                          type="checkbox"
+                          checked={formData.isSpecial}
+                          onChange={(e) => {
+                            const isSpecial = e.target.checked;
+                            setFormData({
+                              ...formData,
+                              isSpecial,
+                              isPrivate: isSpecial ? true : formData.isPrivate, // Auto-set private for special rooms
+                              gameId: isSpecial ? "" : formData.gameId, // Clear game selection for special rooms
+                              gameName: isSpecial ? formData.gameName : "", // Clear custom game name when unchecking special
+                            });
+                          }}
+                          className="w-5 h-5 rounded border-primary/30 text-primary focus:ring-primary"
+                        />
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-cyber text-foreground group-hover:text-primary transition-colors">
+                            ⭐ Special Room (Custom Game)
+                          </span>
+                          <div className="group relative">
+                            <span className="text-xs text-muted-foreground cursor-help">
+                              ℹ️
+                            </span>
+                            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
+                              Special rooms allow custom game configurations
+                              without predefined games. Admin manages winners
+                              manually.
+                            </div>
+                          </div>
+                        </div>
                       </label>
                     </div>
                   </div>

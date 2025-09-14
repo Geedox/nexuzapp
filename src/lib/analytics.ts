@@ -18,7 +18,7 @@ export interface TrendData {
 
 export interface RecentGame {
     game: string;
-    result: 'WIN' | 'LOSS';
+    result: 'WIN' | 'LOSS' | string;
     amount: string;
     date: string;
     roomId: string;
@@ -87,9 +87,22 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
     }
 }
 
-// Get recent games for a user
-export async function getRecentGames(userId: string, limit: number = 10): Promise<RecentGame[]> {
+// Get recent games for a user with pagination
+export async function getRecentGames(
+    userId: string,
+    limit: number = 10,
+    offset: number = 0
+): Promise<{ games: RecentGame[]; total: number }> {
     try {
+        // Get total count for pagination
+        const { count, error: countError } = await supabase
+            .from('game_room_participants')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', userId);
+
+        if (countError) throw countError;
+
+        // Get paginated data
         const { data: participations, error } = await supabase
             .from('game_room_participants')
             .select(`
@@ -104,11 +117,11 @@ export async function getRecentGames(userId: string, limit: number = 10): Promis
       `)
             .eq('user_id', userId)
             .order('joined_at', { ascending: false })
-            .limit(limit);
+            .range(offset, offset + limit - 1);
 
         if (error) throw error;
 
-        return participations?.map(p => ({
+        const games = participations?.map(p => ({
             game: p.room?.game?.name || 'Unknown Game',
             result: p.final_position === 1 ? 'WIN' : 'LOSS',
             amount: p.earnings ? (p.earnings > 0 ? `+$${p.earnings.toFixed(2)}` : `-$${Math.abs(p.earnings).toFixed(2)}`) : '$0.00',
@@ -116,6 +129,11 @@ export async function getRecentGames(userId: string, limit: number = 10): Promis
             roomId: p.room_id,
             position: p.final_position
         })) || [];
+
+        return {
+            games,
+            total: count || 0
+        };
     } catch (error) {
         console.error('Error fetching recent games:', error);
         throw error;
@@ -126,7 +144,7 @@ export async function getRecentGames(userId: string, limit: number = 10): Promis
 export async function getGameStats(userId: string): Promise<GameStats> {
     try {
         const analyticsData = await getAnalyticsData(userId);
-        const recentGames = await getRecentGames(userId, 10);
+        const { games: recentGames } = await getRecentGames(userId, 10);
 
         return {
             totalGames: analyticsData.gamesPlayed,

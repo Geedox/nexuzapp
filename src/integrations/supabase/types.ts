@@ -509,6 +509,7 @@ export type Database = {
         Row: {
           actual_end_time: string | null
           actual_start_time: string | null
+          admin_has_approved: boolean | null
           created_at: string | null
           creator_id: string | null
           currency: Database["public"]["Enums"]["currency_type"]
@@ -517,8 +518,10 @@ export type Database = {
           entry_fee: number
           game_id: string | null
           game_instance_id: string | null
+          game_name: string | null
           id: string
           is_private: boolean | null
+          is_special: boolean | null
           is_sponsored: boolean | null
           max_players: number
           min_players_to_start: number | null
@@ -526,6 +529,7 @@ export type Database = {
           on_chain_create_digest: string | null
           on_chain_room_id: string | null
           platform_fee_collected: number | null
+          required_approvals: number | null
           room_code: string | null
           sponsor_amount: number | null
           start_time: string
@@ -538,6 +542,7 @@ export type Database = {
         Insert: {
           actual_end_time?: string | null
           actual_start_time?: string | null
+          admin_has_approved?: boolean | null
           created_at?: string | null
           creator_id?: string | null
           currency: Database["public"]["Enums"]["currency_type"]
@@ -546,8 +551,10 @@ export type Database = {
           entry_fee: number
           game_id?: string | null
           game_instance_id?: string | null
+          game_name?: string | null
           id?: string
           is_private?: boolean | null
+          is_special?: boolean | null
           is_sponsored?: boolean | null
           max_players: number
           min_players_to_start?: number | null
@@ -555,6 +562,7 @@ export type Database = {
           on_chain_create_digest?: string | null
           on_chain_room_id?: string | null
           platform_fee_collected?: number | null
+          required_approvals?: number | null
           room_code?: string | null
           sponsor_amount?: number | null
           start_time: string
@@ -567,6 +575,7 @@ export type Database = {
         Update: {
           actual_end_time?: string | null
           actual_start_time?: string | null
+          admin_has_approved?: boolean | null
           created_at?: string | null
           creator_id?: string | null
           currency?: Database["public"]["Enums"]["currency_type"]
@@ -575,8 +584,10 @@ export type Database = {
           entry_fee?: number
           game_id?: string | null
           game_instance_id?: string | null
+          game_name?: string | null
           id?: string
           is_private?: boolean | null
+          is_special?: boolean | null
           is_sponsored?: boolean | null
           max_players?: number
           min_players_to_start?: number | null
@@ -584,6 +595,7 @@ export type Database = {
           on_chain_create_digest?: string | null
           on_chain_room_id?: string | null
           platform_fee_collected?: number | null
+          required_approvals?: number | null
           room_code?: string | null
           sponsor_amount?: number | null
           start_time?: string
@@ -1422,6 +1434,7 @@ export const Constants = {
     },
   },
 } as const
+
 
 
 
