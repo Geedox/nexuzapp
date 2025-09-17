@@ -17,6 +17,7 @@ import {
     retryWithBackoff,
     sleep
 } from "./utils";
+import { CURRENCY } from "../../src/constants";
 
 /**
  * Test 8: Sponsored Game Room with No Winner
@@ -95,6 +96,8 @@ async function testSponsoredGameRoomNoWinner(): Promise<void> {
                 winnerSplitRule: winnerSplitRule as any,
                 startTimeMs,
                 endTimeMs,
+                isSpecial: false,
+                currency: CURRENCY.USDC as "USDC" | "USDT",
             });
         });
 
@@ -128,6 +131,7 @@ async function testSponsoredGameRoomNoWinner(): Promise<void> {
                 roomId: createResult.roomId!,
                 roomCode: "",
                 entryFee: 0, // No entry fee for sponsored rooms
+                currency: CURRENCY.USDC as "USDC" | "USDT",
             });
         });
 
@@ -159,6 +163,7 @@ async function testSponsoredGameRoomNoWinner(): Promise<void> {
                 roomId: createResult.roomId!,
                 winnerAddresses: [], // Empty array = no winners
                 scores: [], // Empty array = no scores
+                currency: CURRENCY.USDC as "USDC" | "USDT",
             });
         });
 

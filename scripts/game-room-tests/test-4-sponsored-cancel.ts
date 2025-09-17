@@ -1,5 +1,5 @@
 import { SuiClient } from "@mysten/sui.js/client";
-import { GameRoom } from "@/integrations/smartcontracts/gameRoom";
+import { GameRoom } from "../../src/integrations/smartcontracts/gameRoom";
 import {
   createKeypair,
   getBalances,
@@ -15,6 +15,7 @@ import {
   retryWithBackoff,
   sleep
 } from "./utils";
+import { CURRENCY } from "../../src/constants";
 
 /**
  * Test 4: Sponsored Room Cancellation
@@ -93,6 +94,8 @@ async function testSponsoredRoomCancellation(): Promise<void> {
         winnerSplitRule: winnerSplitRule as any,
         startTimeMs,
         endTimeMs,
+        isSpecial: false,
+        currency: CURRENCY.USDC as "USDC" | "USDT",
       });
     });
 
@@ -125,6 +128,8 @@ async function testSponsoredRoomCancellation(): Promise<void> {
         roomId: createResult.roomId!,
         roomCode: "",
         entryFee: 0, // No entry fee for sponsored rooms
+        isSponsored: true,
+        currency: CURRENCY.USDC as "USDC" | "USDT",
       });
     });
 
@@ -155,6 +160,7 @@ async function testSponsoredRoomCancellation(): Promise<void> {
       return await gameRoom.cancelRoom({
         walletKeyPair: keypair1.keypair,
         roomId: createResult.roomId!,
+        currency: CURRENCY.USDC as "USDC" | "USDT",
       });
     });
 
@@ -194,7 +200,7 @@ async function testSponsoredRoomCancellation(): Promise<void> {
     const testPassed = balance1Correct && balance2Correct;
 
     // Log test result
-    const result = logTestResult(testName, testPassed, {
+    logTestResult(testName, testPassed, {
       roomId: createResult.roomId,
       createDigest: createResult.digest,
       joinDigest: joinResult.digest,
@@ -206,8 +212,6 @@ async function testSponsoredRoomCancellation(): Promise<void> {
       sponsorAmountDeducted: sponsorAmount,
       sponsorAmountRefunded: sponsorAmount
     });
-
-    return result;
 
   } catch (error) {
     console.error(`\nTest failed with error:`, error);

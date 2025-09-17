@@ -18,7 +18,7 @@ export class GameRoom {
 
     constructor(
         client: SuiClient,
-        packageId: string = "0x6c3952a173926538fecced5a94fc257d21e90f3898460a748ae1f2e9b32d3c31",
+        packageId: string = "0x7489f67b8978b8741b993eb3f46abfd1bd5a2f1da8a66056b25bd23fa8d6a065",
         UsdcStoreId: string = "0x2c823995c8608544be9a8a2e13e6ead2f7ff0c5b7878773ab3585fd5c17760a0",
         UsdtStoreId: string = "0x84e70f22a7a7530bbd0c5c9fddbd67874235a312a3738a2eaeb853046aebed6f",
     ) {
@@ -226,6 +226,7 @@ export class GameRoom {
             roomCode = "",
             isSponsored = false,
             sponsorAmount = 0,
+            isSpecial = false,
             winnerSplitRule,
             startTimeMs,
             endTimeMs,
@@ -242,25 +243,26 @@ export class GameRoom {
         const requiredPayment = isSponsored ? sponsorAmountSmallest : entryFeeSmallest;
 
         // Prepare USDC payment coin
-        const usdcCoins = await this.client.getCoins({ owner: userAddress, coinType: COIN_TYPES.USDC });
-        if (usdcCoins.data.length === 0) {
-            throw new Error("No USDC coins found in wallet to fund room creation.");
+        const coinType = currency === "USDC" ? COIN_TYPES.USDC : COIN_TYPES.USDT;
+        const coins = await this.client.getCoins({ owner: userAddress, coinType: coinType });
+        if (coins.data.length === 0) {
+            throw new Error(`No ${currency} coins found in wallet to fund room creation.`);
         }
 
-        const totalUsdc = usdcCoins.data.reduce((sum, c) => sum + Number(c.balance), 0);
+        const totalUsdc = coins.data.reduce((sum, c) => sum + Number(c.balance), 0);
         if (totalUsdc < requiredPayment) {
             throw new Error(`Insufficient USDC: need ${requiredPayment / Math.pow(10, usdcDecimals)} USDC, have ${totalUsdc / Math.pow(10, usdcDecimals)} USDC`);
         }
 
-        const usdcPrimary = txb.object(usdcCoins.data[0].coinObjectId);
-        if (usdcCoins.data.length > 1) {
-            const rest = usdcCoins.data.slice(1).map(c => txb.object(c.coinObjectId));
-            txb.mergeCoins(usdcPrimary, rest);
+        const coinsPrimary = txb.object(coins.data[0].coinObjectId);
+        if (coins.data.length > 1) {
+            const rest = coins.data.slice(1).map(c => txb.object(c.coinObjectId));
+            txb.mergeCoins(coinsPrimary, rest);
         }
-        const [paymentCoin] = txb.splitCoins(usdcPrimary, [requiredPayment]);
+        const [paymentCoin] = txb.splitCoins(coinsPrimary, [requiredPayment]);
         // Call create_room_with_usdc, capture (room_id, change)
         const createResult = txb.moveCall({
-            target: this.getTarget("create_room_with_usdc"),
+            target: this.getTarget("create_room"),
             arguments: [
                 txb.object(currency === "USDC" ? this.UsdcStoreId : this.UsdtStoreId),
                 txb.pure(name),
@@ -271,6 +273,7 @@ export class GameRoom {
                 txb.pure(isPrivate),
                 txb.pure(roomCode),
                 txb.pure(isSponsored),
+                txb.pure(isSpecial),
                 txb.pure(sponsorAmountSmallest),
                 txb.pure(winnerSplitRule),
                 txb.pure(startTimeMs),
@@ -352,9 +355,9 @@ export class GameRoom {
         const entryFeeSmallest = this.toU64SmallestUnits(entryFee, usdcDecimals);
 
         // Prepare USDC entry fee coin (may be 0 for sponsored rooms)
-        const usdcCoins = await this.client.getCoins({ owner: userAddress, coinType: COIN_TYPES.USDC });
+        const coins = await this.client.getCoins({ owner: userAddress, coinType: COIN_TYPES.USDC });
         if (!isSponsored) {
-            if (usdcCoins.data.length === 0) {
+            if (coins.data.length === 0) {
                 if (entryFeeSmallest === 0) {
                     throw new Error("Joining sponsored rooms requires at least one USDC coin to create a 0-value coin. Please hold a tiny amount of USDC.");
                 }
@@ -362,18 +365,18 @@ export class GameRoom {
             }
         }
 
-        const totalUsdc = usdcCoins.data.reduce((sum, c) => sum + Number(c.balance), 0);
+        const totalUsdc = coins.data.reduce((sum, c) => sum + Number(c.balance), 0);
         if (entryFeeSmallest > 0 && totalUsdc < entryFeeSmallest) {
             throw new Error(`Insufficient USDC: need ${entryFee} USDC, have ${totalUsdc / Math.pow(10, usdcDecimals)} USDC`);
         }
 
-        const usdcPrimary = txb.object(usdcCoins.data[0].coinObjectId);
-        if (usdcCoins.data.length > 1) {
-            const rest = usdcCoins.data.slice(1).map(c => txb.object(c.coinObjectId));
-            txb.mergeCoins(usdcPrimary, rest);
+        const coinsPrimary = txb.object(coins.data[0].coinObjectId);
+        if (coins.data.length > 1) {
+            const rest = coins.data.slice(1).map(c => txb.object(c.coinObjectId));
+            txb.mergeCoins(coinsPrimary, rest);
         }
 
-        const [entryFeeCoin] = txb.splitCoins(usdcPrimary, [entryFeeSmallest]); // 0 split is allowed
+        const [entryFeeCoin] = txb.splitCoins(coinsPrimary, [entryFeeSmallest]); // 0 split is allowed
         // Call join_room, capture (participant_id, change)
         const joinResult = txb.moveCall({
             target: this.getTarget("join_room"),

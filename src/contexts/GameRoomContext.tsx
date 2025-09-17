@@ -11,6 +11,9 @@ import { useTransaction } from "@/contexts/TransactionContext";
 import type { Database, TablesInsert } from "@/integrations/supabase/types";
 import { logger } from "@/utils/logger";
 import { verifyCoinForRoomCreation } from "@/lib/utils";
+import { tournamentService } from "@/services/tournamentService";
+
+type Wallet = Profile["sui_wallet_data"];
 
 interface GameRoom {
   id: string;
@@ -42,11 +45,24 @@ interface GameRoom {
   created_at: string;
   updated_at: string;
   game_name: string | null;
-  game?: any;
-  creator?: any;
+  game?: {
+    id: string;
+    name: string;
+    game_url?: string;
+    description?: string;
+    image_url?: string;
+  };
+  creator?: {
+    id: string;
+    username?: string;
+    display_name?: string;
+    avatar_url?: string;
+  };
   participants?: GameRoomParticipant[];
   required_approvals: number | null;
   admin_has_approved: boolean | null;
+  mode: "regular" | "tournament" | "league";
+  play_mode: "single" | "multiplayer" | string; // New field for single vs multiplayer
 }
 
 const SESSION_STORAGE_KEY = "nexuz_game_sessions";
@@ -74,7 +90,14 @@ export interface GameRoomParticipant {
   joined_at: string;
   left_at: string | null;
   is_active: boolean;
-  user?: any;
+  user?: {
+    id: string;
+    username?: string;
+    display_name?: string;
+    avatar_url?: string;
+    email?: string;
+    sui_wallet_data?: Database["public"]["Tables"]["profiles"]["Row"]["sui_wallet_data"];
+  };
 }
 
 export interface CreateRoomData {
@@ -95,6 +118,18 @@ export interface CreateRoomData {
   isSpecial?: boolean;
   sponsorAmount?: number;
   gameName?: string;
+  mode: "regular" | "tournament" | "league";
+  playMode: "single" | "multiplayer"; // New field for single vs multiplayer
+  // Tournament-specific fields
+  tournamentRounds?: number;
+  roundDurationMinutes?: number;
+  eliminationType?: "single" | "double" | "swiss";
+  maxRounds?: number;
+  playersPerMatch?: number;
+  timeLimitMinutes?: number;
+  autoStart?: boolean;
+  seedingEnabled?: boolean;
+  spectatorMode?: boolean;
 }
 
 export interface GameRoomFilters {
@@ -166,6 +201,39 @@ interface GameRoomContextType {
     hasParticipantSignature: boolean;
   }>;
   hasSigned: (roomId: string, signer: string) => Promise<boolean>;
+
+  // Tournament-specific functions
+  createTournament: (
+    roomId: string,
+    tournamentData: {
+      eliminationType: "single" | "double" | "swiss";
+      maxRounds?: number;
+      playersPerMatch?: number;
+      roundDurationMinutes?: number;
+      timeLimitMinutes?: number;
+    }
+  ) => Promise<void>;
+  startTournament: (roomId: string) => Promise<void>;
+  getTournamentBracket: (
+    roomId: string
+  ) => Promise<import("@/services/tournamentService").TournamentBracket | null>;
+  getTournamentStats: (
+    roomId: string
+  ) => Promise<import("@/services/tournamentService").TournamentStats | null>;
+  startTournamentMatch: (matchId: string) => Promise<void>;
+  completeTournamentMatch: (
+    matchId: string,
+    winnerId: string,
+    matchData?: Record<string, unknown>
+  ) => Promise<void>;
+  timeoutTournamentMatch: (matchId: string) => Promise<void>;
+  canStartTournament: (roomId: string) => Promise<boolean>;
+  isTournamentReady: (roomId: string) => Promise<boolean>;
+  getCurrentRoundMatches: (
+    roomId: string
+  ) => Promise<import("@/services/tournamentService").TournamentMatch[]>;
+  subscribeToTournament: (roomId: string) => void;
+  unsubscribeFromTournament: (roomId: string) => void;
 }
 
 const GameRoomContext = createContext<GameRoomContextType | undefined>(
@@ -340,15 +408,38 @@ export const GameRoomProvider = ({
 
   // Function to map on-chain transaction effects to winners
   const mapOnChainTransactionToWinners = (
-    onChainResult: any,
-    winners: any[],
-    room: any
+    onChainResult: {
+      digest: string;
+      effects?: unknown;
+      events?: Array<{
+        type: string;
+        parsedJson?: { amount?: number; recipient?: string; to?: string };
+        data?: { amount?: number };
+        recipient?: string;
+      }>;
+      gameCompletedEvent?: unknown;
+    },
+    winners: Array<{ userId: string; position: number; participantId: string }>,
+    room: GameRoom
   ) => {
     if (!onChainResult?.effects || !onChainResult?.events) {
       return null;
     }
 
-    const transactionMapping: any = {
+    const transactionMapping: {
+      digest: string;
+      roomId: string;
+      effects: unknown;
+      events: unknown;
+      gameCompletedEvent: unknown;
+      winnerTransactions: Array<{
+        userId: string;
+        position: number;
+        address: string;
+        transferEvent: unknown;
+        amount: number;
+      }>;
+    } = {
       digest: onChainResult.digest,
       roomId: room.on_chain_room_id,
       effects: onChainResult.effects,
@@ -369,8 +460,9 @@ export const GameRoomProvider = ({
       const participant = room.participants?.find(
         (p: any) => p.user_id === winner.userId
       );
-      if (participant?.user?.sui_wallet_data?.address) {
-        const winnerAddress = participant.user.sui_wallet_data.address;
+      const wallet = participant?.user?.sui_wallet_data as Wallet;
+      if (wallet) {
+        const winnerAddress = wallet.address;
 
         // Find transfer event for this winner
         const transferEvent = transferEvents.find((ev: any) => {
@@ -409,7 +501,17 @@ export const GameRoomProvider = ({
       position: number;
       participantId: string;
     }[],
-    onChainResult?: any
+    onChainResult?: {
+      digest: string;
+      effects?: unknown;
+      events?: Array<{
+        type: string;
+        parsedJson?: { amount?: number; recipient?: string; to?: string };
+        data?: { amount?: number };
+        recipient?: string;
+      }>;
+      gameCompletedEvent?: unknown;
+    }
   ) => {
     try {
       logger.info(`Starting prize distribution for room ${room.id}`);
@@ -472,7 +574,8 @@ export const GameRoomProvider = ({
           .update({
             final_position: winner.position,
             earnings: earnings,
-            payout_transaction_id: onChainResult?.digest,
+            payout_transaction_id: "onChainResult.digest",
+            // payout_transaction_id: onChainResult?.digest,
           })
           .eq("room_id", room.id)
           .eq("user_id", winner.userId);
@@ -864,7 +967,7 @@ export const GameRoomProvider = ({
 
       // Check if user is in the room
       const userParticipant = room.participants?.find(
-        (p: any) => p.user_id === user.id && p.is_active
+        (p: GameRoomParticipant) => p.user_id === user.id && p.is_active
       );
 
       if (!userParticipant) {
@@ -933,11 +1036,12 @@ export const GameRoomProvider = ({
         title: "Game Launched",
         description: "Game opened in new tab. Play and submit your score!",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error("Error launching game:", error);
       toast({
         title: "Error",
-        description: error.message || "Failed to launch game",
+        description:
+          error instanceof Error ? error.message : "Failed to launch game",
         variant: "destructive",
       });
       throw error;
@@ -1265,7 +1369,9 @@ export const GameRoomProvider = ({
   }, [rooms, activeGameSessions]);
 
   // Function to automatically complete a single game
-  const autoCompleteGame = async (room: any) => {
+  const autoCompleteGame = async (
+    room: GameRoom & { participants?: GameRoomParticipant[] }
+  ) => {
     // Call smart contract first to complete the game on-chain
     let onChainResult = null;
     try {
@@ -1294,7 +1400,7 @@ export const GameRoomProvider = ({
 
           for (const winner of winners) {
             const participant = participants.find(
-              (p: any) => p.user_id === winner.userId
+              (p) => p.user_id === winner.userId
             );
             const addr = (
               participant?.user?.sui_wallet_data as Profile["sui_wallet_data"]
@@ -1317,7 +1423,12 @@ export const GameRoomProvider = ({
                 `Failed to complete game on-chain for room ${room.id}: Missing transaction digest`
               );
             }
-            await distributePrizes(room, participants, winners, onChainResult);
+            await distributePrizes(
+              room as Database["public"]["Tables"]["game_rooms"]["Row"],
+              participants,
+              winners,
+              onChainResult
+            );
             logger.success(
               `Successfully completed game on-chain for room ${room.id} with digest: ${onChainResult.digest}`
             );
@@ -1329,7 +1440,12 @@ export const GameRoomProvider = ({
               currency: room.currency as "USDC" | "USDT",
             });
             // Still call distributePrizes even with no winners to update participant records
-            await distributePrizes(room, participants, [], onChainResult);
+            await distributePrizes(
+              room as Database["public"]["Tables"]["game_rooms"]["Row"],
+              participants,
+              [],
+              onChainResult
+            );
             logger.success(
               `Successfully completed game on-chain for room ${room.id} with digest: ${onChainResult.digest}`
             );
@@ -1394,7 +1510,9 @@ export const GameRoomProvider = ({
       );
 
       for (const room of expiredRooms) {
-        await autoCompleteGame(room);
+        await autoCompleteGame(
+          room as GameRoom & { participants?: GameRoomParticipant[] }
+        );
       }
     } catch (error) {
       logger.error("Error auto-completing expired games:", error);
@@ -1418,7 +1536,9 @@ export const GameRoomProvider = ({
 
       for (const room of roomsToUpdate) {
         let newStatus = room.status;
-        let updates: any = {};
+        let updates: Partial<
+          Database["public"]["Tables"]["game_rooms"]["Update"]
+        > = {};
 
         const startTime = new Date(room.start_time);
         const endTime = new Date(room.end_time);
@@ -1443,7 +1563,9 @@ export const GameRoomProvider = ({
           currentTime >= endTime
         ) {
           // Auto-complete the game instead of just updating status
-          await autoCompleteGame(room);
+          await autoCompleteGame(
+            room as GameRoom & { participants?: GameRoomParticipant[] }
+          );
           continue; // Skip the manual status update since autoCompleteGame handles it
         }
 
@@ -1683,6 +1805,17 @@ export const GameRoomProvider = ({
           min_players_to_start: 2,
           required_approvals: data.isSpecial ? 2 : 0,
           admin_has_approved: false,
+          mode: data.mode as Database["public"]["Enums"]["room_mode"],
+          // Tournament-specific fields
+          tournament_rounds:
+            data.mode === "tournament" ? data.tournamentRounds : null,
+          round_duration_minutes:
+            data.mode === "tournament" ? data.roundDurationMinutes : null,
+          elimination_type:
+            data.mode === "tournament" ? data.eliminationType : null,
+          max_rounds: data.mode === "tournament" ? data.maxRounds : null,
+          players_per_match:
+            data.mode === "tournament" ? data.playersPerMatch : null,
         };
 
         const { data: roomData, error: roomError } = await supabase
@@ -1702,6 +1835,22 @@ export const GameRoomProvider = ({
             .from("game_instances")
             .update({ room_id: roomData.id })
             .eq("id", instanceData.id);
+        }
+
+        // For tournament mode, create tournament bracket if auto-start is enabled
+        if (data.mode === "tournament" && data.autoStart) {
+          try {
+            await createTournament(roomData.id, {
+              eliminationType: data.eliminationType || "single",
+              timeLimitMinutes: data.timeLimitMinutes || 30,
+              roundDurationMinutes: data.roundDurationMinutes || 60,
+              playersPerMatch: data.playersPerMatch || 2,
+              maxRounds: data.maxRounds,
+            });
+          } catch (tournamentError) {
+            logger.warn("Tournament auto-creation failed:", tournamentError);
+            // Don't fail room creation if tournament creation fails
+          }
         }
 
         if (data.entryFee > 0) {
@@ -1760,11 +1909,12 @@ export const GameRoomProvider = ({
       } else {
         throw new Error("On-chain room creation is required for USDC rooms");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error("Error creating room:", error);
       toast({
         title: "Error",
-        description: error.message || "Failed to create game room",
+        description:
+          error instanceof Error ? error.message : "Failed to create game room",
         variant: "destructive",
       });
       throw error;
@@ -1849,11 +1999,12 @@ export const GameRoomProvider = ({
         title: "Success",
         description: "Joined room successfully",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error("Error joining room:", error);
       toast({
         title: "Error",
-        description: error.message || "Failed to join room",
+        description:
+          error instanceof Error ? error.message : "Failed to join room",
         variant: "destructive",
       });
       throw error;
@@ -2035,11 +2186,12 @@ export const GameRoomProvider = ({
       } else {
         throw new Error("Room cannot be cancelled without on-chain support");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error("Error cancelling room:", error);
       toast({
         title: "Error",
-        description: error.message || "Failed to cancel room",
+        description:
+          error instanceof Error ? error.message : "Failed to cancel room",
         variant: "destructive",
       });
       throw error;
@@ -2066,7 +2218,7 @@ export const GameRoomProvider = ({
         .single();
 
       if (error) throw error;
-      return data as GameRoom;
+      return data as unknown as GameRoom;
     } catch (error) {
       logger.error("Error fetching room details:", error);
       return null;
@@ -2091,7 +2243,7 @@ export const GameRoomProvider = ({
         .order("score", { ascending: false });
 
       if (error) throw error;
-      return (data as GameRoomParticipant[]) || [];
+      return (data as unknown as GameRoomParticipant[]) || [];
     } catch (error) {
       logger.error("Error fetching participants:", error);
       return [];
@@ -2109,7 +2261,9 @@ export const GameRoomProvider = ({
         .single();
       if (!room) throw new Error("Room not found");
       if (!room.data.is_special) throw new Error("Room is not a special room");
-      await autoCompleteGame(room);
+      await autoCompleteGame(
+        room.data as GameRoom & { participants?: GameRoomParticipant[] }
+      );
     } catch (error) {
       logger.error("Error completing game:", error);
       toast({
@@ -2246,6 +2400,166 @@ export const GameRoomProvider = ({
     }
   };
 
+  // Tournament-specific functions
+  const createTournament = async (
+    roomId: string,
+    tournamentData: {
+      eliminationType: "single" | "double" | "swiss";
+      maxRounds?: number;
+      playersPerMatch?: number;
+      roundDurationMinutes?: number;
+      timeLimitMinutes?: number;
+    }
+  ) => {
+    try {
+      await tournamentService.createTournamentMatches({
+        roomId,
+        ...tournamentData,
+      });
+
+      toast({
+        title: "Tournament Created",
+        description: "Tournament bracket has been generated successfully",
+      });
+    } catch (error: unknown) {
+      logger.error("Error creating tournament:", error);
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to create tournament",
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
+
+  const startTournament = async (roomId: string) => {
+    try {
+      const bracket = await tournamentService.getTournamentBracket(roomId);
+      if (!bracket) {
+        throw new Error("Tournament not found");
+      }
+
+      // Start first round matches
+      const firstRoundMatches = bracket.rounds[0]?.matches || [];
+      for (const match of firstRoundMatches) {
+        await tournamentService.startMatch(match.id);
+      }
+
+      toast({
+        title: "Tournament Started",
+        description: "First round matches have begun",
+      });
+    } catch (error: unknown) {
+      logger.error("Error starting tournament:", error);
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error ? error.message : "Failed to start tournament",
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
+
+  const getTournamentBracket = async (roomId: string) => {
+    try {
+      return await tournamentService.getTournamentBracket(roomId);
+    } catch (error) {
+      logger.error("Error getting tournament bracket:", error);
+      return null;
+    }
+  };
+
+  const getTournamentStats = async (roomId: string) => {
+    try {
+      return await tournamentService.getTournamentStats(roomId);
+    } catch (error) {
+      logger.error("Error getting tournament stats:", error);
+      return null;
+    }
+  };
+
+  const startTournamentMatch = async (matchId: string) => {
+    try {
+      await tournamentService.startMatch(matchId);
+    } catch (error) {
+      logger.error("Error starting tournament match:", error);
+      throw error;
+    }
+  };
+
+  const completeTournamentMatch = async (
+    matchId: string,
+    winnerId: string,
+    matchData?: Record<string, unknown>
+  ) => {
+    try {
+      await tournamentService.completeMatch(matchId, winnerId, matchData);
+    } catch (error) {
+      logger.error("Error completing tournament match:", error);
+      throw error;
+    }
+  };
+
+  const timeoutTournamentMatch = async (matchId: string) => {
+    try {
+      await tournamentService.timeoutMatch(matchId);
+    } catch (error) {
+      logger.error("Error timing out tournament match:", error);
+      throw error;
+    }
+  };
+
+  const canStartTournament = async (roomId: string): Promise<boolean> => {
+    try {
+      const participants = await tournamentService.getTournamentParticipants(
+        roomId
+      );
+      return participants.length >= 2; // Minimum 2 players
+    } catch (error) {
+      logger.error("Error checking if tournament can start:", error);
+      return false;
+    }
+  };
+
+  const isTournamentReady = async (roomId: string): Promise<boolean> => {
+    try {
+      const bracket = await tournamentService.getTournamentBracket(roomId);
+      return bracket !== null && bracket.rounds.length > 0;
+    } catch (error) {
+      logger.error("Error checking if tournament is ready:", error);
+      return false;
+    }
+  };
+
+  const getCurrentRoundMatches = async (roomId: string) => {
+    try {
+      const bracket = await tournamentService.getTournamentBracket(roomId);
+      if (!bracket) return [];
+
+      const currentRound =
+        bracket.rounds.find((r) => r.isActive) || bracket.rounds[0];
+      return currentRound?.matches || [];
+    } catch (error) {
+      logger.error("Error getting current round matches:", error);
+      return [];
+    }
+  };
+
+  const subscribeToTournament = (roomId: string) => {
+    // Implementation for real-time tournament updates
+    // This would typically set up WebSocket or polling subscriptions
+    logger.debug(`Subscribing to tournament updates for room ${roomId}`);
+  };
+
+  const unsubscribeFromTournament = (roomId: string) => {
+    // Implementation for unsubscribing from tournament updates
+    logger.debug(`Unsubscribing from tournament updates for room ${roomId}`);
+  };
+
   // Load rooms when user changes, currentPage changes, or filters change
   useEffect(() => {
     if (user) {
@@ -2360,6 +2674,19 @@ export const GameRoomProvider = ({
     approveGameRoomCompletion,
     getSignatureStatus,
     hasSigned,
+    // Tournament-specific functions
+    createTournament,
+    startTournament,
+    getTournamentBracket,
+    getTournamentStats,
+    startTournamentMatch,
+    completeTournamentMatch,
+    timeoutTournamentMatch,
+    canStartTournament,
+    isTournamentReady,
+    getCurrentRoundMatches,
+    subscribeToTournament,
+    unsubscribeFromTournament,
   };
 
   return (

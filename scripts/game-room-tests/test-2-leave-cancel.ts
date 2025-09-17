@@ -1,3 +1,4 @@
+import { CURRENCY } from "../../src/constants";
 import { GameRoom } from "../../src/integrations/smartcontracts/gameRoom";
 import {
   createKeypair,
@@ -91,6 +92,8 @@ async function testRoomCreationJoinLeaveCancel(): Promise<void> {
         winnerSplitRule: winnerSplitRule as any,
         startTimeMs,
         endTimeMs,
+        isSpecial: false,
+        currency: CURRENCY.USDC as "USDC" | "USDT",
       });
     });
 
@@ -115,6 +118,8 @@ async function testRoomCreationJoinLeaveCancel(): Promise<void> {
         roomId: createResult.roomId!,
         roomCode: "",
         entryFee,
+        isSponsored: false,
+        currency: CURRENCY.USDC as "USDC" | "USDT",
       });
     });
 
@@ -137,6 +142,7 @@ async function testRoomCreationJoinLeaveCancel(): Promise<void> {
       return await gameRoom.leaveRoom({
         walletKeyPair: keypair2.keypair,
         roomId: createResult.roomId!,
+        currency: CURRENCY.USDC as "USDC" | "USDT",
       });
     });
 
@@ -167,6 +173,7 @@ async function testRoomCreationJoinLeaveCancel(): Promise<void> {
       return await gameRoom.cancelRoom({
         walletKeyPair: keypair1.keypair,
         roomId: createResult.roomId!,
+        currency: CURRENCY.USDC as "USDC" | "USDT",
       });
     });
 

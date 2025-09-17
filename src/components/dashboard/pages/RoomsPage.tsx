@@ -465,6 +465,18 @@ const RoomsPage = () => {
     isSpecial: false,
     sponsorAmount: 0,
     gameName: "",
+    mode: "regular",
+    playMode: "single",
+    // Tournament-specific fields
+    tournamentRounds: 3,
+    roundDurationMinutes: 60,
+    eliminationType: "single",
+    maxRounds: 5,
+    playersPerMatch: 2,
+    timeLimitMinutes: 30,
+    autoStart: true,
+    seedingEnabled: false,
+    spectatorMode: false,
   });
 
   const winnerRules = [
@@ -704,6 +716,8 @@ const RoomsPage = () => {
         isSpecial: false,
         sponsorAmount: 0,
         gameName: "",
+        playMode: "single",
+        mode: "regular",
       });
 
       // Show room code if private
@@ -801,8 +815,8 @@ const RoomsPage = () => {
       setSelectedRoomId(room.id);
     } else if (canJoinRoom(room)) {
       // Show join modal
-      setSelectedRoom(room);
       setShowJoinModal(true);
+      setSelectedRoom(room);
     } else if (room.status === "completed") {
       // For completed rooms where user didn't win, show room details
       setSelectedRoomId(room.id);
@@ -1120,10 +1134,27 @@ const RoomsPage = () => {
                         </span>
                       </div>
                     )}
+                    {room.mode === "tournament" && (
+                      <div className="flex justify-center mt-2">
+                        <span className="text-xs font-cyber text-orange-400">
+                          🏆 Tournament Mode
+                        </span>
+                      </div>
+                    )}
+                    {room.mode === "league" && (
+                      <div className="flex justify-center mt-2">
+                        <span className="text-xs font-cyber text-blue-400">
+                          🏅 League Mode
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   <button
-                    onClick={() => handleRoomAction(room)}
+                    onClick={(e) => {
+                      handleRoomAction(room);
+                      e.stopPropagation();
+                    }}
                     disabled={
                       joining ||
                       (!isUserInRoom(room) &&
@@ -1284,7 +1315,7 @@ const RoomsPage = () => {
               </div>
 
               {/* Modal Content - Scrollable */}
-              <div className="flex-1 overflow-y-auto p-6">
+              <div className="flex-1 overflow-y-auto p-6 overflow-x-hidden">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <div className="space-y-4">
                     <div>
@@ -1491,20 +1522,63 @@ const RoomsPage = () => {
                   <div className="space-y-4">
                     <div>
                       <label className="text-sm font-cyber text-primary mb-1 block">
+                        Room Mode
+                      </label>
+                      <select
+                        value={formData.mode}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            mode: e.target.value as
+                              | "regular"
+                              | "tournament"
+                              | "league",
+                            // Ensure even number of players for tournaments
+                            maxPlayers:
+                              e.target.value === "tournament" &&
+                              formData.maxPlayers % 2 !== 0
+                                ? formData.maxPlayers + 1
+                                : formData.maxPlayers,
+                          })
+                        }
+                        className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
+                      >
+                        <option value="regular">Regular Room</option>
+                        <option value="tournament">Tournament</option>
+                        <option value="league">League</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-cyber text-primary mb-1 block">
                         Max Players
+                        {formData.mode === "tournament" && (
+                          <span className="text-xs text-yellow-400 ml-2">
+                            (Must be even for tournaments)
+                          </span>
+                        )}
                       </label>
                       <input
                         type="number"
                         value={formData.maxPlayers}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          let value = parseInt(e.target.value) || 2;
+                          // Ensure even number for tournaments
+                          if (
+                            formData.mode === "tournament" &&
+                            value % 2 !== 0
+                          ) {
+                            value = value + 1;
+                          }
                           setFormData({
                             ...formData,
-                            maxPlayers: parseInt(e.target.value) || 2,
-                          })
-                        }
+                            maxPlayers: value,
+                          });
+                        }}
                         className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
                         min="2"
                         max="100"
+                        step={formData.mode === "tournament" ? "2" : "1"}
                       />
                     </div>
 
@@ -1585,6 +1659,74 @@ const RoomsPage = () => {
                           </p>
                         )}
                     </div>
+
+                    {/* Tournament-specific fields */}
+                    {formData.mode === "tournament" && (
+                      <>
+                        <div>
+                          <label className="text-sm font-cyber text-primary mb-1 block">
+                            Tournament Type
+                          </label>
+                          <select
+                            value={formData.eliminationType}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                eliminationType: e.target.value as
+                                  | "single"
+                                  | "double"
+                                  | "swiss",
+                              })
+                            }
+                            className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
+                          >
+                            <option value="single">Single Elimination</option>
+                            <option value="double">Double Elimination</option>
+                            <option value="swiss">Swiss System</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="text-sm font-cyber text-primary mb-1 block">
+                            Match Time Limit (minutes)
+                          </label>
+                          <input
+                            type="number"
+                            value={formData.timeLimitMinutes}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                timeLimitMinutes:
+                                  parseInt(e.target.value) || 30,
+                              })
+                            }
+                            className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
+                            min="5"
+                            max="120"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-sm font-cyber text-primary mb-1 block">
+                            Round Duration (minutes)
+                          </label>
+                          <input
+                            type="number"
+                            value={formData.roundDurationMinutes}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                roundDurationMinutes:
+                                  parseInt(e.target.value) || 60,
+                              })
+                            }
+                            className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
+                            min="10"
+                            max="240"
+                          />
+                        </div>
+                      </>
+                    )}
 
                     <div className="space-y-3 pt-2">
                       <label className="flex items-center gap-3 cursor-pointer group">

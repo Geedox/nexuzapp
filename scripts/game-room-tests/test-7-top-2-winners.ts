@@ -1,5 +1,5 @@
 import { SuiClient } from "@mysten/sui.js/client";
-import { GameRoom } from "@/integrations/smartcontracts/gameRoom";
+import { GameRoom } from "../../src/integrations/smartcontracts/gameRoom";
 import {
   createKeypair,
   getBalances,
@@ -17,6 +17,7 @@ import {
   retryWithBackoff,
   sleep
 } from "./utils";
+import { CURRENCY } from "../../src/constants";
 
 /**
  * Test 7: Game Completion with Top 2 Winners
@@ -95,6 +96,8 @@ async function testGameCompletionTop2Winners(): Promise<void> {
         winnerSplitRule: winnerSplitRule as any,
         startTimeMs,
         endTimeMs,
+        isSpecial: false,
+        currency: CURRENCY.USDC as "USDC" | "USDT",
       });
     });
 
@@ -119,6 +122,8 @@ async function testGameCompletionTop2Winners(): Promise<void> {
         roomId: createResult.roomId!,
         roomCode: "",
         entryFee,
+        isSponsored: false,
+        currency: CURRENCY.USDC as "USDC" | "USDT",
       });
     });
 
@@ -139,10 +144,10 @@ async function testGameCompletionTop2Winners(): Promise<void> {
 
     const completeResult = await retryWithBackoff(async () => {
       return await gameRoom.completeGame({
-        walletKeyPair: keypair1.keypair,
         roomId: createResult.roomId!,
         winnerAddresses: [keypair1.address, keypair2.address], // Key 1 is 1st, Key 2 is 2nd
         scores: [100, 80], // Score for Key 1 (1st), Score for Key 2 (2nd)
+        currency: CURRENCY.USDC as "USDC" | "USDT",
       });
     });
 
@@ -197,7 +202,7 @@ async function testGameCompletionTop2Winners(): Promise<void> {
     const testPassed = balance1Correct && balance2Correct;
 
     // Log test result
-    const result = logTestResult(testName, testPassed, {
+    logTestResult(testName, testPassed, {
       roomId: createResult.roomId,
       createDigest: createResult.digest,
       joinDigest: joinResult.digest,
@@ -214,8 +219,6 @@ async function testGameCompletionTop2Winners(): Promise<void> {
       winnerAddresses: [keypair1.address, keypair2.address],
       scores: [100, 80]
     });
-
-    return result;
 
   } catch (error) {
     console.error(`\nTest failed with error:`, error);

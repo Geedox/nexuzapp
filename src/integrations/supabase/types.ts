@@ -507,13 +507,18 @@ export type Database = {
       }
       game_rooms: {
         Row: {
+          active_matches: Json | null
           actual_end_time: string | null
           actual_start_time: string | null
           admin_has_approved: boolean | null
+          bracket_data: Json | null
+          completed_matches: Json | null
           created_at: string | null
           creator_id: string | null
           currency: Database["public"]["Enums"]["currency_type"]
           current_players: number | null
+          current_round: number | null
+          elimination_type: string | null
           end_time: string
           entry_fee: number
           game_id: string | null
@@ -523,30 +528,46 @@ export type Database = {
           is_private: boolean | null
           is_special: boolean | null
           is_sponsored: boolean | null
+          league_division: string | null
+          league_points: number | null
+          league_season_id: string | null
           max_players: number
+          max_rounds: number | null
           min_players_to_start: number | null
+          mode: Database["public"]["Enums"]["room_mode"] | null
           name: string
           on_chain_create_digest: string | null
           on_chain_room_id: string | null
           platform_fee_collected: number | null
+          play_mode: string | null
+          players_per_match: number | null
           required_approvals: number | null
           room_code: string | null
+          round_duration_minutes: number | null
           sponsor_amount: number | null
           start_time: string
           status: Database["public"]["Enums"]["room_status"] | null
           timezone: string | null
           total_prize_pool: number | null
+          tournament_ready: boolean | null
+          tournament_rounds: number | null
+          tournament_started_at: string | null
           updated_at: string | null
           winner_split_rule: Database["public"]["Enums"]["winner_split_rule"]
         }
         Insert: {
+          active_matches?: Json | null
           actual_end_time?: string | null
           actual_start_time?: string | null
           admin_has_approved?: boolean | null
+          bracket_data?: Json | null
+          completed_matches?: Json | null
           created_at?: string | null
           creator_id?: string | null
           currency: Database["public"]["Enums"]["currency_type"]
           current_players?: number | null
+          current_round?: number | null
+          elimination_type?: string | null
           end_time: string
           entry_fee: number
           game_id?: string | null
@@ -556,30 +577,46 @@ export type Database = {
           is_private?: boolean | null
           is_special?: boolean | null
           is_sponsored?: boolean | null
+          league_division?: string | null
+          league_points?: number | null
+          league_season_id?: string | null
           max_players: number
+          max_rounds?: number | null
           min_players_to_start?: number | null
+          mode?: Database["public"]["Enums"]["room_mode"] | null
           name: string
           on_chain_create_digest?: string | null
           on_chain_room_id?: string | null
           platform_fee_collected?: number | null
+          play_mode?: string | null
+          players_per_match?: number | null
           required_approvals?: number | null
           room_code?: string | null
+          round_duration_minutes?: number | null
           sponsor_amount?: number | null
           start_time: string
           status?: Database["public"]["Enums"]["room_status"] | null
           timezone?: string | null
           total_prize_pool?: number | null
+          tournament_ready?: boolean | null
+          tournament_rounds?: number | null
+          tournament_started_at?: string | null
           updated_at?: string | null
           winner_split_rule?: Database["public"]["Enums"]["winner_split_rule"]
         }
         Update: {
+          active_matches?: Json | null
           actual_end_time?: string | null
           actual_start_time?: string | null
           admin_has_approved?: boolean | null
+          bracket_data?: Json | null
+          completed_matches?: Json | null
           created_at?: string | null
           creator_id?: string | null
           currency?: Database["public"]["Enums"]["currency_type"]
           current_players?: number | null
+          current_round?: number | null
+          elimination_type?: string | null
           end_time?: string
           entry_fee?: number
           game_id?: string | null
@@ -589,19 +626,30 @@ export type Database = {
           is_private?: boolean | null
           is_special?: boolean | null
           is_sponsored?: boolean | null
+          league_division?: string | null
+          league_points?: number | null
+          league_season_id?: string | null
           max_players?: number
+          max_rounds?: number | null
           min_players_to_start?: number | null
+          mode?: Database["public"]["Enums"]["room_mode"] | null
           name?: string
           on_chain_create_digest?: string | null
           on_chain_room_id?: string | null
           platform_fee_collected?: number | null
+          play_mode?: string | null
+          players_per_match?: number | null
           required_approvals?: number | null
           room_code?: string | null
+          round_duration_minutes?: number | null
           sponsor_amount?: number | null
           start_time?: string
           status?: Database["public"]["Enums"]["room_status"] | null
           timezone?: string | null
           total_prize_pool?: number | null
+          tournament_ready?: boolean | null
+          tournament_rounds?: number | null
+          tournament_started_at?: string | null
           updated_at?: string | null
           winner_split_rule?: Database["public"]["Enums"]["winner_split_rule"]
         }
@@ -999,6 +1047,106 @@ export type Database = {
           },
         ]
       }
+      tournament_matches: {
+        Row: {
+          completed_at: string | null
+          created_at: string | null
+          id: string
+          match_data: Json | null
+          match_number: number
+          player1_id: string | null
+          player2_id: string | null
+          player3_id: string | null
+          player4_id: string | null
+          room_id: string | null
+          round_number: number
+          started_at: string | null
+          status: string | null
+          time_limit_minutes: number | null
+          updated_at: string | null
+          winner_id: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string | null
+          id?: string
+          match_data?: Json | null
+          match_number: number
+          player1_id?: string | null
+          player2_id?: string | null
+          player3_id?: string | null
+          player4_id?: string | null
+          room_id?: string | null
+          round_number: number
+          started_at?: string | null
+          status?: string | null
+          time_limit_minutes?: number | null
+          updated_at?: string | null
+          winner_id?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string | null
+          id?: string
+          match_data?: Json | null
+          match_number?: number
+          player1_id?: string | null
+          player2_id?: string | null
+          player3_id?: string | null
+          player4_id?: string | null
+          room_id?: string | null
+          round_number?: number
+          started_at?: string | null
+          status?: string | null
+          time_limit_minutes?: number | null
+          updated_at?: string | null
+          winner_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tournament_matches_player1_id_fkey"
+            columns: ["player1_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_matches_player2_id_fkey"
+            columns: ["player2_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_matches_player3_id_fkey"
+            columns: ["player3_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_matches_player4_id_fkey"
+            columns: ["player4_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_matches_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "game_rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_matches_winner_id_fkey"
+            columns: ["winner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       transactions: {
         Row: {
           amount: number
@@ -1245,6 +1393,7 @@ export type Database = {
       | "payment"
       | "wallet_connect"
       | "achievement"
+      room_mode: "regular" | "tournament" | "league"
       room_status:
       | "waiting"
       | "starting"
@@ -1410,6 +1559,7 @@ export const Constants = {
         "wallet_connect",
         "achievement",
       ],
+      room_mode: ["regular", "tournament", "league"],
       room_status: ["waiting", "starting", "ongoing", "completed", "cancelled"],
       transaction_type: [
         "win",
@@ -1434,8 +1584,6 @@ export const Constants = {
     },
   },
 } as const
-
-
 
 
 // Gaming avatars for chat rooms
