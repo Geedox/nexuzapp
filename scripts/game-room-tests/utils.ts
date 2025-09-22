@@ -4,6 +4,7 @@ import { SuiClient } from "@mysten/sui.js/client";
 import { Ed25519Keypair } from "@mysten/sui.js/keypairs/ed25519";
 import { TransactionBlock } from "@mysten/sui.js/transactions";
 import { COIN_TYPES } from "../../src/constants";
+import { decodeSuiPrivateKey } from "@mysten/sui.js/cryptography";
 
 export interface TestKeypair {
   keypair: Ed25519Keypair;
@@ -27,22 +28,60 @@ export interface TestResult {
 /**
  * Create Ed25519Keypair from private key string
  */
-export function createKeypair(privateKey: string, name: string): TestKeypair {
+export const createKeypair = (privateKey: string, name: string): TestKeypair => {
   try {
+    // console.debug('Processing private key...');
+    // console.debug('Private key length:', privateKey.length);
+    // console.debug('Private key first 10 chars:', privateKey.substring(0, 10));
+
+    // Check if it's a Sui bech32 private key (starts with 'suiprivkey')
+    if (privateKey.startsWith('suiprivkey')) {
+      // console.debug('Detected Sui bech32 private key format');
+      try {
+        // Decode the bech32 private key to get the raw bytes
+        const { secretKey } = decodeSuiPrivateKey(privateKey);
+        // console.debug('Secret key decoded, length:', secretKey.length);
+
+        // Ensure we have exactly 32 bytes
+        if (secretKey.length !== 32) {
+          throw new Error(`Expected 32 byte secret key, got ${secretKey.length}`);
+        }
+
+        // Create keypair from the decoded bytes
+        const keypair = Ed25519Keypair.fromSecretKey(secretKey);
+        const address = keypair.getPublicKey().toSuiAddress();
+        // console.debug('Successfully created keypair from decoded bech32');
+        // console.debug('Derived address:', testAddress);
+        return { keypair, address, name };
+
+      } catch (bech32Error) {
+        // console.error('[DEBUG] Failed to decode bech32 private key:', bech32Error);
+        throw new Error(`Failed to parse Sui bech32 private key: ${bech32Error.message}`);
+      }
+    }
+
     // Handle hex format (with or without 0x prefix)
     let cleanKey = privateKey;
     if (privateKey.startsWith('0x')) {
       cleanKey = privateKey.slice(2);
+      // console.debug('Removed 0x prefix, new length:', cleanKey.length);
     }
 
-    // Validate hex format and length
+    // Check if key is valid hex and proper length
+    if (!cleanKey || typeof cleanKey !== "string") {
+      throw new Error("Private key is not a valid string");
+    }
+
     if (cleanKey.length !== 64) {
       throw new Error(`Private key must be 64 hex characters, got ${cleanKey.length}`);
     }
 
+    // Validate hex format
     if (!/^[0-9a-fA-F]{64}$/.test(cleanKey)) {
       throw new Error("Private key contains invalid hex characters");
     }
+
+    // console.debug('Private key validation passed for hex format');
 
     // Convert hex string to bytes
     const bytes = new Uint8Array(32);
@@ -54,12 +93,13 @@ export function createKeypair(privateKey: string, name: string): TestKeypair {
     // Create keypair from secret key
     const keypair = Ed25519Keypair.fromSecretKey(bytes);
     const address = keypair.getPublicKey().toSuiAddress();
-
     return { keypair, address, name };
-  } catch (error) {
-    throw new Error(`Failed to create keypair for ${name}: ${error.message}`);
+
+  } catch (e) {
+    console.error("Error creating wallet keypair:", e);
+    throw new Error(`Failed to create wallet keypair: ${e.message}`);
   }
-}
+};
 
 /**
  * Get USDC balance for a specific address
@@ -241,9 +281,10 @@ export function logBalanceChange(
 /**
  * Validate environment variables
  */
-export function validateEnvironment(): { key1: string; key2: string } {
+export function validateEnvironment(): { key1: string; key2: string; adminKey: string } {
   const key1 = process.env.VITE_KEY_1;
   const key2 = process.env.VITE_KEY_2;
+  const adminKey = process.env.VITE_PRIVATE_KEY;
 
   if (!key1) {
     throw new Error("VITE_KEY_1 environment variable is not set");
@@ -252,8 +293,11 @@ export function validateEnvironment(): { key1: string; key2: string } {
   if (!key2) {
     throw new Error("VITE_KEY_2 environment variable is not set");
   }
+  if (!adminKey) {
+    throw new Error("VITE_PRIVATE_KEY environment variable is not set");
+  }
 
-  return { key1, key2 };
+  return { key1, key2, adminKey };
 }
 
 /**

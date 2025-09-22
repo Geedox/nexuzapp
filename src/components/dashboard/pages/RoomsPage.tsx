@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { CreateRoomData, useGameRoom } from "@/contexts/GameRoomContext";
+import { useGameRoom } from "@/hooks/gameroom";
+import { CreateRoomData } from "@/types/gameroom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProfile } from "@/contexts/ProfileContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import GameRoomDetails from "@/components/gameroom/GameRoomDetails";
 import GameRoomFiltersComponent from "@/components/gameroom/GameRoomFilters";
+import { useSearchParams } from "react-router-dom";
 import {
   Download,
   Share2,
@@ -428,6 +430,7 @@ const RoomsPage = () => {
   const { user } = useAuth();
   const { profile } = useProfile();
   const { toast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState(null);
@@ -493,6 +496,15 @@ const RoomsPage = () => {
     setShowCelebration(false);
     setWinnerData(null);
   }, []);
+
+  // Handle URL search params for direct room access
+  useEffect(() => {
+    const roomId = searchParams.get("roomid");
+    if (roomId && !selectedRoomId) {
+      logger.info("Opening room from URL:", roomId);
+      setSelectedRoomId(roomId);
+    }
+  }, [searchParams, selectedRoomId]);
 
   // Fetch available games
   useEffect(() => {
@@ -737,6 +749,10 @@ const RoomsPage = () => {
       // Navigate to the room details
       setTimeout(() => {
         setSelectedRoomId(room.id);
+        // Add roomid to URL
+        const newSearchParams = new URLSearchParams(searchParams);
+        newSearchParams.set("roomId", room.id);
+        setSearchParams(newSearchParams);
       }, 1000);
     } catch (error) {
       logger.error("Error creating room:", error);
@@ -776,7 +792,7 @@ const RoomsPage = () => {
   };
 
   const canJoinRoom = (room) => {
-    if (room.status !== "waiting") return false;
+    if (room.status !== "waiting" && room.status !== "ongoing") return false;
     if (room.current_players >= room.max_players) return false;
     const userInRoom = room.participants?.some(
       (p) => p.user_id === user?.id && p.is_active
@@ -813,6 +829,10 @@ const RoomsPage = () => {
     // If user is already in room (including creator), show room details
     if (isUserInRoom(room)) {
       setSelectedRoomId(room.id);
+      // Add roomid to URL
+      const newSearchParams = new URLSearchParams(searchParams);
+      newSearchParams.set("roomId", room.id);
+      setSearchParams(newSearchParams);
     } else if (canJoinRoom(room)) {
       // Show join modal
       setShowJoinModal(true);
@@ -820,6 +840,10 @@ const RoomsPage = () => {
     } else if (room.status === "completed") {
       // For completed rooms where user didn't win, show room details
       setSelectedRoomId(room.id);
+      // Add roomid to URL
+      const newSearchParams = new URLSearchParams(searchParams);
+      newSearchParams.set("roomId", room.id);
+      setSearchParams(newSearchParams);
     }
   };
 
@@ -905,6 +929,10 @@ const RoomsPage = () => {
         roomId={selectedRoomId}
         onBack={() => {
           setSelectedRoomId(null);
+          // Remove roomid from URL when going back
+          const newSearchParams = new URLSearchParams(searchParams);
+          newSearchParams.delete("roomid");
+          setSearchParams(newSearchParams);
           refreshRooms();
         }}
       />
@@ -1005,7 +1033,13 @@ const RoomsPage = () => {
                       ? "border-yellow-500/50 shadow-lg shadow-yellow-500/20"
                       : "border-primary/20"
                   }`}
-                  onClick={() => setSelectedRoomId(room.id)}
+                  onClick={() => {
+                    setSelectedRoomId(room.id);
+                    // Add roomid to URL
+                    const newSearchParams = new URLSearchParams(searchParams);
+                    newSearchParams.set("roomId", room.id);
+                    setSearchParams(newSearchParams);
+                  }}
                 >
                   {/* Winner Badge */}
                   {userWonInRoom(room) && (
@@ -1411,23 +1445,25 @@ const RoomsPage = () => {
                         </button>
                         <button
                           type="button"
-                          onClick={() =>
-                            setFormData({
-                              ...formData,
-                              currency: "USDT" as "USDC" | "USDT",
-                            })
-                          }
-                          className={`p-4 rounded-xl border-2 transition-all duration-300 font-cyber font-bold ${
-                            formData.currency === "USDT"
-                              ? "border-green-500 bg-green-500/20 text-green-400 shadow-lg shadow-green-500/20"
-                              : "border-primary/30 bg-secondary/50 text-foreground hover:border-primary/50 hover:bg-secondary/70"
-                          }`}
+                          disabled
+                          className="relative p-4 rounded-xl border-2 transition-all duration-300 font-cyber font-bold border-primary/30 bg-secondary/30 text-muted-foreground cursor-not-allowed opacity-60"
                         >
                           <div className="flex flex-col items-center gap-2">
                             <div className="text-2xl">💚</div>
                             <div>USDT</div>
                             <div className="text-xs opacity-75">
                               Balance: {usdtBalance?.toFixed(2) || "0.00"}
+                            </div>
+                          </div>
+                          {/* Coming Soon Overlay */}
+                          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                            <div className="text-center">
+                              <div className="text-yellow-400 font-bold text-sm mb-1">
+                                🚧 COMING SOON
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                Under Development
+                              </div>
                             </div>
                           </div>
                         </button>
@@ -1545,7 +1581,6 @@ const RoomsPage = () => {
                       >
                         <option value="regular">Regular Room</option>
                         <option value="tournament">Tournament</option>
-                        <option value="league">League</option>
                       </select>
                     </div>
 

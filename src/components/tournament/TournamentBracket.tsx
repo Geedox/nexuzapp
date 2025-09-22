@@ -70,11 +70,11 @@ const MatchCard: React.FC<MatchCardProps> = ({
     <Card
       className={`w-full ${
         isMatchActive
-          ? "border-blue-500 bg-blue-50"
+          ? "border-blue-500 bg-blue-400"
           : isMatchCompleted
-          ? "border-green-500 bg-green-50"
+          ? "border-green-500 bg-green-400"
           : isMatchTimeout
-          ? "border-red-500 bg-red-50"
+          ? "border-red-500 bg-red-400"
           : ""
       }`}
     >
@@ -109,7 +109,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
       <CardContent className="pt-0">
         <div className="space-y-3">
           {/* Player 1 */}
-          <div className="flex items-center justify-between p-2 rounded-md bg-gray-50">
+          <div className="flex items-center justify-between p-2 rounded-md">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-blue-500"></div>
               <span className="font-medium">
@@ -134,7 +134,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
 
           {/* Player 2 */}
           {match.player2_id && (
-            <div className="flex items-center justify-between p-2 rounded-md bg-gray-50">
+            <div className="flex items-center justify-between p-2 rounded-md">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-red-500"></div>
                 <span className="font-medium">

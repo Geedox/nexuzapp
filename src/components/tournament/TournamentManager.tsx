@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from "react";
-import { useGameRoom } from "@/contexts/GameRoomContext";
+import React, { useState, useEffect, useCallback } from "react";
 import { useTournament } from "@/contexts/TournamentContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -49,10 +48,12 @@ const TournamentManager: React.FC<TournamentManagerProps> = ({
     canStartTournament,
     isTournamentReady,
     getTournamentStats,
-  } = useGameRoom();
-
-  const { currentTournament, participants, stats, loading, refreshTournament } =
-    useTournament();
+    currentTournament,
+    participants,
+    stats,
+    loading,
+    refreshTournament,
+  } = useTournament();
 
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [canStart, setCanStart] = useState(false);
@@ -67,6 +68,14 @@ const TournamentManager: React.FC<TournamentManagerProps> = ({
     roundDurationMinutes: 60,
     playersPerMatch: 2,
   });
+
+  // Tournament configuration from database
+  const [tournamentConfig, setTournamentConfig] = useState<{
+    eliminationType: string;
+    timeLimitMinutes: number;
+    roundDurationMinutes: number;
+    playersPerMatch: number;
+  } | null>(null);
 
   // Check tournament status
   useEffect(() => {
@@ -86,19 +95,58 @@ const TournamentManager: React.FC<TournamentManagerProps> = ({
     return () => clearInterval(interval);
   }, [roomId, canStartTournament, isTournamentReady, participants]);
 
-  // Refresh tournament data
+  // Load tournament configuration from database
+  const loadTournamentConfiguration = useCallback(
+    async (roomId: string) => {
+      try {
+        const matches = await getTournamentStats(roomId);
+        if (matches && currentTournament?.rounds.length > 0) {
+          const firstMatch = currentTournament.rounds[0]?.matches[0];
+          if (firstMatch) {
+            const config = {
+              eliminationType:
+                firstMatch.match_data?.elimination_type || "single",
+              timeLimitMinutes: firstMatch.time_limit_minutes || 30,
+              roundDurationMinutes:
+                firstMatch.match_data?.round_duration_minutes || 60,
+              playersPerMatch: firstMatch.match_data?.players_per_match || 2,
+            };
+            setTournamentConfig(config);
+          }
+        }
+      } catch (error) {
+        console.error("Error loading tournament configuration:", error);
+      }
+    },
+    [getTournamentStats, currentTournament]
+  );
+
+  // Refresh tournament data and load configuration
   useEffect(() => {
     if (roomId) {
       refreshTournament(roomId);
+      loadTournamentConfiguration(roomId);
     }
-  }, [roomId, refreshTournament]);
+  }, [roomId, refreshTournament, loadTournamentConfiguration]);
 
   const handleCreateTournament = async () => {
     if (!roomId) return;
 
+    // Prevent duplicate creation
+    if (isCreating || isReady) {
+      return;
+    }
+
     setIsCreating(true);
     try {
-      await createTournament(roomId, {
+      // Double-check tournament doesn't already exist
+      const tournamentExists = await isTournamentReady(roomId);
+      if (tournamentExists) {
+        throw new Error("Tournament already exists for this room");
+      }
+
+      await createTournament({
+        roomId: roomId,
         eliminationType: formData.eliminationType,
         timeLimitMinutes: formData.timeLimitMinutes,
         roundDurationMinutes: formData.roundDurationMinutes,
@@ -297,9 +345,11 @@ const TournamentManager: React.FC<TournamentManagerProps> = ({
                   onOpenChange={setShowCreateDialog}
                 >
                   <DialogTrigger asChild>
-                    <Button className="flex-1">
+                    <Button className="flex-1" disabled={isCreating || isReady}>
                       <Target className="h-4 w-4 mr-2" />
-                      Create Tournament
+                      {isReady
+                        ? "Tournament Already Created"
+                        : "Create Tournament"}
                     </Button>
                   </DialogTrigger>
                   <DialogContent className="max-w-md">
@@ -446,13 +496,18 @@ const TournamentManager: React.FC<TournamentManagerProps> = ({
                   <div>
                     <span className="text-muted-foreground">Type:</span>{" "}
                     <span className="font-medium">
-                      {getEliminationTypeLabel(formData.eliminationType)}
+                      {getEliminationTypeLabel(
+                        tournamentConfig?.eliminationType ||
+                          formData.eliminationType
+                      )}
                     </span>
                   </div>
                   <div>
                     <span className="text-muted-foreground">Match Limit:</span>{" "}
                     <span className="font-medium">
-                      {formData.timeLimitMinutes} min
+                      {tournamentConfig?.timeLimitMinutes ||
+                        formData.timeLimitMinutes}{" "}
+                      min
                     </span>
                   </div>
                   <div>
@@ -460,7 +515,9 @@ const TournamentManager: React.FC<TournamentManagerProps> = ({
                       Round Duration:
                     </span>{" "}
                     <span className="font-medium">
-                      {formData.roundDurationMinutes} min
+                      {tournamentConfig?.roundDurationMinutes ||
+                        formData.roundDurationMinutes}{" "}
+                      min
                     </span>
                   </div>
                   <div>
@@ -468,7 +525,8 @@ const TournamentManager: React.FC<TournamentManagerProps> = ({
                       Players per Match:
                     </span>{" "}
                     <span className="font-medium">
-                      {formData.playersPerMatch}
+                      {tournamentConfig?.playersPerMatch ||
+                        formData.playersPerMatch}
                     </span>
                   </div>
                 </div>
@@ -509,7 +567,7 @@ const TournamentManager: React.FC<TournamentManagerProps> = ({
                           "Unknown Player"}
                       </div>
                       <div className="text-sm text-muted-foreground">
-                        Score: {participant.score?.toLocaleString() || 0}
+                        Score: {participant.total_score?.toLocaleString() || 0}
                       </div>
                     </div>
                   </div>
@@ -527,4 +585,3 @@ const TournamentManager: React.FC<TournamentManagerProps> = ({
 };
 
 export default TournamentManager;
-

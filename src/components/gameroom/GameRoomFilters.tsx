@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { useGameRoom, GameRoomFilters } from "@/contexts/GameRoomContext";
+import { GameRoomFilters } from "@/types/gameroom";
+import { useGameRoom } from "@/hooks/gameroom";
 import { supabase } from "@/integrations/supabase/client";
 import { Search, Filter, X, ChevronDown, ChevronUp } from "lucide-react";
 

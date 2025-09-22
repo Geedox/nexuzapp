@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { useGameRoom } from "@/contexts/GameRoomContext";
 import { useTournament } from "@/contexts/TournamentContext";
 import { TournamentMatch } from "@/services/tournamentService";
 import TournamentBracket from "./TournamentBracket";
@@ -16,47 +15,44 @@ import {
   Users,
   Clock,
   Target,
-  Play,
-  Pause,
   RotateCcw,
-  Info,
   TrendingUp,
+  CheckCircle,
 } from "lucide-react";
 
 interface TournamentDisplayProps {
   roomId: string;
   isCreator: boolean;
   isMobile?: boolean;
+  onComplete?: (roomId: string) => Promise<void>;
 }
 
 const TournamentDisplay: React.FC<TournamentDisplayProps> = ({
   roomId,
   isCreator,
   isMobile = false,
+  onComplete,
 }) => {
   const {
     canStartTournament,
     isTournamentReady,
     getCurrentRoundMatches,
-    startTournamentMatch,
-    completeTournamentMatch,
-    timeoutTournamentMatch,
-  } = useGameRoom();
-
-  const {
-    currentTournament,
-    participants,
-    stats,
-    loading,
+    startMatch,
+    completeMatch,
+    timeoutMatch,
     error,
     refreshTournament,
     getMatchTimeRemaining,
+    participants,
+    stats,
   } = useTournament();
 
   const [activeMatches, setActiveMatches] = useState<TournamentMatch[]>([]);
   const [canStart, setCanStart] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [isCompleting, setIsCompleting] = useState(false);
+  const [hasTriggeredCompletion, setHasTriggeredCompletion] = useState(false);
 
   // Load tournament status
   useEffect(() => {
@@ -89,6 +85,43 @@ const TournamentDisplay: React.FC<TournamentDisplayProps> = ({
     }
   }, [roomId, refreshTournament]);
 
+  // Handle tournament completion
+  useEffect(() => {
+    const handleTournamentCompletion = async () => {
+      if (
+        stats?.isComplete &&
+        stats.winner &&
+        onComplete &&
+        !hasTriggeredCompletion &&
+        !isCompleting
+      ) {
+        setIsCompleting(true);
+        setHasTriggeredCompletion(true);
+
+        try {
+          console.log("Tournament completed, triggering room completion...");
+          await onComplete(roomId);
+          console.log("Room completion triggered successfully");
+        } catch (error) {
+          console.error("Error triggering room completion:", error);
+          // Reset the flag so it can be retried
+          setHasTriggeredCompletion(false);
+        } finally {
+          setIsCompleting(false);
+        }
+      }
+    };
+
+    handleTournamentCompletion();
+  }, [
+    stats?.isComplete,
+    stats?.winner,
+    onComplete,
+    roomId,
+    hasTriggeredCompletion,
+    isCompleting,
+  ]);
+
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
@@ -102,7 +135,7 @@ const TournamentDisplay: React.FC<TournamentDisplayProps> = ({
 
   const handleStartMatch = async (matchId: string) => {
     try {
-      await startTournamentMatch(matchId);
+      await startMatch(matchId);
       // Refresh current matches
       const currentMatches = await getCurrentRoundMatches(roomId);
       setActiveMatches(currentMatches);
@@ -113,7 +146,7 @@ const TournamentDisplay: React.FC<TournamentDisplayProps> = ({
 
   const handleCompleteMatch = async (matchId: string, winnerId: string) => {
     try {
-      await completeTournamentMatch(matchId, winnerId);
+      await completeMatch(matchId, winnerId);
       // Refresh current matches
       const currentMatches = await getCurrentRoundMatches(roomId);
       setActiveMatches(currentMatches);
@@ -124,7 +157,7 @@ const TournamentDisplay: React.FC<TournamentDisplayProps> = ({
 
   const handleTimeoutMatch = async (matchId: string) => {
     try {
-      await timeoutTournamentMatch(matchId);
+      await timeoutMatch(matchId);
       // Refresh current matches
       const currentMatches = await getCurrentRoundMatches(roomId);
       setActiveMatches(currentMatches);
@@ -256,20 +289,30 @@ const TournamentDisplay: React.FC<TournamentDisplayProps> = ({
                   }`}
                 >
                   {activeMatches.map((match) => (
-                    <MatchCard
-                      key={match.id}
-                      match={match}
-                      participants={participants}
-                      onStartMatch={isCreator ? handleStartMatch : undefined}
-                      onCompleteMatch={
-                        isCreator ? handleCompleteMatch : undefined
-                      }
-                      onTimeoutMatch={
-                        isCreator ? handleTimeoutMatch : undefined
-                      }
-                      timeRemaining={getMatchTimeRemaining(match.id)}
-                      isAdmin={isCreator}
-                    />
+                    <div key={match.id} className="space-y-4">
+                      <MatchCard
+                        match={match}
+                        participants={participants}
+                        onStartMatch={isCreator ? handleStartMatch : undefined}
+                        onCompleteMatch={
+                          isCreator ? handleCompleteMatch : undefined
+                        }
+                        onTimeoutMatch={
+                          isCreator ? handleTimeoutMatch : undefined
+                        }
+                        timeRemaining={getMatchTimeRemaining(match.id)}
+                        isAdmin={isCreator}
+                      />
+                      {match.status === "active" && (
+                        <TournamentTimer
+                          matchId={match.id}
+                          initialTimeMinutes={match.time_limit_minutes || 30}
+                          status={match.status}
+                          onTimeout={isCreator ? handleTimeoutMatch : undefined}
+                          isAdmin={isCreator}
+                        />
+                      )}
+                    </div>
                   ))}
                 </div>
               )}
@@ -364,6 +407,61 @@ const TournamentDisplay: React.FC<TournamentDisplayProps> = ({
                   <TrendingUp className="h-4 w-4" />
                   {stats.totalRounds} rounds
                 </div>
+              </div>
+
+              {/* Completion Status and Actions */}
+              <div className="mt-6 space-y-3">
+                {isCompleting && (
+                  <div className="flex items-center justify-center gap-2 text-blue-600">
+                    <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-blue-600"></div>
+                    <span className="text-sm">
+                      Completing room and distributing prizes...
+                    </span>
+                  </div>
+                )}
+
+                {hasTriggeredCompletion && !isCompleting && (
+                  <div className="flex items-center justify-center gap-2 text-green-600">
+                    <CheckCircle className="h-4 w-4" />
+                    <span className="text-sm">
+                      Room completion triggered successfully!
+                    </span>
+                  </div>
+                )}
+
+                {onComplete &&
+                  isCreator &&
+                  !hasTriggeredCompletion &&
+                  !isCompleting && (
+                    <Button
+                      onClick={async () => {
+                        setIsCompleting(true);
+                        setHasTriggeredCompletion(true);
+                        try {
+                          await onComplete(roomId);
+                        } catch (error) {
+                          console.error(
+                            "Error triggering room completion:",
+                            error
+                          );
+                          setHasTriggeredCompletion(false);
+                        } finally {
+                          setIsCompleting(false);
+                        }
+                      }}
+                      disabled={isCompleting}
+                      className="bg-green-600 hover:bg-green-700 text-white"
+                    >
+                      {isCompleting ? (
+                        <span className="flex items-center gap-2">
+                          <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
+                          Completing...
+                        </span>
+                      ) : (
+                        "Complete Room & Distribute Prizes"
+                      )}
+                    </Button>
+                  )}
               </div>
             </div>
           </CardContent>

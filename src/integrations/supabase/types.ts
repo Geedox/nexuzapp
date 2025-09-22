@@ -39,6 +39,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      approvals: {
+        Row: {
+          created_at: string
+          id: string
+          participant_id: string | null
+          room_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          participant_id?: string | null
+          room_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          participant_id?: string | null
+          room_id?: string | null
+        }
+        Relationships: []
+      }
       chat_messages: {
         Row: {
           content: string
@@ -380,10 +401,12 @@ export type Database = {
           final_position: number | null
           id: string
           is_active: boolean | null
+          join_digest: string | null
           joined_at: string | null
           left_at: string | null
           payment_amount: number
           payment_currency: Database["public"]["Enums"]["currency_type"]
+          payout_digest: string | null
           payout_transaction_id: string | null
           room_id: string | null
           score: number | null
@@ -396,10 +419,12 @@ export type Database = {
           final_position?: number | null
           id?: string
           is_active?: boolean | null
+          join_digest?: string | null
           joined_at?: string | null
           left_at?: string | null
           payment_amount: number
           payment_currency: Database["public"]["Enums"]["currency_type"]
+          payout_digest?: string | null
           payout_transaction_id?: string | null
           room_id?: string | null
           score?: number | null
@@ -412,10 +437,12 @@ export type Database = {
           final_position?: number | null
           id?: string
           is_active?: boolean | null
+          join_digest?: string | null
           joined_at?: string | null
           left_at?: string | null
           payment_amount?: number
           payment_currency?: Database["public"]["Enums"]["currency_type"]
+          payout_digest?: string | null
           payout_transaction_id?: string | null
           room_id?: string | null
           score?: number | null
@@ -538,6 +565,7 @@ export type Database = {
           name: string
           on_chain_create_digest: string | null
           on_chain_room_id: string | null
+          participant_has_approved: boolean | null
           platform_fee_collected: number | null
           play_mode: string | null
           players_per_match: number | null
@@ -545,6 +573,7 @@ export type Database = {
           room_code: string | null
           round_duration_minutes: number | null
           sponsor_amount: number | null
+          start_signing: boolean | null
           start_time: string
           status: Database["public"]["Enums"]["room_status"] | null
           timezone: string | null
@@ -587,6 +616,7 @@ export type Database = {
           name: string
           on_chain_create_digest?: string | null
           on_chain_room_id?: string | null
+          participant_has_approved?: boolean | null
           platform_fee_collected?: number | null
           play_mode?: string | null
           players_per_match?: number | null
@@ -594,6 +624,7 @@ export type Database = {
           room_code?: string | null
           round_duration_minutes?: number | null
           sponsor_amount?: number | null
+          start_signing?: boolean | null
           start_time: string
           status?: Database["public"]["Enums"]["room_status"] | null
           timezone?: string | null
@@ -636,6 +667,7 @@ export type Database = {
           name?: string
           on_chain_create_digest?: string | null
           on_chain_room_id?: string | null
+          participant_has_approved?: boolean | null
           platform_fee_collected?: number | null
           play_mode?: string | null
           players_per_match?: number | null
@@ -643,6 +675,7 @@ export type Database = {
           room_code?: string | null
           round_duration_minutes?: number | null
           sponsor_amount?: number | null
+          start_signing?: boolean | null
           start_time?: string
           status?: Database["public"]["Enums"]["room_status"] | null
           timezone?: string | null
@@ -1584,6 +1617,8 @@ export const Constants = {
     },
   },
 } as const
+
+
 
 
 // Gaming avatars for chat rooms

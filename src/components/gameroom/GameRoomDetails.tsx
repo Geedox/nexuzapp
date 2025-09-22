@@ -1,10 +1,14 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { GameRoomParticipant, useGameRoom } from "@/contexts/GameRoomContext";
+import { useState, useEffect, useCallback } from "react";
+import { useGameRoom } from "@/hooks/gameroom";
+import { GameRoom, GameRoomParticipant } from "@/types/gameroom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { TournamentDisplay } from "@/components/tournament";
 import { TournamentProvider } from "@/contexts/TournamentContext";
+import { AdminPanel } from "@/components/gameroom/AdminPanel";
+import { ApprovalSection } from "@/components/gameroom/ApprovalSection";
+import { logger } from "@/utils";
 
 const GameRoomDetails = ({ roomId, onBack }) => {
   const {
@@ -14,13 +18,12 @@ const GameRoomDetails = ({ roomId, onBack }) => {
     cancelRoom,
     playGame,
     completeGame,
-    approveGameRoomCompletion,
-    getSignatureStatus,
-    hasSigned,
+    initiateRoomCompletion,
+    getSignaturesAndStatus,
   } = useGameRoom();
   const { user } = useAuth();
   const { toast } = useToast();
-  const [room, setRoom] = useState(null);
+  const [room, setRoom] = useState<GameRoom | null>(null);
   const [participants, setParticipants] = useState<GameRoomParticipant[]>([]);
   const [loading, setLoading] = useState(true);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
@@ -28,21 +31,31 @@ const GameRoomDetails = ({ roomId, onBack }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isLaunchingGame, setIsLaunchingGame] = useState(false);
   const [winners, setWinners] = useState([]);
-  const [showSpecialRoomAdmin, setShowSpecialRoomAdmin] = useState(false);
   const [isCompletingSpecialRoom, setIsCompletingSpecialRoom] = useState(false);
   const [showCompletionConfirmation, setShowCompletionConfirmation] =
     useState(false);
-  const [pendingCompletion, setPendingCompletion] = useState(null);
-  const [signatureStatus, setSignatureStatus] = useState({
-    collected: 0,
-    required: 2,
-    hasCreatorSignature: false,
-    hasParticipantSignature: false,
-  });
-  const [isSubmittingApproval, setIsSubmittingApproval] = useState(false);
   const [activeTab, setActiveTab] = useState<"overview" | "tournament">(
-    "overview"
+    "tournament"
   );
+  const [signaturesAndStatus, setSignaturesAndStatus] = useState<{
+    collected: number;
+    required: number;
+    hasCreatorSignature: boolean;
+    hasParticipantSignature: boolean;
+    signers: {
+      id: string;
+      participant_id: string | null;
+      room_id: string | null;
+      created_at: string;
+    }[];
+  } | null>(null);
+  const [completionInitiated, setCompletionInitiated] = useState(false);
+
+  // Function to get signature status and signers
+  const getSignatureStatus = useCallback(async () => {
+    const sigStatus = await getSignaturesAndStatus(roomId);
+    setSignaturesAndStatus(sigStatus);
+  }, [roomId, getSignaturesAndStatus]);
 
   // Enhanced loadRoomData function
   const loadRoomData = useCallback(
@@ -58,6 +71,9 @@ const GameRoomDetails = ({ roomId, onBack }) => {
 
         if (roomData) {
           setRoom(roomData);
+
+          // Check if completion has been initiated (admin_has_approved is not null means initiation happened)
+          setCompletionInitiated(!!roomData.start_signing);
 
           // If room is completed, determine winners for display
           if (roomData.status === "completed") {
@@ -78,14 +94,13 @@ const GameRoomDetails = ({ roomId, onBack }) => {
         // Load signature status for special rooms
         if (roomData?.is_special) {
           try {
-            const sigStatus = await getSignatureStatus(roomId);
-            setSignatureStatus(sigStatus);
+            await getSignatureStatus();
           } catch (error) {
-            console.error("Error loading signature status:", error);
+            logger.error("Error loading signature status:", error);
           }
         }
       } catch (error) {
-        console.error("Error loading room data:", error);
+        logger.error("Error loading room data:", error);
         toast({
           title: "Error",
           description: "Failed to load room details",
@@ -105,6 +120,11 @@ const GameRoomDetails = ({ roomId, onBack }) => {
 
     const now = new Date();
     const endTime = new Date(room.end_time);
+
+    // Special rooms should not auto-complete - they require manual completion
+    if (room.is_special) {
+      return;
+    }
 
     // If current time has passed end time and room is still ongoing/waiting
     if (
@@ -171,12 +191,13 @@ const GameRoomDetails = ({ roomId, onBack }) => {
           loadRoomData(false);
         }
       )
+
       .subscribe();
 
     return () => {
       subscription.unsubscribe();
     };
-  }, [roomId, loadRoomData]);
+  }, [roomId, loadRoomData, room?.is_special]);
 
   // Determine actual room status based on time
   const getActualStatus = useCallback(() => {
@@ -196,7 +217,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
       return "waiting";
     } else if (now >= startTime && now < endTime) {
       return "ongoing";
-    } else if (now >= endTime) {
+    } else if (now >= endTime && !room.is_special) {
       return "completed";
     }
 
@@ -256,79 +277,10 @@ const GameRoomDetails = ({ roomId, onBack }) => {
     }
   };
 
-  const handleSpecialRoomCompletion = async () => {
-    if (!room || !participants.length) return;
-
-    // Check signature requirements first
-    if (signatureStatus.collected < signatureStatus.required) {
-      toast({
-        title: "Insufficient Signatures",
-        description: `Required ${signatureStatus.required} signatures, but only ${signatureStatus.collected} collected. Both creator and one participant must sign.`,
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (
-      !signatureStatus.hasCreatorSignature ||
-      !signatureStatus.hasParticipantSignature
-    ) {
-      toast({
-        title: "Missing Required Signatures",
-        description:
-          "Both creator and participant signatures are required to complete the game.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Validate that all participants have positions and scores
-    const participantsWithPositions = participants.filter(
-      (p) =>
-        p.final_position &&
-        p.final_position > 0 &&
-        p.score !== null &&
-        p.score !== undefined
-    );
-
-    if (participantsWithPositions.length !== participants.length) {
-      toast({
-        title: "Incomplete Data",
-        description: "All participants must have positions and scores assigned",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Check for duplicate positions
-    const positions = participantsWithPositions.map((p) => p.final_position);
-    const uniquePositions = new Set(positions);
-    if (positions.length !== uniquePositions.size) {
-      toast({
-        title: "Invalid Positions",
-        description: "Each participant must have a unique position",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Prepare winners data for completeGame function
-    const winners = participantsWithPositions.map((participant) => ({
-      userId: participant.user_id,
-      position: participant.final_position,
-      participantId: participant.id,
-    }));
-
-    setPendingCompletion({ winners, participants: participantsWithPositions });
-    setShowCompletionConfirmation(true);
-  };
-
   const confirmSpecialRoomCompletion = async () => {
-    if (!pendingCompletion) return;
-
     setIsCompletingSpecialRoom(true);
     try {
-      await completeGame(roomId, pendingCompletion.winners);
+      await completeGame(roomId);
 
       toast({
         title: "Success",
@@ -336,9 +288,6 @@ const GameRoomDetails = ({ roomId, onBack }) => {
       });
 
       setShowCompletionConfirmation(false);
-      setShowSpecialRoomAdmin(false);
-      setPendingCompletion(null);
-
       // Refresh room data
       await loadRoomData(false);
     } catch (error) {
@@ -353,52 +302,30 @@ const GameRoomDetails = ({ roomId, onBack }) => {
     }
   };
 
-  // Signature handling functions
-  const handleApprovalSubmit = async () => {
-    setIsSubmittingApproval(true);
+  // Handler for initiating room completion
+  const handleInitiateCompletion = async () => {
     try {
-      await approveGameRoomCompletion(roomId);
-
-      // Refresh signature status
-      const sigStatus = await getSignatureStatus(roomId);
-      setSignatureStatus(sigStatus);
-
-      // Refresh room data
+      await initiateRoomCompletion(roomId);
       await loadRoomData(false);
-
-      toast({
-        title: "Success",
-        description: "Approval submitted successfully",
-      });
+      await getSignatureStatus();
     } catch (error) {
-      console.error("Error submitting approval:", error);
-      toast({
-        title: "Error",
-        description: "Failed to submit approval",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSubmittingApproval(false);
+      console.error("Error initiating completion:", error);
     }
   };
 
-  const checkUserSignatureStatus = async () => {
-    if (!user || !room) return false;
+  // Handler for participants update from AdminPanel
+  const handleParticipantsUpdate = async () => {
+    await loadRoomData(false);
+  };
 
-    try {
-      // Get user's wallet address
-      const userProfile = user.user_metadata?.sui_wallet_data;
-      if (!userProfile?.address) return false;
-
-      return await hasSigned(roomId, userProfile.address);
-    } catch (error) {
-      console.error("Error checking user signature status:", error);
-      return false;
-    }
+  // Handler for approval submission from ApprovalSection
+  const handleApprovalSubmitted = async () => {
+    await loadRoomData(false);
+    await getSignatureStatus();
   };
 
   // Helper functions
-  const formatDateTime = (date) => {
+  const formatDateTime = (date: string | number | Date) => {
     return new Date(date).toLocaleString("en-US", {
       month: "short",
       day: "numeric",
@@ -408,7 +335,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
     });
   };
 
-  const getTimeRemaining = (startTime) => {
+  const getTimeRemaining = (startTime: string | number | Date) => {
     const start = new Date(startTime);
     const diff = start.getTime() - currentTime.getTime();
 
@@ -423,7 +350,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
     return `Starts in ${seconds}s`;
   };
 
-  const getStatusColor = (status) => {
+  const getStatusColor = (status: string) => {
     switch (status) {
       case "waiting":
         return "bg-yellow-500/20 text-yellow-400 border-yellow-500/30";
@@ -440,7 +367,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
     }
   };
 
-  const getWinnerSplitDisplay = (rule) => {
+  const getWinnerSplitDisplay = (rule: string | number) => {
     const splits = {
       winner_takes_all: "Winner Takes All (100%)",
       top_2: "Top 2 Players (60% / 40%)",
@@ -500,16 +427,6 @@ const GameRoomDetails = ({ roomId, onBack }) => {
             {room?.mode === "tournament" && (
               <div className="flex bg-secondary/30 rounded-lg p-1">
                 <button
-                  onClick={() => setActiveTab("overview")}
-                  className={`px-4 py-2 rounded-md font-cyber font-bold text-sm transition-all ${
-                    activeTab === "overview"
-                      ? "bg-primary text-background"
-                      : "text-foreground hover:bg-secondary/50"
-                  }`}
-                >
-                  Overview
-                </button>
-                <button
                   onClick={() => setActiveTab("tournament")}
                   className={`px-4 py-2 rounded-md font-cyber font-bold text-sm transition-all ${
                     activeTab === "tournament"
@@ -542,7 +459,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
                 Game:{" "}
                 <span className="text-foreground">
                   {room.is_special
-                    ? "Custom Game"
+                    ? room.game_name || "Unknown Game"
                     : room.game?.name || "Unknown Game"}
                 </span>
               </p>
@@ -817,255 +734,27 @@ const GameRoomDetails = ({ roomId, onBack }) => {
 
         {/* Special Room Admin Panel */}
         {room.is_special && isCreator && actualStatus === "ongoing" && (
-          <div className="bg-gradient-to-br from-card to-secondary/20 border-2 border-primary/30 rounded-2xl p-6 cyber-border">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-cyber text-xl font-bold text-primary">
-                ⭐ Special Room Admin Panel
-              </h2>
-              <button
-                onClick={() => setShowSpecialRoomAdmin(!showSpecialRoomAdmin)}
-                className="bg-gradient-to-r from-purple-500 to-purple-600 text-white px-4 py-2 rounded-lg font-cyber font-bold hover:scale-105 transition-all"
-              >
-                {showSpecialRoomAdmin ? "Hide Admin Panel" : "Manage Winners"}
-              </button>
-            </div>
-
-            {showSpecialRoomAdmin && (
-              <div className="space-y-4">
-                <p className="text-sm font-cyber text-muted-foreground">
-                  As the room creator, you can manually assign positions and
-                  scores to participants. Both you and one participant must
-                  approve the final results.
-                </p>
-
-                {/* Signature Status */}
-                <div className="bg-purple-500/20 border border-purple-500/30 rounded-lg p-4">
-                  <h3 className="font-cyber text-lg font-bold text-purple-400 mb-2">
-                    📝 Signature Status
-                  </h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm font-cyber text-purple-300">
-                        Signatures Collected: {signatureStatus.collected} /{" "}
-                        {signatureStatus.required}
-                      </p>
-                      <div className="w-full bg-purple-900/30 rounded-full h-2 mt-1">
-                        <div
-                          className="bg-purple-400 h-2 rounded-full transition-all duration-300"
-                          style={{
-                            width: `${
-                              (signatureStatus.collected /
-                                signatureStatus.required) *
-                              100
-                            }%`,
-                          }}
-                        ></div>
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-sm font-cyber text-purple-300">
-                        Status:{" "}
-                        {signatureStatus.hasCreatorSignature &&
-                        signatureStatus.hasParticipantSignature
-                          ? "✅ Ready to Complete"
-                          : "⏳ Pending Signatures"}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Admin Approval Button */}
-                  <div className="mt-4">
-                    <button
-                      onClick={handleApprovalSubmit}
-                      disabled={isSubmittingApproval}
-                      className="bg-gradient-to-r from-purple-500 to-purple-600 text-white px-4 py-2 rounded-lg font-cyber font-bold hover:scale-105 transition-all disabled:opacity-50 disabled:hover:scale-100"
-                    >
-                      {isSubmittingApproval ? (
-                        <span className="flex items-center justify-center gap-2">
-                          <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
-                          Submitting...
-                        </span>
-                      ) : (
-                        "📝 Approve Game Completion"
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  {participants.map((participant, index) => (
-                    <div
-                      key={participant.id}
-                      className="flex items-center justify-between bg-secondary/30 rounded-lg p-4 border border-primary/20"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="font-cyber text-lg text-primary">
-                          #{index + 1}
-                        </span>
-                        <div>
-                          <p className="font-cyber text-foreground">
-                            {participant.user?.username || "Unknown Player"}
-                          </p>
-                          <p className="text-xs font-cyber text-muted-foreground">
-                            Joined:{" "}
-                            {new Date(
-                              participant.joined_at
-                            ).toLocaleTimeString()}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-2">
-                          <label className="text-sm font-cyber text-muted-foreground">
-                            Position:
-                          </label>
-                          <input
-                            type="number"
-                            min="1"
-                            max={participants.length}
-                            value={participant.final_position || ""}
-                            onChange={(e) => {
-                              const newParticipants = [...participants];
-                              newParticipants[index] = {
-                                ...participant,
-                                final_position:
-                                  parseInt(e.target.value) || null,
-                              };
-                              setParticipants(newParticipants);
-                            }}
-                            className="w-20 px-2 py-1 bg-secondary/50 border border-primary/30 rounded text-center text-sm font-cyber text-foreground focus:border-primary focus:outline-none"
-                            placeholder="1"
-                          />
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <label className="text-sm font-cyber text-muted-foreground">
-                            Score:
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            value={participant.score || ""}
-                            onChange={(e) => {
-                              const newParticipants = [...participants];
-                              newParticipants[index] = {
-                                ...participant,
-                                score: parseInt(e.target.value) || 0,
-                              };
-                              setParticipants(newParticipants);
-                            }}
-                            className="w-24 px-2 py-1 bg-secondary/50 border border-primary/30 rounded text-center text-sm font-cyber text-foreground focus:border-primary focus:outline-none"
-                            placeholder="0"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <button
-                    onClick={handleSpecialRoomCompletion}
-                    disabled={
-                      isCompletingSpecialRoom ||
-                      signatureStatus.collected < signatureStatus.required ||
-                      !signatureStatus.hasCreatorSignature ||
-                      !signatureStatus.hasParticipantSignature
-                    }
-                    className="flex-1 bg-gradient-to-r from-green-500 to-green-600 text-white font-cyber font-bold py-3 rounded-xl hover:scale-105 transition-all shadow-lg hover:shadow-green-500/50 disabled:opacity-50 disabled:hover:scale-100"
-                  >
-                    {isCompletingSpecialRoom ? (
-                      <span className="flex items-center justify-center gap-2">
-                        <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
-                        Completing...
-                      </span>
-                    ) : signatureStatus.collected < signatureStatus.required ? (
-                      `Complete Room (${signatureStatus.collected}/${signatureStatus.required} signatures)`
-                    ) : (
-                      "Complete Room & Distribute Prizes"
-                    )}
-                  </button>
-                  <button
-                    onClick={() => setShowSpecialRoomAdmin(false)}
-                    disabled={isCompletingSpecialRoom}
-                    className="px-6 bg-secondary border-2 border-primary/30 font-cyber font-bold py-3 rounded-xl hover:bg-secondary/80 hover:border-primary/50 transition-all disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+          <AdminPanel
+            room={room}
+            participants={participants}
+            onParticipantsUpdate={handleParticipantsUpdate}
+            onInitiateCompletion={handleInitiateCompletion}
+            isCompletingRoom={isCompletingSpecialRoom}
+            setShowCompletionConfirmation={setShowCompletionConfirmation}
+          />
         )}
 
-        {/* Participant Signature Section for Special Rooms */}
+        {/* Approval Section for Special Rooms */}
         {room.is_special &&
-          isParticipant &&
-          !isCreator &&
+          (isCreator || isParticipant) &&
           actualStatus === "ongoing" && (
-            <div className="bg-gradient-to-br from-card to-secondary/20 border-2 border-primary/30 rounded-2xl p-6 cyber-border">
-              <h2 className="font-cyber text-xl font-bold text-primary mb-4">
-                📝 Approve Game Completion
-              </h2>
-              <p className="text-sm font-cyber text-muted-foreground mb-4">
-                As a participant, you can approve the game completion. Both the
-                room creator and one participant must approve before the game
-                can be completed.
-              </p>
-
-              {/* Signature Status for Participants */}
-              <div className="bg-blue-500/20 border border-blue-500/30 rounded-lg p-4 mb-4">
-                <h3 className="font-cyber text-lg font-bold text-blue-400 mb-2">
-                  Signature Status
-                </h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm font-cyber text-blue-300">
-                      Signatures Collected: {signatureStatus.collected} /{" "}
-                      {signatureStatus.required}
-                    </p>
-                    <div className="w-full bg-blue-900/30 rounded-full h-2 mt-1">
-                      <div
-                        className="bg-blue-400 h-2 rounded-full transition-all duration-300"
-                        style={{
-                          width: `${
-                            (signatureStatus.collected /
-                              signatureStatus.required) *
-                            100
-                          }%`,
-                        }}
-                      ></div>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-sm font-cyber text-blue-300">
-                      Status:{" "}
-                      {signatureStatus.hasCreatorSignature &&
-                      signatureStatus.hasParticipantSignature
-                        ? "✅ Ready to Complete"
-                        : "⏳ Pending Signatures"}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Participant Approval Button */}
-              <button
-                onClick={handleApprovalSubmit}
-                disabled={isSubmittingApproval}
-                className="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-3 rounded-lg font-cyber font-bold hover:scale-105 transition-all disabled:opacity-50 disabled:hover:scale-100"
-              >
-                {isSubmittingApproval ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
-                    Submitting...
-                  </span>
-                ) : (
-                  "📝 Submit My Approval"
-                )}
-              </button>
-            </div>
+            <ApprovalSection
+              room={room}
+              participants={participants}
+              signaturesAndStatus={signaturesAndStatus}
+              onApprovalSubmitted={handleApprovalSubmitted}
+              completionInitiated={completionInitiated}
+            />
           )}
 
         {/* Action Buttons */}
@@ -1091,9 +780,18 @@ const GameRoomDetails = ({ roomId, onBack }) => {
           {/* Special Room Status */}
           {room.is_special && actualStatus === "ongoing" && (
             <div className="flex-1 bg-purple-600/20 border border-purple-500/30 text-purple-400 font-cyber font-bold py-3 rounded-xl text-center">
-              ⭐ Special Room - Admin manages game completion
+              ⭐ Special Room
             </div>
           )}
+
+          {/* Special Room Past End Time */}
+          {room.is_special &&
+            actualStatus === "ongoing" &&
+            currentTime >= new Date(room.end_time) && (
+              <div className="flex-1 bg-orange-600/20 border border-orange-500/30 text-orange-400 font-cyber font-bold py-3 rounded-xl text-center">
+                ⚠️ Special Room - Time expired, awaiting manual completion
+              </div>
+            )}
 
           {/* Waiting for players message */}
           {actualStatus === "waiting" &&
@@ -1218,7 +916,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
         )}
 
         {/* Special Room Completion Confirmation Modal */}
-        {showCompletionConfirmation && pendingCompletion && (
+        {showCompletionConfirmation && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
             <div className="bg-card border-2 border-primary/50 rounded-2xl p-6 max-w-2xl w-full mx-4">
               <h3 className="font-cyber text-xl font-bold text-primary mb-4">
@@ -1234,7 +932,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
                 <h4 className="font-cyber text-lg font-bold text-foreground">
                   Final Rankings:
                 </h4>
-                {pendingCompletion.participants
+                {participants
                   .sort((a, b) => a.final_position - b.final_position)
                   .map((participant, index) => (
                     <div
@@ -1256,7 +954,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
                       </div>
                       <div className="text-right">
                         <p className="text-sm font-cyber text-green-400">
-                          Position {participant.final_position}
+                          Position {index + 1}
                         </p>
                       </div>
                     </div>
@@ -1281,7 +979,6 @@ const GameRoomDetails = ({ roomId, onBack }) => {
                 <button
                   onClick={() => {
                     setShowCompletionConfirmation(false);
-                    setPendingCompletion(null);
                   }}
                   disabled={isCompletingSpecialRoom}
                   className="flex-1 bg-secondary border border-primary/30 font-cyber font-bold py-3 rounded-lg hover:bg-secondary/80 transition-colors disabled:opacity-50"
@@ -1299,6 +996,23 @@ const GameRoomDetails = ({ roomId, onBack }) => {
             roomId={roomId}
             isCreator={isCreator}
             isMobile={window.innerWidth < 768}
+            onComplete={async (roomId: string) => {
+              try {
+                await completeGame(roomId);
+                toast({
+                  title: "Success",
+                  description: "Tournament completed and prizes distributed!",
+                });
+              } catch (error) {
+                console.error("Error completing tournament room:", error);
+                toast({
+                  title: "Error",
+                  description: "Failed to complete tournament room",
+                  variant: "destructive",
+                });
+                throw error; // Re-throw to let TournamentDisplay handle the error state
+              }
+            }}
           />
         )}
 
@@ -1360,145 +1074,8 @@ const GameRoomDetails = ({ roomId, onBack }) => {
                 </div>
               </div>
             )}
-
-            {/* Participants */}
-            <div className="bg-gradient-to-br from-card to-secondary/20 border-2 border-primary/30 rounded-2xl p-6 cyber-border">
-              <h2 className="font-cyber text-xl font-bold text-primary mb-4">
-                Participants
-              </h2>
-              <div className="space-y-2">
-                {participants.length === 0 ? (
-                  <p className="text-muted-foreground text-center py-4">
-                    No participants yet
-                  </p>
-                ) : (
-                  participants
-                    .sort((a, b) => (b.score || 0) - (a.score || 0)) // Sort by score descending
-                    .map((participant, index) => (
-                      <div
-                        key={participant.id}
-                        className="flex items-center justify-between bg-secondary/30 rounded-lg p-3 border border-primary/20"
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="font-cyber text-lg text-primary">
-                            #{index + 1}
-                          </span>
-                          <div>
-                            <p className="font-cyber text-foreground">
-                              {participant.user?.username || "Unknown Player"}
-                              {participant.user_id === user?.id && (
-                                <span className="text-xs text-accent ml-2">
-                                  (You)
-                                </span>
-                              )}
-                              {participant.user_id === room.creator_id && (
-                                <span className="text-xs text-yellow-400 ml-2">
-                                  (Host)
-                                </span>
-                              )}
-                            </p>
-                            <p className="text-xs font-cyber text-muted-foreground">
-                              Joined:{" "}
-                              {new Date(
-                                participant.joined_at
-                              ).toLocaleTimeString()}
-                            </p>
-                          </div>
-                        </div>
-                        {(actualStatus === "ongoing" ||
-                          actualStatus === "completed") && (
-                          <div className="text-right">
-                            <p className="font-cyber text-sm text-muted-foreground">
-                              Score
-                            </p>
-                            <p className="font-cyber text-lg text-accent">
-                              {participant.score || 0}
-                            </p>
-                            {actualStatus === "completed" &&
-                              participant.earnings > 0 && (
-                                <p className="text-xs font-cyber text-green-400">
-                                  Won: {participant.earnings} {room.currency}
-                                </p>
-                              )}
-                          </div>
-                        )}
-                      </div>
-                    ))
-                )}
-              </div>
-            </div>
           </>
         )}
-
-        <style>{`
-        .cyber-border {
-          position: relative;
-          overflow: hidden;
-        }
-        
-        .cyber-border::before {
-          content: '';
-          position: absolute;
-          top: 0;
-          left: -100%;
-          width: 100%;
-          height: 2px;
-          background: linear-gradient(90deg, transparent, var(--primary), transparent);
-          animation: scan 3s linear infinite;
-        }
-        
-        .cyber-button {
-          position: relative;
-          overflow: hidden;
-        }
-        
-        .cyber-button::after {
-          content: '';
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          width: 0;
-          height: 0;
-          border-radius: 50%;
-          background: rgba(255, 255, 255, 0.2);
-          transform: translate(-50%, -50%);
-          transition: width 0.6s, height 0.6s;
-        }
-        
-        .cyber-button:hover::after {
-          width: 300px;
-          height: 300px;
-        }
-        
-        .glow-text {
-          text-shadow: 0 0 10px currentColor, 0 0 20px currentColor;
-        }
-        
-        .glow-text-subtle {
-          text-shadow: 0 0 5px currentColor;
-        }
-        
-        @keyframes scan {
-          to {
-            left: 100%;
-          }
-        }
-        
-        .animate-fade-in {
-          animation: fadeIn 0.5s ease-out;
-        }
-        
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-            transform: translateY(10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-      `}</style>
       </div>
     </TournamentProvider>
   );

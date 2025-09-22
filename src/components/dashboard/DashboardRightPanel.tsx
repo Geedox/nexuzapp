@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useLeaderboard } from "@/contexts/LeaderboardContext";
-import { useGameRoom } from "@/contexts/GameRoomContext";
+import { useGameRoom } from "@/hooks/gameroom";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { logger } from "@/utils";

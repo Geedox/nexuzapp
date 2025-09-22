@@ -8,6 +8,9 @@ import { testGameCompletionNoWinners } from "./test-5-no-winners";
 import { testGameCompletionSingleWinner } from "./test-6-single-winner";
 import { testGameCompletionTop2Winners } from "./test-7-top-2-winners";
 import { testSponsoredGameRoomNoWinner } from "./test-8-sponsored-no-winner";
+import { testPrivateSponsoredRoom } from "./test-9-private-sponsored";
+import { testPrivateNonSponsoredRoom } from "./test-10-private-non-sponsored";
+import { testSpecialRoomWithSignatures } from "./test-11-special-room";
 import { TestResult } from "./utils";
 
 /**
@@ -63,6 +66,21 @@ const allTests: TestFunction[] = [
     name: "test-8",
     function: testSponsoredGameRoomNoWinner,
     description: "Sponsored Game Room with No Winner"
+  },
+  {
+    name: "test-9",
+    function: testPrivateSponsoredRoom,
+    description: "Private Sponsored Room"
+  },
+  {
+    name: "test-10",
+    function: testPrivateNonSponsoredRoom,
+    description: "Private Non-Sponsored Room"
+  },
+  {
+    name: "test-11",
+    function: testSpecialRoomWithSignatures,
+    description: "Special Room with Signature Collection"
   }
 ];
 

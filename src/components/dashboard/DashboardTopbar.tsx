@@ -260,6 +260,18 @@ const DashboardTopbar = () => {
                           {decodeURIComponent(emoji)}
                         </div>
                       );
+                    } else if (
+                      profile.avatar_url.match(/^https.*\.(png|jpe?g)$/i)
+                    ) {
+                      return (
+                        <div className="w-6 h-6 sm:w-8 sm:h-8 bg-gradient-to-r from-primary to-accent rounded-full flex items-center justify-center text-lg sm:text-xl">
+                          <img
+                            className="w-full h-full object-cover rounded-full"
+                            src={profile.avatar_url}
+                            alt={profile.display_name}
+                          />
+                        </div>
+                      );
                     }
                     return (
                       <div className="w-6 h-6 sm:w-8 sm:h-8 bg-gradient-to-r from-primary to-accent rounded-full flex items-center justify-center">
@@ -338,12 +350,10 @@ const DashboardTopbar = () => {
                   <span>Settings</span>
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem
-                className="hover:bg-primary/20 font-cyber cursor-pointer"
-              >
+              <DropdownMenuItem className="hover:bg-primary/20 font-cyber cursor-pointer">
                 <Link to="/dashboard/support">
-                <HelpCircle className="mr-2 h-4 w-4" />
-                <span>Support</span>
+                  <HelpCircle className="mr-2 h-4 w-4" />
+                  <span>Support</span>
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator className="bg-primary/20" />

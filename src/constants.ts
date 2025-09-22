@@ -24,3 +24,5 @@ export const CURRENCY: Record<string, string> = {
     USDC: "USDC" as const,
     USDT: "USDT" as const,
 }
+
+export const SESSION_STORAGE_KEY = "nexuz_game_sessions";

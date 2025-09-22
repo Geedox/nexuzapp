@@ -4,7 +4,7 @@ This comprehensive test suite validates the complete lifecycle of game rooms usi
 
 ## Overview
 
-The test suite consists of 8 individual test scenarios that validate different aspects of the game room smart contract:
+The test suite consists of 11 individual test scenarios that validate different aspects of the game room smart contract:
 
 1. **Room Creation → Join → Cancel → Refund** - Tests full refunds when rooms are cancelled
 2. **Room Creation → Join → Leave → Cancel** - Tests user leaving and creator cancellation
@@ -14,6 +14,9 @@ The test suite consists of 8 individual test scenarios that validate different a
 6. **Game Completion with Single Winner** - Tests winner getting full prize minus platform fee
 7. **Game Completion with Top 2 Winners** - Tests 60%/40% split rule enforcement
 8. **Sponsored Game Room with No Winner** - Tests sponsor refund minus platform fee
+9. **Private Sponsored Room** - Tests private sponsored rooms with room codes
+10. **Private Non-Sponsored Room** - Tests private rooms with room codes and entry fees
+11. **Special Room with Signature Collection** - Tests special rooms with signature requirements
 
 ## Prerequisites
 
@@ -141,22 +144,52 @@ All tests use the following standardized parameters to minimize costs:
 - Joiner balance unchanged (no entry fee paid)
 - Room status: completed
 
+### Test 9: Private Sponsored Room
+
+- Private room requires correct room code to join
+- No entry fee required for participants (sponsored)
+- Winner receives 93% of sponsor amount
+- Sponsor receives no refund if not winner
+- Room status: completed
+
+### Test 10: Private Non-Sponsored Room
+
+- Private room requires correct room code to join
+- Entry fee required from all participants
+- Platform fee: 7% of total prize pool
+- Winner gets 93% of total prize pool
+- Losers receive no refund
+- Room status: completed
+
+### Test 11: Special Room with Signature Collection
+
+- Special rooms are automatically private (require room code)
+- Entry fee required from all participants
+- Requires signature collection from creator and participant
+- Game completion only possible with sufficient signatures
+- Platform fee: 7% of total prize pool
+- Winner gets 93% of total prize pool after signature validation
+- Room status: completed
+
 ## File Structure
 
 ```
 scripts/game-room-tests/
-├── README.md                 # This file
-├── index.ts                  # Main test runner
-├── utils.ts                  # Common utilities and helpers
-├── transfer.ts               # Script for transfer functions
-├── test-1-cancel-refund.ts  # Test 1: Cancel with refunds
-├── test-2-leave-cancel.ts   # Test 2: Leave then cancel
-├── test-3-sponsored-leave.ts # Test 3: Sponsored room leave
-├── test-4-sponsored-cancel.ts # Test 4: Sponsored room cancel
-├── test-5-no-winners.ts     # Test 5: No winners completion
-├── test-6-single-winner.ts  # Test 6: Single winner
-├── test-7-top-2-winners.ts # Test 7: Top 2 winners
-└── test-8-sponsored-no-winner.ts # Test 8: Sponsored room no winner
+├── README.md                      # This file
+├── index.ts                       # Main test runner
+├── utils.ts                       # Common utilities and helpers
+├── transfer.ts                    # Script for transfer functions
+├── test-1-cancel-refund.ts        # Test 1: Cancel with refunds
+├── test-2-leave-cancel.ts         # Test 2: Leave then cancel
+├── test-3-sponsored-leave.ts      # Test 3: Sponsored room leave
+├── test-4-sponsored-cancel.ts     # Test 4: Sponsored room cancel
+├── test-5-no-winners.ts           # Test 5: No winners completion
+├── test-6-single-winner.ts        # Test 6: Single winner
+├── test-7-top-2-winners.ts        # Test 7: Top 2 winners
+├── test-8-sponsored-no-winner.ts  # Test 8: Sponsored room no winner
+├── test-9-private-sponsored.ts    # Test 9: Private sponsored room
+├── test-10-private-non-sponsored.ts # Test 10: Private non-sponsored room
+└── test-11-special-room.ts        # Test 11: Special room with signatures
 ```
 
 ## Smart Contract Integration
