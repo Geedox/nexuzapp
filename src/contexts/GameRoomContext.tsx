@@ -10,159 +10,18 @@ import { useMemo } from "react";
 import { useTransaction } from "@/contexts/TransactionContext";
 import type { Database, TablesInsert } from "@/integrations/supabase/types";
 import { logger } from "@/utils/logger";
-
-interface GameRoom {
-  id: string;
-  name: string;
-  game_id: string;
-  game_instance_id: string | null;
-  creator_id: string;
-  entry_fee: number;
-  currency: Database["public"]["Enums"]["currency_type"];
-  max_players: number;
-  current_players: number;
-  min_players_to_start: number;
-  is_private: boolean;
-  room_code: string | null;
-  is_sponsored: boolean;
-  sponsor_amount: number;
-  winner_split_rule: Database["public"]["Enums"]["winner_split_rule"];
-  status: Database["public"]["Enums"]["room_status"];
-  start_time: string;
-  end_time: string;
-  actual_start_time: string | null;
-  actual_end_time: string | null;
-  timezone: string | null;
-  total_prize_pool: number;
-  platform_fee_collected: number;
-  on_chain_create_digest: string | null;
-  on_chain_room_id: string | null;
-  created_at: string;
-  updated_at: string;
-  game?: any;
-  creator?: any;
-  participants?: GameRoomParticipant[];
-}
-
-const SESSION_STORAGE_KEY = "nexuz_game_sessions";
-interface GameSession {
-  roomId: string;
-  userId: string;
-  sessionToken: string;
-  gameUrl: string;
-  startTime: Date;
-  expiresAt: Date; // Add expiration
-}
-
-interface GameRoomParticipant {
-  id: string;
-  room_id: string;
-  user_id: string;
-  wallet_id: string;
-  entry_transaction_id: string | null;
-  payment_currency: Database["public"]["Enums"]["currency_type"];
-  payment_amount: number;
-  score: number;
-  final_position: number | null;
-  earnings: number;
-  payout_transaction_id: string | null;
-  joined_at: string;
-  left_at: string | null;
-  is_active: boolean;
-  user?: any;
-}
-
-export interface CreateRoomData {
-  name: string;
-  gameId: string;
-  entryFee: number;
-  currency: Extract<
-    Database["public"]["Enums"]["currency_type"],
-    "USDC" | "USDT"
-  >;
-  maxPlayers: number;
-  isPrivate: boolean;
-  winnerSplitRule: Database["public"]["Enums"]["winner_split_rule"];
-  startTime: Date;
-  endTime: Date;
-  timezone: string;
-  isSponsored?: boolean;
-  sponsorAmount?: number;
-}
-
-export interface GameRoomFilters {
-  status?: Database["public"]["Enums"]["room_status"][];
-  currency?: Database["public"]["Enums"]["currency_type"][];
-  isPrivate?: boolean;
-  isSponsored?: boolean;
-  minEntryFee?: number;
-  maxEntryFee?: number;
-  minPlayers?: number;
-  maxPlayers?: number;
-  gameId?: string;
-  creatorId?: string;
-  sortBy?:
-    | "created_at"
-    | "start_time"
-    | "end_time"
-    | "entry_fee"
-    | "total_prize_pool"
-    | "current_players";
-  sortOrder?: "asc" | "desc";
-  searchQuery?: string;
-}
-
-interface GameRoomContextType {
-  rooms: GameRoom[];
-  loading: boolean;
-  creating: boolean;
-  joining: boolean;
-  // Pagination state
-  currentPage: number;
-  totalPages: number;
-  totalRooms: number;
-  roomsPerPage: number;
-  // Filter state
-  filters: GameRoomFilters;
-  // Pagination functions
-  goToPage: (page: number) => Promise<void>;
-  nextPage: () => Promise<void>;
-  prevPage: () => Promise<void>;
-  refreshRooms: () => Promise<void>;
-  // Filter functions
-  setFilters: (filters: Partial<GameRoomFilters>) => void;
-  clearFilters: () => void;
-  applyFilters: () => Promise<void>;
-  createRoom: (data: CreateRoomData) => Promise<GameRoom>;
-  joinRoom: (roomId: string, roomCode?: string) => Promise<void>;
-  leaveRoom: (roomId: string) => Promise<void>;
-  cancelRoom: (roomId: string) => Promise<void>;
-  getRoomDetails: (roomId: string) => Promise<GameRoom | null>;
-  getRoomParticipants: (roomId: string) => Promise<GameRoomParticipant[]>;
-  updateGameScore: (
-    roomId: string,
-    score: number,
-    userId?: string
-  ) => Promise<{ updated: boolean; previousScore: number; newScore: number }>;
-  completeGame: (
-    roomId: string,
-    winners: { userId: string; position: number }[]
-  ) => Promise<void>;
-  playGame: (roomId: string) => Promise<void>;
-  handleGameMessage: (event: MessageEvent) => void;
-}
-
-const GameRoomContext = createContext<GameRoomContextType | undefined>(
-  undefined
-);
-
-export const useGameRoom = () => {
-  const context = useContext(GameRoomContext);
-  if (context === undefined) {
-    throw new Error("useGameRoom must be used within a GameRoomProvider");
-  }
-  return context;
-};
+import { verifyCoinForRoomCreation } from "@/lib/utils";
+import { SESSION_STORAGE_KEY } from "@/constants";
+import {
+  GameRoomFilters,
+  GameRoom,
+  GameRoomContextType,
+  GameSession,
+  Wallet,
+  GameRoomParticipant,
+  CreateRoomData,
+} from "@/types/gameroom";
+import { GameRoomContext } from "@/hooks/gameroom";
 
 export const GameRoomProvider = ({
   children,
@@ -191,30 +50,14 @@ export const GameRoomProvider = ({
   const [activeGameSessions, setActiveGameSessions] = useState<
     Map<string, GameSession>
   >(new Map());
-  const [newGameSessions, setNewGameSessions] = useState<
-    Map<string, GameSession>
-  >(new Map());
 
   const onChainGameRoom = useMemo(() => {
-    // logger.debug("Creating onChainGameRoom instance...");
-    // logger.debug("suiClient available:", !!suiClient);
-    // logger.debug(
-    //   "suiClient details:",
-    //   suiClient ? "Connected" : "Not connected"
-    // );
-
     try {
       if (!suiClient) {
         logger.debug("No suiClient available, returning null");
         return null;
       }
-
-      // logger.debug("Attempting to create OnChainGameRoom instance...");
       const instance = new OnChainGameRoom(suiClient);
-      // logger.debug(
-      //   "OnChainGameRoom instance created successfully:",
-      //   !!instance
-      // );
       return instance;
     } catch (error) {
       logger.error("[DEBUG] Error creating OnChainGameRoom:", error);
@@ -324,15 +167,38 @@ export const GameRoomProvider = ({
 
   // Function to map on-chain transaction effects to winners
   const mapOnChainTransactionToWinners = (
-    onChainResult: any,
-    winners: any[],
-    room: any
+    onChainResult: {
+      digest: string;
+      effects?: unknown;
+      events?: Array<{
+        type: string;
+        parsedJson?: { amount?: number; recipient?: string; to?: string };
+        data?: { amount?: number };
+        recipient?: string;
+      }>;
+      gameCompletedEvent?: unknown;
+    },
+    winners: Array<{ userId: string; position: number; participantId: string }>,
+    room: GameRoom
   ) => {
     if (!onChainResult?.effects || !onChainResult?.events) {
       return null;
     }
 
-    const transactionMapping: any = {
+    const transactionMapping: {
+      digest: string;
+      roomId: string;
+      effects: unknown;
+      events: unknown;
+      gameCompletedEvent: unknown;
+      winnerTransactions: Array<{
+        userId: string;
+        position: number;
+        address: string;
+        transferEvent: unknown;
+        amount: number;
+      }>;
+    } = {
       digest: onChainResult.digest,
       roomId: room.on_chain_room_id,
       effects: onChainResult.effects,
@@ -353,8 +219,9 @@ export const GameRoomProvider = ({
       const participant = room.participants?.find(
         (p: any) => p.user_id === winner.userId
       );
-      if (participant?.user?.sui_wallet_data?.address) {
-        const winnerAddress = participant.user.sui_wallet_data.address;
+      const wallet = participant?.user?.sui_wallet_data as Wallet;
+      if (wallet) {
+        const winnerAddress = wallet.address;
 
         // Find transfer event for this winner
         const transferEvent = transferEvents.find((ev: any) => {
@@ -393,7 +260,17 @@ export const GameRoomProvider = ({
       position: number;
       participantId: string;
     }[],
-    onChainResult?: any
+    onChainResult?: {
+      digest: string;
+      effects?: unknown;
+      events?: Array<{
+        type: string;
+        parsedJson?: { amount?: number; recipient?: string; to?: string };
+        data?: { amount?: number };
+        recipient?: string;
+      }>;
+      gameCompletedEvent?: unknown;
+    }
   ) => {
     try {
       logger.info(`Starting prize distribution for room ${room.id}`);
@@ -456,7 +333,8 @@ export const GameRoomProvider = ({
           .update({
             final_position: winner.position,
             earnings: earnings,
-            payout_transaction_id: onChainResult?.digest,
+            payout_transaction_id: null,
+            payout_digest: onChainResult?.digest,
           })
           .eq("room_id", room.id)
           .eq("user_id", winner.userId);
@@ -848,7 +726,7 @@ export const GameRoomProvider = ({
 
       // Check if user is in the room
       const userParticipant = room.participants?.find(
-        (p: any) => p.user_id === user.id && p.is_active
+        (p: GameRoomParticipant) => p.user_id === user.id && p.is_active
       );
 
       if (!userParticipant) {
@@ -917,11 +795,12 @@ export const GameRoomProvider = ({
         title: "Game Launched",
         description: "Game opened in new tab. Play and submit your score!",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error("Error launching game:", error);
       toast({
         title: "Error",
-        description: error.message || "Failed to launch game",
+        description:
+          error instanceof Error ? error.message : "Failed to launch game",
         variant: "destructive",
       });
       throw error;
@@ -1164,6 +1043,86 @@ export const GameRoomProvider = ({
     }
   };
 
+  // Admin function to update participant scores (allows lower scores and multiple updates)
+  const updateParticipantScore = async (
+    roomId: string,
+    participants: {
+      participantId: string;
+      newScore: number;
+    }[]
+  ) => {
+    if (!user) throw new Error("User not authenticated");
+
+    try {
+      // Verify user is admin (room creator or has admin privileges)
+      const { data: room, error: roomError } = await supabase
+        .from("game_rooms")
+        .select("creator_id, status")
+        .eq("id", roomId)
+        .single();
+
+      if (roomError) throw roomError;
+
+      const isRoomCreator = room.creator_id === user.id;
+      if (!isRoomCreator) {
+        throw new Error("Only room creators can update participant scores");
+      }
+
+      // Check if room is still active (not completed)
+      if (room.status === "completed" || room.status === "cancelled") {
+        throw new Error(
+          "Cannot update scores for completed or cancelled rooms"
+        );
+      }
+      const result: {
+        success: boolean;
+        score: number;
+      }[] = [];
+
+      for (const participantData of participants) {
+        logger.debug(
+          `Admin updating participant ${participantData.participantId} score in room ${roomId} to ${participantData.newScore}`
+        );
+
+        const newScoreNum = Number(participantData.newScore);
+        // Get current participant data
+        const { data: participant, error: participantError } = await supabase
+          .from("game_room_participants")
+          .update({
+            score: newScoreNum,
+          })
+          .eq("room_id", roomId)
+          .eq("id", participantData.participantId)
+          .select("id, score")
+          .single();
+        if (participantError) throw participantError;
+        logger.success(
+          `Successfully updated participant ${participant.id} score from ${participant.score} to ${newScoreNum}`
+        );
+
+        result.push({
+          success: true,
+          score: newScoreNum,
+        });
+      }
+      toast({
+        title: "Score Updated",
+        description: `Participant scores updated`,
+      });
+
+      return result;
+    } catch (error) {
+      logger.error("Error updating participant score:", error);
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error ? error.message : "Failed to update score",
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
+
   // Add message listener in useEffect
   useEffect(() => {
     // Listen for messages from game windows
@@ -1249,7 +1208,9 @@ export const GameRoomProvider = ({
   }, [rooms, activeGameSessions]);
 
   // Function to automatically complete a single game
-  const autoCompleteGame = async (room: any) => {
+  const autoCompleteGame = async (
+    room: GameRoom & { participants?: GameRoomParticipant[] }
+  ) => {
     // Call smart contract first to complete the game on-chain
     let onChainResult = null;
     try {
@@ -1261,7 +1222,7 @@ export const GameRoomProvider = ({
         .eq("is_active", true)
         .order("score", { ascending: false });
       if (
-        room.currency === "USDC" &&
+        verifyCoinForRoomCreation(room.currency) &&
         onChainGameRoom &&
         room.on_chain_room_id
       ) {
@@ -1278,7 +1239,7 @@ export const GameRoomProvider = ({
 
           for (const winner of winners) {
             const participant = participants.find(
-              (p: any) => p.user_id === winner.userId
+              (p) => p.user_id === winner.userId
             );
             const addr = (
               participant?.user?.sui_wallet_data as Profile["sui_wallet_data"]
@@ -1294,13 +1255,19 @@ export const GameRoomProvider = ({
               roomId: room.on_chain_room_id,
               winnerAddresses,
               scores,
+              currency: room.currency as "USDC" | "USDT",
             });
             if (!onChainResult?.digest) {
               throw new Error(
                 `Failed to complete game on-chain for room ${room.id}: Missing transaction digest`
               );
             }
-            await distributePrizes(room, participants, winners, onChainResult);
+            await distributePrizes(
+              room as Database["public"]["Tables"]["game_rooms"]["Row"],
+              participants,
+              winners,
+              onChainResult
+            );
             logger.success(
               `Successfully completed game on-chain for room ${room.id} with digest: ${onChainResult.digest}`
             );
@@ -1309,9 +1276,15 @@ export const GameRoomProvider = ({
               roomId: room.on_chain_room_id,
               winnerAddresses: [],
               scores: [],
+              currency: room.currency as "USDC" | "USDT",
             });
             // Still call distributePrizes even with no winners to update participant records
-            await distributePrizes(room, participants, [], onChainResult);
+            await distributePrizes(
+              room as Database["public"]["Tables"]["game_rooms"]["Row"],
+              participants,
+              [],
+              onChainResult
+            );
             logger.success(
               `Successfully completed game on-chain for room ${room.id} with digest: ${onChainResult.digest}`
             );
@@ -1335,19 +1308,6 @@ export const GameRoomProvider = ({
       }
     } catch (error) {
       logger.error(`Failed to complete game for room ${room.id}:`, error);
-      // If auto-completion fails, at least update the status
-      try {
-        await supabase
-          .from("game_rooms")
-          .update({
-            status: "completed",
-            actual_end_time: new Date().toISOString(),
-            platform_fee_collected: 0,
-          })
-          .eq("id", room.id);
-      } catch (statusError) {
-        logger.error("Error updating room status as fallback:", statusError);
-      }
       throw error;
     }
   };
@@ -1358,6 +1318,7 @@ export const GameRoomProvider = ({
       const now = new Date().toISOString();
 
       // Get rooms that have ended but are still marked as ongoing or waiting
+      // Exclude special rooms as they require manual completion
       const { data: expiredRooms } = await supabase
         .from("game_rooms")
         .select(
@@ -1367,16 +1328,19 @@ export const GameRoomProvider = ({
         `
         )
         .in("status", ["waiting", "ongoing"])
-        .lt("end_time", now);
+        .lt("end_time", now)
+        .eq("is_special", false);
 
       if (!expiredRooms || expiredRooms.length === 0) return;
 
       logger.info(
-        `Found ${expiredRooms.length} expired rooms to auto-complete`
+        `Found ${expiredRooms.length} expired rooms to auto-complete (excluding special rooms)`
       );
 
       for (const room of expiredRooms) {
-        await autoCompleteGame(room);
+        await autoCompleteGame(
+          room as GameRoom & { participants?: GameRoomParticipant[] }
+        );
       }
     } catch (error) {
       logger.error("Error auto-completing expired games:", error);
@@ -1392,7 +1356,7 @@ export const GameRoomProvider = ({
       const { data: roomsToUpdate } = await supabase
         .from("game_rooms")
         .select(
-          "id, status, start_time, end_time, current_players, min_players_to_start, name, currency, on_chain_room_id"
+          "id, status, start_time, end_time, current_players, min_players_to_start, name, currency, on_chain_room_id, is_special"
         )
         .in("status", ["waiting", "ongoing"]);
 
@@ -1400,7 +1364,9 @@ export const GameRoomProvider = ({
 
       for (const room of roomsToUpdate) {
         let newStatus = room.status;
-        let updates: any = {};
+        let updates: Partial<
+          Database["public"]["Tables"]["game_rooms"]["Update"]
+        > = {};
 
         const startTime = new Date(room.start_time);
         const endTime = new Date(room.end_time);
@@ -1420,12 +1386,16 @@ export const GameRoomProvider = ({
         }
 
         // Check if room should be completed - AUTO COMPLETE WITH PRIZE DISTRIBUTION
+        // Skip auto-completion for special rooms - they require manual completion
         if (
           (room.status === "ongoing" || room.status === "waiting") &&
-          currentTime >= endTime
+          currentTime >= endTime &&
+          !room.is_special
         ) {
           // Auto-complete the game instead of just updating status
-          await autoCompleteGame(room);
+          await autoCompleteGame(
+            room as GameRoom & { participants?: GameRoomParticipant[] }
+          );
           continue; // Skip the manual status update since autoCompleteGame handles it
         }
 
@@ -1570,21 +1540,27 @@ export const GameRoomProvider = ({
         }
       }
 
-      // Create game instance first
-      const { data: instanceData, error: instanceError } = await supabase
-        .from("game_instances")
-        .insert({
-          game_id: data.gameId,
-          instance_data: {},
-        })
-        .select()
-        .single();
+      // Create game instance first (skip for special rooms)
+      let instanceData:
+        | Database["public"]["Tables"]["game_instances"]["Row"]
+        | null = null;
+      if (!data.isSpecial) {
+        const { data: instance, error: instanceError } = await supabase
+          .from("game_instances")
+          .insert({
+            game_id: data.gameId,
+            instance_data: {},
+          })
+          .select()
+          .single();
 
-      if (instanceError) {
-        logger.error("Game instance error:", instanceError);
-        throw new Error(
-          instanceError.message || "Failed to create game instance"
-        );
+        if (instanceError) {
+          logger.error("Game instance error:", instanceError);
+          throw new Error(
+            instanceError.message || "Failed to create game instance"
+          );
+        }
+        instanceData = instance;
       }
 
       // Generate room code for private rooms
@@ -1593,12 +1569,13 @@ export const GameRoomProvider = ({
         : null;
 
       // On-chain room creation MUST be successful before proceeding with database updates
-      if (data.currency === "USDC" && onChainGameRoom) {
+      if (verifyCoinForRoomCreation(data.currency) && onChainGameRoom) {
         const signer = getWalletKeypair();
         if (!signer)
           throw new Error("Missing wallet signer for on-chain room creation");
 
         logger.info(`Creating game room on-chain: ${data.name}`);
+        logger.debug("Creating game room on-chain:", data);
         const chainResult = await onChainGameRoom.createGameRoom({
           walletKeyPair: signer,
           name: data.name,
@@ -1606,6 +1583,7 @@ export const GameRoomProvider = ({
           entryFee: data.entryFee || 0,
           maxPlayers: data.maxPlayers,
           isPrivate: data.isPrivate,
+          isSpecial: data.isSpecial,
           roomCode: roomCode || "",
           isSponsored: !!data.isSponsored,
           sponsorAmount: data.sponsorAmount || 0,
@@ -1615,10 +1593,10 @@ export const GameRoomProvider = ({
             | "top_3"
             | "top_4"
             | "top_5"
-            | "top_10"
-            | "equal",
+            | "top_10",
           startTimeMs: data.startTime.getTime(),
           endTimeMs: data.endTime.getTime(),
+          currency: data.currency,
         });
 
         if (!chainResult?.roomId || !chainResult?.digest) {
@@ -1634,13 +1612,14 @@ export const GameRoomProvider = ({
         // Only proceed with database updates after successful on-chain creation
         const insertPayload: TablesInsert<"game_rooms"> = {
           name: data.name,
-          game_id: data.gameId,
-          game_instance_id: instanceData.id,
+          game_id: data.isSpecial ? null : data.gameId,
+          game_instance_id: instanceData?.id || null,
           creator_id: user.id,
           entry_fee: data.isSponsored ? 0 : data.entryFee,
           currency: data.currency,
           max_players: data.maxPlayers,
           is_private: data.isPrivate,
+          game_name: data.gameName,
           room_code: roomCode,
           on_chain_room_id: chainResult.roomId,
           on_chain_create_digest: chainResult.digest,
@@ -1650,9 +1629,27 @@ export const GameRoomProvider = ({
           end_time: data.endTime.toISOString(),
           timezone: data.timezone,
           is_sponsored: data.isSponsored || false,
+          is_special: data.isSpecial || false,
           sponsor_amount: data.sponsorAmount || 0,
-          total_prize_pool: data.isSponsored ? data.sponsorAmount || 0 : 0,
+          total_prize_pool: data.isSponsored
+            ? data.sponsorAmount
+            : data.entryFee > 0
+            ? data.entryFee
+            : 0,
           min_players_to_start: 2,
+          required_approvals: data.isSpecial ? 2 : 0,
+          admin_has_approved: false,
+          mode: data.mode as Database["public"]["Enums"]["room_mode"],
+          // Tournament-specific fields
+          tournament_rounds:
+            data.mode === "tournament" ? data.tournamentRounds : null,
+          round_duration_minutes:
+            data.mode === "tournament" ? data.roundDurationMinutes : null,
+          elimination_type:
+            data.mode === "tournament" ? data.eliminationType : null,
+          max_rounds: data.mode === "tournament" ? data.maxRounds : null,
+          players_per_match:
+            data.mode === "tournament" ? data.playersPerMatch : null,
         };
 
         const { data: roomData, error: roomError } = await supabase
@@ -1666,82 +1663,34 @@ export const GameRoomProvider = ({
           throw new Error(roomError.message || "Failed to create room");
         }
 
-        // Update game instance with room_id
-        await supabase
-          .from("game_instances")
-          .update({ room_id: roomData.id })
-          .eq("id", instanceData.id);
-
-        if (data.isSponsored && data.sponsorAmount) {
-          // Create sponsor transaction
-          const { data: sponsorTx } = await supabase
-            .from("transactions")
-            .insert({
-              user_id: user.id,
-              room_id: roomData.id,
-              type: "fee",
-              amount: data.sponsorAmount,
-              currency: data.currency,
-              status: "completed",
-              description: `Sponsorship for room: ${data.name}`,
-            })
-            .select()
-            .single();
-        } else if (data.entryFee > 0) {
-          // For non-sponsored rooms, creator pays entry fee
-          const { data: entryTx } = await supabase
-            .from("transactions")
-            .insert({
-              user_id: user.id,
-              room_id: roomData.id,
-              type: "fee",
-              amount: data.entryFee,
-              currency: data.currency,
-              status: "completed",
-              description: `Entry fee for room: ${data.name} (Creator)`,
-            })
-            .select()
-            .single();
-
-          // Auto-join creator as first participant
-          await supabase.from("game_room_participants").insert({
-            room_id: roomData.id,
-            user_id: user.id,
-            wallet_id: null,
-            entry_transaction_id: entryTx.id,
-            payment_currency: data.currency,
-            payment_amount: data.entryFee,
-            is_active: true,
-          });
-
-          // Update room's current_players count and prize pool
+        // Update game instance with room_id (only for non-special rooms)
+        if (instanceData) {
           await supabase
-            .from("game_rooms")
-            .update({
-              current_players: 1,
-              total_prize_pool: data.entryFee,
-            })
-            .eq("id", roomData.id);
-        } else {
-          // Free room (sponsored with 0 entry fee) - just join creator
-          await supabase.from("game_room_participants").insert({
+            .from("game_instances")
+            .update({ room_id: roomData.id })
+            .eq("id", instanceData.id);
+        }
+
+        // For non-sponsored rooms, creator pays entry fee
+        // Auto-join creator as first participant
+        const { data: creatorJoin, error: creatorJoinError } = await supabase
+          .from("game_room_participants")
+          .insert({
             room_id: roomData.id,
             user_id: user.id,
             wallet_id: null,
             entry_transaction_id: null,
+            join_digest: chainResult.digest,
+            payout_digest: null,
             payment_currency: data.currency,
-            payment_amount: 0,
+            payment_amount: data.entryFee > 0 ? data.entryFee : 0,
             is_active: true,
-          });
-
-          // Update room's current_players count
-          await supabase
-            .from("game_rooms")
-            .update({
-              current_players: 1,
-            })
-            .eq("id", roomData.id);
-        }
+          })
+          .select()
+          .single();
+        if (creatorJoin)
+          logger.success("Creator auto-joined room", creatorJoin.id);
+        if (creatorJoinError) throw creatorJoinError;
 
         await refreshRooms();
         await refreshBalances();
@@ -1756,11 +1705,12 @@ export const GameRoomProvider = ({
       } else {
         throw new Error("On-chain room creation is required for USDC rooms");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error("Error creating room:", error);
       toast({
         title: "Error",
-        description: error.message || "Failed to create game room",
+        description:
+          error instanceof Error ? error.message : "Failed to create game room",
         variant: "destructive",
       });
       throw error;
@@ -1803,30 +1753,9 @@ export const GameRoomProvider = ({
         throw new Error(`Insufficient ${room.currency} balance`);
       }
 
-      // Create entry fee transaction (only for non-sponsored rooms)
-      let transaction = null;
-      if (!room.is_sponsored && room.entry_fee > 0) {
-        const { data: txData, error: txError } = await supabase
-          .from("transactions")
-          .insert({
-            user_id: user.id,
-            room_id: roomId,
-            type: "fee",
-            amount: room.entry_fee,
-            currency: room.currency,
-            status: "completed",
-            description: `Entry fee for room: ${room.name}`,
-          })
-          .select()
-          .single();
-
-        if (txError) throw txError;
-        transaction = txData;
-      }
-
       // On-chain join MUST be successful before proceeding with database updates
       if (
-        room.currency === "USDC" &&
+        verifyCoinForRoomCreation(room.currency) &&
         onChainGameRoom &&
         room.on_chain_room_id
       ) {
@@ -1834,29 +1763,31 @@ export const GameRoomProvider = ({
         if (!signer) throw new Error("Missing wallet signer for on-chain join");
 
         logger.info(`Joining room on-chain: ${roomId}`);
-        await onChainGameRoom.joinGameRoom({
+        const chainResult = await onChainGameRoom.joinGameRoom({
           isSponsored: room.is_sponsored,
           walletKeyPair: signer,
           roomId: room.on_chain_room_id,
           roomCode: roomCode || "",
           entryFee: room.is_sponsored ? 0 : Number(room.entry_fee || 0),
+          currency: room.currency as "USDC" | "USDT",
         });
         logger.success(`Successfully joined room on-chain: ${roomId}`);
+        // Only proceed with database updates after successful on-chain join
+        const { error: joinError } = await supabase
+          .from("game_room_participants")
+          .insert({
+            room_id: roomId,
+            user_id: user.id,
+            wallet_id: null,
+            entry_transaction_id: null,
+            join_digest: chainResult.digest,
+            payout_digest: null,
+            payment_currency: room.currency,
+            payment_amount: room.is_sponsored ? 0 : room.entry_fee,
+          });
+
+        if (joinError) throw joinError;
       }
-
-      // Only proceed with database updates after successful on-chain join
-      const { error: joinError } = await supabase
-        .from("game_room_participants")
-        .insert({
-          room_id: roomId,
-          user_id: user.id,
-          wallet_id: null,
-          entry_transaction_id: transaction?.id || null,
-          payment_currency: room.currency,
-          payment_amount: room.is_sponsored ? 0 : room.entry_fee,
-        });
-
-      if (joinError) throw joinError;
 
       await refreshBalances();
       await refreshTransactions();
@@ -1866,11 +1797,12 @@ export const GameRoomProvider = ({
         title: "Success",
         description: "Joined room successfully",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error("Error joining room:", error);
       toast({
         title: "Error",
-        description: error.message || "Failed to join room",
+        description:
+          error instanceof Error ? error.message : "Failed to join room",
         variant: "destructive",
       });
       throw error;
@@ -1897,7 +1829,7 @@ export const GameRoomProvider = ({
 
       // On-chain leave MUST be successful before proceeding with database updates
       if (
-        room?.currency === "USDC" &&
+        verifyCoinForRoomCreation(room.currency) &&
         onChainGameRoom &&
         room?.on_chain_room_id
       ) {
@@ -1909,6 +1841,7 @@ export const GameRoomProvider = ({
         await onChainGameRoom.leaveRoom({
           walletKeyPair: signer,
           roomId: room.on_chain_room_id,
+          currency: room.currency as "USDC" | "USDT",
         });
         logger.success(`Successfully left room on-chain: ${roomId}`);
       }
@@ -1975,7 +1908,7 @@ export const GameRoomProvider = ({
 
       // On-chain cancel (refunds) MUST be successful before proceeding with database updates
       if (
-        room.currency === "USDC" &&
+        verifyCoinForRoomCreation(room.currency) &&
         onChainGameRoom &&
         room.on_chain_room_id
       ) {
@@ -1987,6 +1920,7 @@ export const GameRoomProvider = ({
         await onChainGameRoom.cancelRoom({
           walletKeyPair: signer,
           roomId: room.on_chain_room_id,
+          currency: room.currency as "USDC" | "USDT",
         });
         logger.success(`Successfully cancelled room on-chain: ${roomId}`);
 
@@ -2050,11 +1984,12 @@ export const GameRoomProvider = ({
       } else {
         throw new Error("Room cannot be cancelled without on-chain support");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error("Error cancelling room:", error);
       toast({
         title: "Error",
-        description: error.message || "Failed to cancel room",
+        description:
+          error instanceof Error ? error.message : "Failed to cancel room",
         variant: "destructive",
       });
       throw error;
@@ -2081,7 +2016,7 @@ export const GameRoomProvider = ({
         .single();
 
       if (error) throw error;
-      return data as GameRoom;
+      return data as unknown as GameRoom;
     } catch (error) {
       logger.error("Error fetching room details:", error);
       return null;
@@ -2106,104 +2041,265 @@ export const GameRoomProvider = ({
         .order("score", { ascending: false });
 
       if (error) throw error;
-      return (data as GameRoomParticipant[]) || [];
+      return (data as unknown as GameRoomParticipant[]) || [];
     } catch (error) {
       logger.error("Error fetching participants:", error);
       return [];
     }
   };
 
-  // Manual complete game function (for admin use)
-  const completeGame = async (
-    roomId: string,
-    winners: { userId: string; position: number; participantId: string }[]
-  ) => {
+  // Initiate room completion (sets flag for participants to approve)
+  const initiateRoomCompletion = async (roomId: string) => {
     try {
-      // Get room details
+      if (!user) throw new Error("User not authenticated");
+
+      // Get room details to verify user is creator
       const { data: room, error: roomError } = await supabase
         .from("game_rooms")
-        .select("*, participants:game_room_participants(*, user:profiles(*))")
+        .select("*, participants:game_room_participants(*)")
         .eq("id", roomId)
         .single();
 
       if (roomError) throw roomError;
+      if (!room) throw new Error("Room not found");
+      if (!room.is_special) throw new Error("Room is not a special room");
+      if (room.creator_id !== user.id)
+        throw new Error("Only room creator can initiate completion");
 
-      // Get participants
-      const { data: participants, error: participantsError } = await supabase
-        .from("game_room_participants")
-        .select("*")
-        .eq("room_id", roomId)
-        .eq("is_active", true);
+      // Validate that all participants have valid scores
+      const participants = room.participants || [];
+      const hasValidScores = participants.every(
+        (p) => p.score !== null && p.score !== undefined && p.score >= 0
+      );
 
-      if (participantsError) throw participantsError;
-
-      // On-chain completion MUST be successful before proceeding with database updates
-      let onChainResult = null;
-      if (
-        room.currency === "USDC" &&
-        onChainGameRoom &&
-        room.on_chain_room_id
-      ) {
-        const signer = getWalletKeypair();
-        if (!signer)
-          throw new Error("Missing wallet signer for on-chain completion");
-
-        logger.info(`Completing game on-chain for room ${roomId}`);
-
-        const activeParticipants = (room.participants || []).filter(
-          (p) => p.is_active
-        );
-        const winnersSorted = winners.sort((a, b) => a.position - b.position);
-        const winnerAddresses: string[] = [];
-        const scores: number[] = [];
-
-        for (const w of winnersSorted) {
-          const participant = activeParticipants.find(
-            (p) => p.user_id === w.userId
-          );
-          const addr = (
-            participant?.user?.sui_wallet_data as Profile["sui_wallet_data"]
-          )?.address;
-          if (!addr) throw new Error("Missing winner on-chain address");
-          winnerAddresses.push(addr);
-          scores.push(Number(participant?.score || 0));
-        }
-
-        // Call smart contract first - this must succeed
-        onChainResult = await onChainGameRoom.completeGame({
-          roomId: room.on_chain_room_id,
-          winnerAddresses,
-          scores,
-        });
-
-        logger.success(
-          `Successfully completed game on-chain for room ${roomId} with digest: ${onChainResult.digest}`
+      if (!hasValidScores) {
+        throw new Error(
+          "All participants must have valid scores before initiating completion"
         );
       }
 
-      // Only proceed with database updates after successful on-chain completion
-      // Distribute prizes in DB using the enhanced function with on-chain transaction details
-      await distributePrizes(room, participants, winners, onChainResult);
+      // Update room for users to start signing for completion approval
+      await supabase
+        .from("game_rooms")
+        .update({
+          start_signing: true,
+        })
+        .eq("id", roomId);
 
-      await refreshRooms();
-      await refreshBalances();
-      await refreshTransactions();
+      logger.info(`Room completion initiated for room ${roomId}`);
 
       toast({
-        title: "Success",
-        description: "Game completed and winnings distributed",
+        title: "Completion Initiated",
+        description:
+          "Room completion process has been started. Participants can now provide their approval.",
       });
+
+      // Refresh rooms to update UI
+      await refreshRooms();
     } catch (error) {
-      logger.error("Error completing game:", error);
+      logger.error("Error initiating room completion:", error);
       toast({
         title: "Error",
-        description: "Failed to complete game",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to initiate completion",
         variant: "destructive",
       });
       throw error;
     }
   };
 
+  // Manual complete game function (for special room admin use)
+  const completeGame = async (roomId: string) => {
+    try {
+      if (!user) throw new Error("User not authenticated");
+
+      // Get room details
+      const { data: roomData, error: roomError } = await supabase
+        .from("game_rooms")
+        .select("*, participants:game_room_participants(*, user:profiles(*))")
+        .eq("id", roomId)
+        .single();
+
+      if (roomError) throw roomError;
+      if (!roomData) throw new Error("Room not found");
+      if (!roomData.is_special) throw new Error("Room is not a special room");
+
+      // Verify user is the room creator
+      if (roomData.creator_id !== user.id) {
+        throw new Error("Only room creator can complete special rooms");
+      }
+      await autoCompleteGame(roomData);
+      logger.success(`Successfully completed room ${roomId}`);
+    } catch (error) {
+      logger.error("Error completing special room:", error);
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error ? error.message : "Failed to complete game",
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
+
+  // Special room signature functions
+  const approveGameRoomCompletion = async (roomId: string) => {
+    try {
+      if (!user) throw new Error("User not authenticated");
+
+      const signer = getWalletKeypair();
+      if (!signer) throw new Error("Wallet not connected");
+
+      // Get room details to determine currency
+      const room = await getRoomDetails(roomId);
+      if (!room) throw new Error("Room not found");
+      if (!room.is_special) throw new Error("Room is not a special room");
+
+      // Debug: Log room details
+      logger.debug(`[DEBUG] Room details:`, {
+        roomId,
+        onChainRoomId: room.on_chain_room_id,
+        currency: room.currency,
+        isSpecial: room.is_special,
+        creatorId: room.creator_id,
+        participants: room.participants?.map((p) => ({
+          userId: p.user_id,
+          isActive: p.is_active,
+        })),
+      });
+
+      if (!onChainGameRoom)
+        throw new Error("On-chain integration not available");
+
+      // Call the smart contract function
+      // await onChainGameRoom.approveGameRoomCompletion({
+      //   walletKeyPair: signer,
+      //   roomId: room.on_chain_room_id || roomId,
+      //   currency: room.currency as "USDC" | "USDT",
+      // });
+
+      // Update database to track the signature
+      const isCreator = room.creator_id === user.id;
+      const isParticipant = room.participants?.some(
+        (p) => p.user_id === user.id && p.is_active
+      );
+
+      if (!isCreator && !isParticipant) {
+        throw new Error("User not authorized to sign for this room");
+      }
+
+      // Update approval status based on who is approving
+      const updates: Partial<
+        Database["public"]["Tables"]["game_rooms"]["Update"]
+      > = {};
+
+      if (isCreator) {
+        updates.admin_has_approved = true;
+      } else if (isParticipant) {
+        updates.participant_has_approved = true;
+      }
+
+      // Insert approval record
+      await supabase.from("approvals").insert({
+        participant_id: isParticipant ? user.id : null,
+        room_id: roomId,
+        created_at: new Date().toISOString(),
+      });
+
+      logger.info("Signature submitted:", {
+        room_id: roomId,
+        user_id: user.id,
+        is_creator: isCreator,
+        is_participant: isParticipant,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Update room approval status
+      if (Object.keys(updates).length > 0) {
+        await supabase
+          .from("game_rooms")
+          .update({
+            ...updates,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", roomId);
+      }
+
+      logger.success(
+        `Signature submitted for room ${roomId} by ${
+          isCreator ? "creator" : "participant"
+        }`
+      );
+
+      // Refresh rooms to update UI
+      await refreshRooms();
+
+      toast({
+        title: "Success",
+        description: "Signature submitted successfully",
+      });
+    } catch (error) {
+      logger.error("Error approving game room completion:", error);
+      toast({
+        title: "Error",
+        description: "Failed to submit signature",
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
+
+  const getSignaturesAndStatus = async (roomId: string) => {
+    try {
+      if (!user) throw new Error("User not authenticated");
+
+      // Get room details and signatures from database
+      const { data: room, error } = await supabase
+        .from("game_rooms")
+        .select(
+          `
+          required_approvals, is_special, admin_has_approved, participant_has_approved`
+        )
+        .eq("id", roomId)
+        .single();
+      if (error) throw error;
+      if (!room) throw new Error("Room not found");
+      if (!room.is_special) throw new Error("Room is not a special room");
+      const required = room.required_approvals || 2;
+      const hasCreatorSignature = room.admin_has_approved;
+      const hasParticipantSignature = room.participant_has_approved;
+      let collected = 0;
+      if (hasCreatorSignature) collected++;
+      if (hasParticipantSignature) collected++;
+
+      const { data: signers, error: signersError } = await supabase
+        .from("approvals")
+        .select("*")
+        .eq("room_id", roomId);
+      if (signersError) throw signersError;
+      const signatures = {
+        collected,
+        required,
+        hasCreatorSignature,
+        hasParticipantSignature,
+        signers,
+      };
+
+      logger.debug("Signature status for room", roomId, signatures);
+      return signatures;
+    } catch (error) {
+      logger.error("Error getting signature status:", error);
+      return {
+        collected: 0,
+        required: 2,
+        hasCreatorSignature: false,
+        hasParticipantSignature: false,
+        signers: [],
+      };
+    }
+  };
   // Load rooms when user changes, currentPage changes, or filters change
   useEffect(() => {
     if (user) {
@@ -2311,9 +2407,15 @@ export const GameRoomProvider = ({
     getRoomDetails,
     getRoomParticipants,
     updateGameScore,
+    // Admin score management functions
+    updateParticipantScore,
+    initiateRoomCompletion,
     completeGame,
     playGame,
     handleGameMessage,
+    // Special room signature functions
+    approveGameRoomCompletion,
+    getSignaturesAndStatus,
   };
 
   return (

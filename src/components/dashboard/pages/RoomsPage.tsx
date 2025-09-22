@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { CreateRoomData, useGameRoom } from "@/contexts/GameRoomContext";
+import { useGameRoom } from "@/hooks/gameroom";
+import { CreateRoomData } from "@/types/gameroom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProfile } from "@/contexts/ProfileContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import GameRoomDetails from "@/components/gameroom/GameRoomDetails";
 import GameRoomFiltersComponent from "@/components/gameroom/GameRoomFilters";
+import { useSearchParams } from "react-router-dom";
 import {
   Download,
   Share2,
@@ -428,6 +430,7 @@ const RoomsPage = () => {
   const { user } = useAuth();
   const { profile } = useProfile();
   const { toast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState(null);
@@ -462,7 +465,21 @@ const RoomsPage = () => {
     startTime: new Date(Date.now() + 3600000), // 1 hour from now
     endTime: new Date(Date.now() + 7200000), // 2 hours from now
     isSponsored: false,
+    isSpecial: false,
     sponsorAmount: 0,
+    gameName: "",
+    mode: "regular",
+    playMode: "single",
+    // Tournament-specific fields
+    tournamentRounds: 3,
+    roundDurationMinutes: 60,
+    eliminationType: "single",
+    maxRounds: 5,
+    playersPerMatch: 2,
+    timeLimitMinutes: 30,
+    autoStart: true,
+    seedingEnabled: false,
+    spectatorMode: false,
   });
 
   const winnerRules = [
@@ -479,6 +496,15 @@ const RoomsPage = () => {
     setShowCelebration(false);
     setWinnerData(null);
   }, []);
+
+  // Handle URL search params for direct room access
+  useEffect(() => {
+    const roomId = searchParams.get("roomid");
+    if (roomId && !selectedRoomId) {
+      logger.info("Opening room from URL:", roomId);
+      setSelectedRoomId(roomId);
+    }
+  }, [searchParams, selectedRoomId]);
 
   // Fetch available games
   useEffect(() => {
@@ -585,10 +611,30 @@ const RoomsPage = () => {
   };
 
   const handleCreateRoom = async () => {
-    if (!formData.name || !formData.gameId) {
+    if (!formData.name) {
       toast({
         title: "Error",
-        description: "Please fill in all required fields",
+        description: "Please fill in room name",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // For non-special rooms, game selection is required
+    if (!formData.isSpecial && !formData.gameId) {
+      toast({
+        title: "Error",
+        description: "Please select a game",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // For special rooms, custom game name is required
+    if (formData.isSpecial && !formData.gameName.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a custom game name",
         variant: "destructive",
       });
       return;
@@ -606,28 +652,31 @@ const RoomsPage = () => {
       return;
     }
 
-    // Validate end time is after start time
-    if (formData.endTime <= formData.startTime) {
-      toast({
-        title: "Invalid End Time",
-        description: "End time must be after start time",
-        variant: "destructive",
-      });
-      return;
-    }
+    // For non-special rooms, validate end time
+    if (!formData.isSpecial) {
+      // Validate end time is after start time
+      if (formData.endTime <= formData.startTime) {
+        toast({
+          title: "Invalid End Time",
+          description: "End time must be after start time",
+          variant: "destructive",
+        });
+        return;
+      }
 
-    // Check minimum duration (10 minutes)
-    const minDuration = 10 * 60 * 1000; // 10 minutes in milliseconds
-    if (
-      formData.endTime.getTime() - formData.startTime.getTime() <
-      minDuration
-    ) {
-      toast({
-        title: "Invalid Duration",
-        description: "Game must last at least 10 minutes",
-        variant: "destructive",
-      });
-      return;
+      // Check minimum duration (10 minutes)
+      const minDuration = 10 * 60 * 1000; // 10 minutes in milliseconds
+      if (
+        formData.endTime.getTime() - formData.startTime.getTime() <
+        minDuration
+      ) {
+        toast({
+          title: "Invalid Duration",
+          description: "Game must last at least 10 minutes",
+          variant: "destructive",
+        });
+        return;
+      }
     }
     const balance =
       formData.currency === "USDC"
@@ -676,7 +725,11 @@ const RoomsPage = () => {
         startTime: new Date(Date.now() + 3600000),
         endTime: new Date(Date.now() + 7200000),
         isSponsored: false,
+        isSpecial: false,
         sponsorAmount: 0,
+        gameName: "",
+        playMode: "single",
+        mode: "regular",
       });
 
       // Show room code if private
@@ -696,6 +749,10 @@ const RoomsPage = () => {
       // Navigate to the room details
       setTimeout(() => {
         setSelectedRoomId(room.id);
+        // Add roomid to URL
+        const newSearchParams = new URLSearchParams(searchParams);
+        newSearchParams.set("roomId", room.id);
+        setSearchParams(newSearchParams);
       }, 1000);
     } catch (error) {
       logger.error("Error creating room:", error);
@@ -735,7 +792,7 @@ const RoomsPage = () => {
   };
 
   const canJoinRoom = (room) => {
-    if (room.status !== "waiting") return false;
+    if (room.status !== "waiting" && room.status !== "ongoing") return false;
     if (room.current_players >= room.max_players) return false;
     const userInRoom = room.participants?.some(
       (p) => p.user_id === user?.id && p.is_active
@@ -772,13 +829,21 @@ const RoomsPage = () => {
     // If user is already in room (including creator), show room details
     if (isUserInRoom(room)) {
       setSelectedRoomId(room.id);
+      // Add roomid to URL
+      const newSearchParams = new URLSearchParams(searchParams);
+      newSearchParams.set("roomId", room.id);
+      setSearchParams(newSearchParams);
     } else if (canJoinRoom(room)) {
       // Show join modal
-      setSelectedRoom(room);
       setShowJoinModal(true);
+      setSelectedRoom(room);
     } else if (room.status === "completed") {
       // For completed rooms where user didn't win, show room details
       setSelectedRoomId(room.id);
+      // Add roomid to URL
+      const newSearchParams = new URLSearchParams(searchParams);
+      newSearchParams.set("roomId", room.id);
+      setSearchParams(newSearchParams);
     }
   };
 
@@ -864,6 +929,10 @@ const RoomsPage = () => {
         roomId={selectedRoomId}
         onBack={() => {
           setSelectedRoomId(null);
+          // Remove roomid from URL when going back
+          const newSearchParams = new URLSearchParams(searchParams);
+          newSearchParams.delete("roomid");
+          setSearchParams(newSearchParams);
           refreshRooms();
         }}
       />
@@ -964,7 +1033,13 @@ const RoomsPage = () => {
                       ? "border-yellow-500/50 shadow-lg shadow-yellow-500/20"
                       : "border-primary/20"
                   }`}
-                  onClick={() => setSelectedRoomId(room.id)}
+                  onClick={() => {
+                    setSelectedRoomId(room.id);
+                    // Add roomid to URL
+                    const newSearchParams = new URLSearchParams(searchParams);
+                    newSearchParams.set("roomId", room.id);
+                    setSearchParams(newSearchParams);
+                  }}
                 >
                   {/* Winner Badge */}
                   {userWonInRoom(room) && (
@@ -992,7 +1067,9 @@ const RoomsPage = () => {
                         Game:
                       </span>
                       <span className="text-sm font-cyber text-foreground">
-                        {room.game?.name || "Unknown"}
+                        {room.is_special
+                          ? "Custom Game"
+                          : room.game?.name || "Unknown"}
                       </span>
                     </div>
                     <div className="flex justify-between">
@@ -1084,10 +1161,34 @@ const RoomsPage = () => {
                         </span>
                       </div>
                     )}
+                    {room.is_special && (
+                      <div className="flex justify-center mt-2">
+                        <span className="text-xs font-cyber text-purple-400">
+                          ⭐ Special Room
+                        </span>
+                      </div>
+                    )}
+                    {room.mode === "tournament" && (
+                      <div className="flex justify-center mt-2">
+                        <span className="text-xs font-cyber text-orange-400">
+                          🏆 Tournament Mode
+                        </span>
+                      </div>
+                    )}
+                    {room.mode === "league" && (
+                      <div className="flex justify-center mt-2">
+                        <span className="text-xs font-cyber text-blue-400">
+                          🏅 League Mode
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   <button
-                    onClick={() => handleRoomAction(room)}
+                    onClick={(e) => {
+                      handleRoomAction(room);
+                      e.stopPropagation();
+                    }}
                     disabled={
                       joining ||
                       (!isUserInRoom(room) &&
@@ -1248,7 +1349,7 @@ const RoomsPage = () => {
               </div>
 
               {/* Modal Content - Scrollable */}
-              <div className="flex-1 overflow-y-auto p-6">
+              <div className="flex-1 overflow-y-auto p-6 overflow-x-hidden">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <div className="space-y-4">
                     <div>
@@ -1267,23 +1368,110 @@ const RoomsPage = () => {
                     </div>
 
                     <div>
-                      <label className="text-sm font-cyber text-primary mb-1 block">
-                        Select Game
+                      {formData.isSpecial ? (
+                        <>
+                          <label className="text-sm font-cyber text-primary mb-1 block">
+                            Game Name
+                          </label>
+                          <input
+                            type="text"
+                            value={formData.gameName}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                gameName: e.target.value,
+                              })
+                            }
+                            className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                            placeholder="Enter custom game name..."
+                          />
+                          <p className="text-xs font-cyber text-yellow-400 mt-1">
+                            Special rooms use custom games - enter your game
+                            name
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <label className="text-sm font-cyber text-primary mb-1 block">
+                            Select Game
+                          </label>
+                          <select
+                            value={formData.gameId}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                gameId: e.target.value,
+                              })
+                            }
+                            className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
+                          >
+                            <option value="">Choose a game...</option>
+                            {games.map((game) => (
+                              <option key={game.id} value={game.id}>
+                                {game.name}
+                              </option>
+                            ))}
+                          </select>
+                        </>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-cyber text-primary mb-3 block">
+                        💰 Select Coin for Room Creation
                       </label>
-                      <select
-                        value={formData.gameId}
-                        onChange={(e) =>
-                          setFormData({ ...formData, gameId: e.target.value })
-                        }
-                        className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
-                      >
-                        <option value="">Choose a game...</option>
-                        {games.map((game) => (
-                          <option key={game.id} value={game.id}>
-                            {game.name}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setFormData({
+                              ...formData,
+                              currency: "USDC" as "USDC" | "USDT",
+                            })
+                          }
+                          className={`p-4 rounded-xl border-2 transition-all duration-300 font-cyber font-bold ${
+                            formData.currency === "USDC"
+                              ? "border-blue-500 bg-blue-500/20 text-blue-400 shadow-lg shadow-blue-500/20"
+                              : "border-primary/30 bg-secondary/50 text-foreground hover:border-primary/50 hover:bg-secondary/70"
+                          }`}
+                        >
+                          <div className="flex flex-col items-center gap-2">
+                            <div className="text-2xl">💙</div>
+                            <div>USDC</div>
+                            <div className="text-xs opacity-75">
+                              Balance: {usdcBalance?.toFixed(2) || "0.00"}
+                            </div>
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          disabled
+                          className="relative p-4 rounded-xl border-2 transition-all duration-300 font-cyber font-bold border-primary/30 bg-secondary/30 text-muted-foreground cursor-not-allowed opacity-60"
+                        >
+                          <div className="flex flex-col items-center gap-2">
+                            <div className="text-2xl">💚</div>
+                            <div>USDT</div>
+                            <div className="text-xs opacity-75">
+                              Balance: {usdtBalance?.toFixed(2) || "0.00"}
+                            </div>
+                          </div>
+                          {/* Coming Soon Overlay */}
+                          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                            <div className="text-center">
+                              <div className="text-yellow-400 font-bold text-sm mb-1">
+                                🚧 COMING SOON
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                Under Development
+                              </div>
+                            </div>
+                          </div>
+                        </button>
+                      </div>
+                      <p className="text-xs font-cyber text-muted-foreground mt-2 text-center">
+                        Choose the coin you want to use for entry fees and
+                        prizes
+                      </p>
                     </div>
 
                     <div>
@@ -1370,20 +1558,62 @@ const RoomsPage = () => {
                   <div className="space-y-4">
                     <div>
                       <label className="text-sm font-cyber text-primary mb-1 block">
+                        Room Mode
+                      </label>
+                      <select
+                        value={formData.mode}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            mode: e.target.value as
+                              | "regular"
+                              | "tournament"
+                              | "league",
+                            // Ensure even number of players for tournaments
+                            maxPlayers:
+                              e.target.value === "tournament" &&
+                              formData.maxPlayers % 2 !== 0
+                                ? formData.maxPlayers + 1
+                                : formData.maxPlayers,
+                          })
+                        }
+                        className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
+                      >
+                        <option value="regular">Regular Room</option>
+                        <option value="tournament">Tournament</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-cyber text-primary mb-1 block">
                         Max Players
+                        {formData.mode === "tournament" && (
+                          <span className="text-xs text-yellow-400 ml-2">
+                            (Must be even for tournaments)
+                          </span>
+                        )}
                       </label>
                       <input
                         type="number"
                         value={formData.maxPlayers}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          let value = parseInt(e.target.value) || 2;
+                          // Ensure even number for tournaments
+                          if (
+                            formData.mode === "tournament" &&
+                            value % 2 !== 0
+                          ) {
+                            value = value + 1;
+                          }
                           setFormData({
                             ...formData,
-                            maxPlayers: parseInt(e.target.value) || 2,
-                          })
-                        }
+                            maxPlayers: value,
+                          });
+                        }}
                         className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
                         min="2"
                         max="100"
+                        step={formData.mode === "tournament" ? "2" : "1"}
                       />
                     </div>
 
@@ -1422,6 +1652,11 @@ const RoomsPage = () => {
                     <div>
                       <label className="text-sm font-cyber text-primary mb-1 block">
                         End Time
+                        {formData.isSpecial && (
+                          <span className="text-xs text-muted-foreground ml-2">
+                            (Optional for Special Rooms)
+                          </span>
+                        )}
                       </label>
                       <input
                         type="datetime-local"
@@ -1434,10 +1669,17 @@ const RoomsPage = () => {
                         }}
                         className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
                       />
-                      <p className="text-xs font-cyber text-muted-foreground mt-1">
-                        Game will end at this time (minimum 10 minutes after
-                        start)
-                      </p>
+                      {formData.isSpecial ? (
+                        <p className="text-xs font-cyber text-yellow-400 mt-1">
+                          Special rooms can run indefinitely until manually
+                          completed by admin
+                        </p>
+                      ) : (
+                        <p className="text-xs font-cyber text-muted-foreground mt-1">
+                          Game will end at this time (minimum 10 minutes after
+                          start)
+                        </p>
+                      )}
                       {formData.startTime &&
                         formData.endTime &&
                         formData.endTime > formData.startTime && (
@@ -1452,6 +1694,74 @@ const RoomsPage = () => {
                           </p>
                         )}
                     </div>
+
+                    {/* Tournament-specific fields */}
+                    {formData.mode === "tournament" && (
+                      <>
+                        <div>
+                          <label className="text-sm font-cyber text-primary mb-1 block">
+                            Tournament Type
+                          </label>
+                          <select
+                            value={formData.eliminationType}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                eliminationType: e.target.value as
+                                  | "single"
+                                  | "double"
+                                  | "swiss",
+                              })
+                            }
+                            className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
+                          >
+                            <option value="single">Single Elimination</option>
+                            <option value="double">Double Elimination</option>
+                            <option value="swiss">Swiss System</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="text-sm font-cyber text-primary mb-1 block">
+                            Match Time Limit (minutes)
+                          </label>
+                          <input
+                            type="number"
+                            value={formData.timeLimitMinutes}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                timeLimitMinutes:
+                                  parseInt(e.target.value) || 30,
+                              })
+                            }
+                            className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
+                            min="5"
+                            max="120"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-sm font-cyber text-primary mb-1 block">
+                            Round Duration (minutes)
+                          </label>
+                          <input
+                            type="number"
+                            value={formData.roundDurationMinutes}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                roundDurationMinutes:
+                                  parseInt(e.target.value) || 60,
+                              })
+                            }
+                            className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
+                            min="10"
+                            max="240"
+                          />
+                        </div>
+                      </>
+                    )}
 
                     <div className="space-y-3 pt-2">
                       <label className="flex items-center gap-3 cursor-pointer group">
@@ -1487,6 +1797,39 @@ const RoomsPage = () => {
                         <span className="text-sm font-cyber text-foreground group-hover:text-primary transition-colors">
                           💰 Sponsored Room (Free Entry)
                         </span>
+                      </label>
+
+                      <label className="flex items-center gap-3 cursor-pointer group">
+                        <input
+                          type="checkbox"
+                          checked={formData.isSpecial}
+                          onChange={(e) => {
+                            const isSpecial = e.target.checked;
+                            setFormData({
+                              ...formData,
+                              isSpecial,
+                              isPrivate: isSpecial ? true : formData.isPrivate, // Auto-set private for special rooms
+                              gameId: isSpecial ? "" : formData.gameId, // Clear game selection for special rooms
+                              gameName: isSpecial ? formData.gameName : "", // Clear custom game name when unchecking special
+                            });
+                          }}
+                          className="w-5 h-5 rounded border-primary/30 text-primary focus:ring-primary"
+                        />
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-cyber text-foreground group-hover:text-primary transition-colors">
+                            ⭐ Special Room (Custom Game)
+                          </span>
+                          <div className="group relative">
+                            <span className="text-xs text-muted-foreground cursor-help">
+                              ℹ️
+                            </span>
+                            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
+                              Special rooms allow custom game configurations
+                              without predefined games. Admin manages winners
+                              manually.
+                            </div>
+                          </div>
+                        </div>
                       </label>
                     </div>
                   </div>

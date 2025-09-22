@@ -43,6 +43,14 @@ const SettingsPage = () => {
 
     setUsernameLoading(true);
     try {
+      const available = await checkUsernameAvailability(newUsername);
+      if (!available) {
+        toast({
+          title: "Failed",
+          description: "Username is already in use",
+        });
+        return;
+      }
       await setUsername(newUsername);
       setIsEditingUsername(false);
       toast({

@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { SuiClient, getFullnodeUrl } from "@mysten/sui.js/client";
 import type { Database } from "@/integrations/supabase/types";
 import { NETWORK, COIN_TYPES } from "@/constants";
+import { liveMarketPrice } from "@/lib/utils";
 
 interface WalletContextType {
   // Blockchain balances
@@ -34,19 +35,21 @@ export const useWallet = () => {
   return context;
 };
 
-// Exchange rates (in production, fetch these from an API)
-const EXCHANGE_RATES = {
-  SUI: 2.5, // 1 SUI = $2.5 USD (example rate)
-  USDC: 1,
-  USDT: 1,
-};
-
 export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
   const [suiBalance, setSuiBalance] = useState<number>(0);
   const [usdcBalance, setUsdcBalance] = useState<number>(0);
   const [usdtBalance, setUsdtBalance] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [refreshingBalances, setRefreshingBalances] = useState(false);
+  const [exchangeRates, setExchangeRates] = useState<{
+    SUI: number;
+    USDC: number;
+    USDT: number;
+  }>({
+    SUI: 0,
+    USDC: 0,
+    USDT: 0,
+  });
 
   const { user } = useAuth();
   const { profile } = useProfile();
@@ -110,6 +113,18 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
+  useEffect(() => {
+    const fetchExchangeRates = async () => {
+      const marketPrice = await liveMarketPrice();
+      setExchangeRates({
+        SUI: Number(marketPrice.SUI),
+        USDC: Number(marketPrice.USDC),
+        USDT: Number(marketPrice.USDT),
+      });
+    };
+    fetchExchangeRates();
+  }, []);
+
   // Save transaction to database
   const saveTransactionToDatabase = async (transactionData: {
     type: Database["public"]["Enums"]["transaction_type"];
@@ -161,9 +176,9 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
   // Get total balance in USD
   const getTotalBalanceInUSD = (): number => {
     return (
-      suiBalance * EXCHANGE_RATES.SUI +
-      usdcBalance * EXCHANGE_RATES.USDC +
-      usdtBalance * EXCHANGE_RATES.USDT
+      suiBalance * exchangeRates.SUI +
+      usdcBalance * exchangeRates.USDC +
+      usdtBalance * exchangeRates.USDT
     );
   };
 

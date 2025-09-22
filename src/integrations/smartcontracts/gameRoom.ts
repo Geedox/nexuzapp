@@ -1,26 +1,32 @@
-import { SuiClient } from "@mysten/sui.js/client";
+import { PaginatedCoins, SuiClient, SuiTransactionBlockResponse } from "@mysten/sui.js/client";
 import { TransactionBlock } from "@mysten/sui.js/transactions";
 import { COIN_TYPES } from "@/constants";
 import { Ed25519Keypair } from "@mysten/sui.js/keypairs/ed25519";
 import { decodeSuiPrivateKey } from "@mysten/sui.js/cryptography";
 import { logger } from "@/utils";
 
+type Currency = "USDC" | "USDT";
+
 export class GameRoom {
     private client: SuiClient;
     private packageId: string;
-    private storeId: string;
+    private UsdtStoreId: string;
+    private UsdcStoreId: string;
     private readonly moduleName = "game_room";
     private sponsorKeypair: Ed25519Keypair;
     private sponsorAddress: string;
 
     constructor(
         client: SuiClient,
-        packageId: string = "0x6c3952a173926538fecced5a94fc257d21e90f3898460a748ae1f2e9b32d3c31",
-        storeId: string = "0x5bf8926d3d8238f5828bb86c3d36c9e18d6193e1cf89401c1aadf4c617726f22",
+        packageId: string = "0xda33dfac3ff73cfd990ba59fc22665e96f1e7101f84b7a9893e521daaf25d622",
+        UsdcStoreId: string = "0x77fcb8a63884b26c3cb806495789a51b8143d525e6734896be4e1b49131615c0",
+        UsdtStoreId: string = "0x74f23eb2d62b00178471ad5022d0cebe8db02955ae167010e29d3679cdbae6ed",
+        // UsdtStoreId: string = "0x74f23eb2d62b00178471ad5022d0cebe8db02955ae167010e29d3679cdbae6ed",
     ) {
         this.client = client;
         this.packageId = packageId;
-        this.storeId = storeId;
+        this.UsdcStoreId = UsdcStoreId;
+        this.UsdtStoreId = UsdtStoreId;
 
         // const sponsorPrivateKey = process.env.VITE_PRIVATE_KEY;
         const sponsorPrivateKey = import.meta.env.VITE_PRIVATE_KEY;
@@ -164,7 +170,7 @@ export class GameRoom {
 
     private async dryRunTransaction(txb: TransactionBlock, sender: string, bufferMultiplier: number = 1.2) {
         // Provisional budget to allow the dry run to work
-        txb.setGasBudget(50_000_000);
+        txb.setGasBudget(10_000_000);
         // Ensure sender is set for building
         txb.setSender(sender);
         const resp = await this.client.dryRunTransactionBlock({
@@ -194,6 +200,83 @@ export class GameRoom {
         return smallest;
     }
 
+    /**
+     * Transfer USDC coins from one address to another
+     */
+    async transfer(
+        fromKeypair: Ed25519Keypair,
+        toAddress: string,
+        amount: number,
+        currency: Currency
+    ): Promise<{ success: boolean; digest?: string; error?: string }> {
+        try {
+            logger.info(`Transferring ${amount.toFixed(6)} USDC from ${fromKeypair.getPublicKey().toSuiAddress()} to ${toAddress}...`);
+
+            // Create transaction block
+            const tx = new TransactionBlock();
+
+            // Split USDC coins from sender (amount in smallest units - 6 decimals)
+            const amountSmallest = this.toU64SmallestUnits(amount, 6);
+
+            // Get USDC coins owned by sender
+            const coins = await this.client.getCoins({
+                owner: fromKeypair.getPublicKey().toSuiAddress(),
+                coinType: currency === "USDC" ? COIN_TYPES.USDC : COIN_TYPES.USDT,
+            });
+
+            if (coins.data.length === 0) {
+                throw new Error('No USDC coins found for sender');
+            }
+
+            // Use the first coin that has sufficient balance
+            let selectedCoin: typeof coins.data[0] | null = null;
+            for (const coin of coins.data) {
+                if (Number(coin.balance) >= amountSmallest) {
+                    selectedCoin = coin;
+                    break;
+                }
+            }
+
+            if (!selectedCoin) {
+                const totalBalance = coins.data.reduce((sum, c) => sum + Number(c.balance), 0) / Math.pow(10, 6);
+                throw new Error(`Insufficient ${currency} balance. Required: ${amount.toFixed(6)}, Available: ${totalBalance.toFixed(6)}`);
+            }
+
+            // Validate the selected coin has required properties
+            if (!selectedCoin.coinObjectId) {
+                throw new Error(`Invalid coin object: missing coinObjectId. Coin: ${JSON.stringify(selectedCoin)}`);
+            }
+
+            // Split coins from the selected coin
+            const [coin] = tx.splitCoins(tx.object(selectedCoin.coinObjectId), [amountSmallest]);
+
+            // Transfer to recipient
+            tx.transferObjects([coin], tx.pure(toAddress));
+
+            // Execute transaction
+            const result = await this.client.signAndExecuteTransactionBlock({
+                signer: fromKeypair,
+                transactionBlock: tx,
+                options: {
+                    showEffects: true,
+                    showEvents: true,
+                },
+            });
+
+            if (result.effects?.status.status === 'success') {
+                logger.success(`${currency} transfer successful! Digest: ${result.digest}`);
+                return { success: true, digest: result.digest };
+            } else {
+                const error = result.effects?.status.error || 'Unknown error';
+                logger.error(`${currency} transfer failed: ${error}`);
+                return { success: false, error };
+            }
+        } catch (error) {
+            logger.error(`${currency} transfer error:`, error);
+            return { success: false, error: error.message };
+        }
+    }
+
     // Create a new game room paying with USDC (or sponsor funding if isSponsored)
     async createGameRoom(options: {
         walletKeyPair: any; // Ed25519Keypair or compatible signer
@@ -203,11 +286,13 @@ export class GameRoom {
         maxPlayers: number;
         isPrivate: boolean;
         roomCode?: string; // required if isPrivate
+        isSpecial: boolean;
         isSponsored?: boolean;
         sponsorAmount?: number; // in USDC units
-        winnerSplitRule: "winner_takes_all" | "top_2" | "top_3" | "top_4" | "top_5" | "top_10" | "equal";
+        winnerSplitRule: "winner_takes_all" | "top_2" | "top_3" | "top_4" | "top_5" | "top_10";
         startTimeMs: number;
         endTimeMs: number;
+        currency: Currency;
     }) {
         const {
             walletKeyPair,
@@ -219,9 +304,11 @@ export class GameRoom {
             roomCode = "",
             isSponsored = false,
             sponsorAmount = 0,
+            isSpecial = false,
             winnerSplitRule,
             startTimeMs,
             endTimeMs,
+            currency,
         } = options;
 
         const txb = new TransactionBlock();
@@ -234,35 +321,37 @@ export class GameRoom {
         const requiredPayment = isSponsored ? sponsorAmountSmallest : entryFeeSmallest;
 
         // Prepare USDC payment coin
-        const usdcCoins = await this.client.getCoins({ owner: userAddress, coinType: COIN_TYPES.USDC });
-        if (usdcCoins.data.length === 0) {
-            throw new Error("No USDC coins found in wallet to fund room creation.");
+        const coinType = currency === "USDC" ? COIN_TYPES.USDC : COIN_TYPES.USDT;
+        const coins = await this.client.getCoins({ owner: userAddress, coinType: coinType });
+        if (coins.data.length === 0) {
+            throw new Error(`No ${currency} coins found in wallet to fund room creation.`);
         }
 
-        const totalUsdc = usdcCoins.data.reduce((sum, c) => sum + Number(c.balance), 0);
+        const totalUsdc = coins.data.reduce((sum, c) => sum + Number(c.balance), 0);
         if (totalUsdc < requiredPayment) {
             throw new Error(`Insufficient USDC: need ${requiredPayment / Math.pow(10, usdcDecimals)} USDC, have ${totalUsdc / Math.pow(10, usdcDecimals)} USDC`);
         }
 
-        const usdcPrimary = txb.object(usdcCoins.data[0].coinObjectId);
-        if (usdcCoins.data.length > 1) {
-            const rest = usdcCoins.data.slice(1).map(c => txb.object(c.coinObjectId));
-            txb.mergeCoins(usdcPrimary, rest);
+        const coinsPrimary = txb.object(coins.data[0].coinObjectId);
+        if (coins.data.length > 1) {
+            const rest = coins.data.slice(1).map(c => txb.object(c.coinObjectId));
+            txb.mergeCoins(coinsPrimary, rest);
         }
-        const [paymentCoin] = txb.splitCoins(usdcPrimary, [requiredPayment]);
+        const [paymentCoin] = txb.splitCoins(coinsPrimary, [requiredPayment]);
         // Call create_room_with_usdc, capture (room_id, change)
         const createResult = txb.moveCall({
-            target: this.getTarget("create_room_with_usdc"),
+            target: this.getTarget("create_room"),
             arguments: [
-                txb.object(this.storeId),
+                txb.object(currency === "USDC" ? this.UsdcStoreId : this.UsdtStoreId),
                 txb.pure(name),
                 txb.pure(gameId),
                 txb.pure(entryFeeSmallest),
-                txb.pure("USDC"),
+                txb.pure(currency),
                 txb.pure(maxPlayers),
                 txb.pure(isPrivate),
                 txb.pure(roomCode),
                 txb.pure(isSponsored),
+                txb.pure(isSpecial),
                 txb.pure(sponsorAmountSmallest),
                 txb.pure(winnerSplitRule),
                 txb.pure(startTimeMs),
@@ -304,27 +393,6 @@ export class GameRoom {
         } as { success: true; digest: string; roomId?: string };
     }
 
-    // Fetch room details by room ID
-    async fetchRoomDetails(options: { walletKeyPair: any; roomId: string }) {
-        const { walletKeyPair, roomId } = options;
-
-        const txb = new TransactionBlock();
-        const roomDetails = txb.moveCall({
-            target: this.getTarget("fetch_room"),
-            arguments: [txb.object(this.storeId), txb.pure(roomId)],
-        });
-        txb.setGasBudget(50_000_000);
-        txb.setSender(walletKeyPair.getPublicKey().toSuiAddress());
-        const result = await this.client.signAndExecuteTransactionBlock({
-            signer: walletKeyPair,
-            transactionBlock: txb,
-            options: { showEffects: true, showEvents: true },
-        });
-
-
-        return { success: true, digest: result.digest, result } as { success: true; digest: string; result: any };
-    }
-
     // Join an existing room. Provide entryFee if required by the room (0 for sponsored rooms).
     async joinGameRoom(options: {
         isSponsored: boolean;
@@ -332,49 +400,73 @@ export class GameRoom {
         roomId: string;
         roomCode?: string; // empty for public rooms
         entryFee: number; // in USDC units; 0 if sponsored
+        currency: Currency;
     }) {
-        const { isSponsored, walletKeyPair, roomId, roomCode = "" } = options;
+        const { isSponsored, walletKeyPair, roomId, roomCode = "", currency } = options;
         const entryFee = options.isSponsored ? 0 : options.entryFee;
-
         const txb = new TransactionBlock();
         const userAddress = walletKeyPair.getPublicKey().toSuiAddress();
 
         const usdcDecimals = 6;
         const entryFeeSmallest = this.toU64SmallestUnits(entryFee, usdcDecimals);
 
-        // Prepare USDC entry fee coin (may be 0 for sponsored rooms)
-        const usdcCoins = await this.client.getCoins({ owner: userAddress, coinType: COIN_TYPES.USDC });
-        if (!isSponsored) {
-            if (usdcCoins.data.length === 0) {
-                if (entryFeeSmallest === 0) {
-                    throw new Error("Joining sponsored rooms requires at least one USDC coin to create a 0-value coin. Please hold a tiny amount of USDC.");
+        // Prepare entry fee coin (may be 0 for sponsored rooms)
+        let coins: PaginatedCoins;
+        const coinType = currency === "USDC" ? COIN_TYPES.USDC : COIN_TYPES.USDT;
+
+        if (isSponsored) {
+            // For sponsored rooms, check if user has any coins first
+            const userCoins = await this.client.getCoins({ owner: userAddress, coinType: coinType });
+
+            if (userCoins.data.length === 0) {
+                // User has no coins - transfer tiny amount from sponsor
+                logger.info(`User has no ${currency} coins. Transferring 0.000001 ${currency} from sponsor...`);
+                const transferResult = await this.transfer(this.sponsorKeypair, userAddress, 0.000001, currency);
+                if (!transferResult.success) {
+                    throw new Error(`Failed to transfer ${currency} to user: ${transferResult.error}`);
                 }
-                throw new Error("No USDC coins found in wallet to pay entry fee.");
+
+                // Wait for transaction to be processed
+                await new Promise(resolve => setTimeout(resolve, 500));
+
+                // Now get the user's coins (should have the transferred coin)
+                coins = await this.client.getCoins({ owner: userAddress, coinType: coinType });
+                if (coins.data.length === 0) {
+                    throw new Error(`Failed to transfer ${currency} coin to user for sponsored transaction`);
+                }
+            } else {
+                // User has coins - use them
+                coins = userCoins;
+            }
+        } else {
+            // For non-sponsored rooms, use user's coins
+            coins = await this.client.getCoins({ owner: userAddress, coinType: coinType });
+            if (coins.data.length === 0) {
+                throw new Error(`No ${currency} coins found in wallet to pay entry fee.`);
+            }
+
+            const totalBalance = coins.data.reduce((sum, c) => sum + Number(c.balance), 0);
+            if (entryFeeSmallest > 0 && totalBalance < entryFeeSmallest) {
+                throw new Error(`Insufficient ${currency}: need ${entryFee} ${currency}, have ${totalBalance / Math.pow(10, usdcDecimals)} ${currency}`);
             }
         }
 
-        const totalUsdc = usdcCoins.data.reduce((sum, c) => sum + Number(c.balance), 0);
-        if (entryFeeSmallest > 0 && totalUsdc < entryFeeSmallest) {
-            throw new Error(`Insufficient USDC: need ${entryFee} USDC, have ${totalUsdc / Math.pow(10, usdcDecimals)} USDC`);
+        const coinsPrimary = txb.object(coins.data[0].coinObjectId);
+        if (coins.data.length > 1) {
+            const rest = coins.data.slice(1).map(c => txb.object(c.coinObjectId));
+            txb.mergeCoins(coinsPrimary, rest);
         }
 
-        const usdcPrimary = txb.object(usdcCoins.data[0].coinObjectId);
-        if (usdcCoins.data.length > 1) {
-            const rest = usdcCoins.data.slice(1).map(c => txb.object(c.coinObjectId));
-            txb.mergeCoins(usdcPrimary, rest);
-        }
-
-        const [entryFeeCoin] = txb.splitCoins(usdcPrimary, [entryFeeSmallest]); // 0 split is allowed
+        const [entryFeeCoin] = txb.splitCoins(coinsPrimary, [entryFeeSmallest]); // 0 split is allowed for sponsored rooms
         // Call join_room, capture (participant_id, change)
         const joinResult = txb.moveCall({
             target: this.getTarget("join_room"),
             arguments: [
-                txb.object(this.storeId),
+                txb.object(currency === "USDC" ? this.UsdcStoreId : this.UsdtStoreId),
                 txb.pure(roomId),
                 txb.pure(roomCode),
                 entryFeeCoin,
                 txb.object("0x6"), // Clock
-                // ctx is implicit
             ],
         }) as unknown as [any, any];
         const [, changeCoin] = joinResult;
@@ -393,40 +485,34 @@ export class GameRoom {
 
             return { success: true, digest: result.digest } as { success: true; digest: string };
         } else {
-            txb.setSender(userAddress)
             txb.transferObjects([changeCoin], txb.pure(this.sponsorAddress));
-            const kindBytes = await txb.build({
-                client: this.client, onlyTransactionKind: true
-            })
+            const kindBytes = await txb.build({ client: this.client, onlyTransactionKind: true });
             const sponsoredTx = TransactionBlock.fromKind(kindBytes);
-            sponsoredTx.setGasBudget(50_000_000);
+            sponsoredTx.setGasBudget(5_000_000);
             sponsoredTx.setSender(userAddress);
             sponsoredTx.setGasOwner(this.sponsorAddress);
             const buildBytes = await sponsoredTx.build({ client: this.client });
-            const { signature: userSignature } = await walletKeyPair.signTransactionBlock(buildBytes);
             const { signature: sponsorSignature } = await this.sponsorKeypair.signTransactionBlock(buildBytes);
+            const { signature: userSignature } = await walletKeyPair.signTransactionBlock(buildBytes);
             const result = await this.client.executeTransactionBlock({
                 transactionBlock: buildBytes,
                 signature: [userSignature, sponsorSignature],
                 options: { showEffects: true, showEvents: true },
-            })
-            if (result.effects?.status?.status !== "success") {
-                throw new Error(`Transaction failed: ${result.effects?.status?.error || "Unknown error"}`);
-            }
+            });
             return { success: true, digest: result.digest } as { success: true; digest: string };
         }
     }
 
     // Start a game (creator only)
-    async startGame(options: { walletKeyPair: any; roomId: string }) {
-        const { walletKeyPair, roomId } = options;
+    async startGame(options: { walletKeyPair: any; roomId: string, currency: Currency }) {
+        const { walletKeyPair, roomId, currency } = options;
 
         const txb = new TransactionBlock();
         const userAddress = walletKeyPair.getPublicKey().toSuiAddress();
         txb.moveCall({
             target: this.getTarget("start_game"),
             arguments: [
-                txb.object(this.storeId),
+                txb.object(currency === "USDC" ? this.UsdcStoreId : this.UsdtStoreId),
                 txb.pure(roomId),
                 txb.object("0x6"),
             ],
@@ -446,45 +532,33 @@ export class GameRoom {
     }
 
     // Leave a room
-    async leaveRoom(options: { walletKeyPair: any; roomId: string }) {
-        const { walletKeyPair, roomId } = options;
+    async leaveRoom(options: { walletKeyPair: any; roomId: string, currency: Currency }) {
+        const { walletKeyPair, roomId, currency } = options;
         const txb = new TransactionBlock();
         const userAddress = walletKeyPair.getPublicKey().toSuiAddress();
         const refundCoin = txb.moveCall({
             target: this.getTarget("leave_room"),
             arguments: [
-                txb.object(this.storeId),
-                txb.pure(userAddress),
+                txb.object(currency === "USDC" ? this.UsdcStoreId : this.UsdtStoreId),
                 txb.pure(roomId),
                 txb.object("0x6"),
             ],
         });
         txb.transferObjects([refundCoin], txb.pure(userAddress));
-        await this.dryRunTransaction(txb, this.sponsorAddress);
-        const result = await this.client.signAndExecuteTransactionBlock({
-            transactionBlock: await txb.build({ client: this.client }),
-            signer: this.sponsorKeypair,
-            options: { showEffects: true, showEvents: true },
-        });
-
-        if (result.effects?.status?.status !== "success") {
-            throw new Error(`Transaction failed: ${result.effects?.status?.error || "Unknown error"}`);
-        }
-
+        const result = await this.sponsorTransaction({ walletKeyPair, txb });
         return { success: true, digest: result.digest } as { success: true; digest: string };
     }
 
     // Cancel a room (creator only). Returns creator refund coin to sender.
-    async cancelRoom(options: { walletKeyPair: any; roomId: string }) {
-        const { walletKeyPair, roomId } = options;
+    async cancelRoom(options: { walletKeyPair: any; roomId: string, currency: Currency }) {
+        const { walletKeyPair, roomId, currency } = options;
 
         const txb = new TransactionBlock();
 
         const refundCoin = txb.moveCall({
             target: this.getTarget("cancel_room"),
             arguments: [
-                txb.object(this.storeId),
-                txb.pure(walletKeyPair.getPublicKey().toSuiAddress()),
+                txb.object(currency === "USDC" ? this.UsdcStoreId : this.UsdtStoreId),
                 txb.pure(roomId),
                 txb.object("0x6"),
             ],
@@ -493,18 +567,7 @@ export class GameRoom {
         // Return refund coin to caller
         const userAddress = walletKeyPair.getPublicKey().toSuiAddress();
         txb.transferObjects([refundCoin], txb.pure(userAddress));
-        await this.dryRunTransaction(txb, this.sponsorAddress);
-
-        // Prepare with sponsor paying gas first
-        const result = await this.client.signAndExecuteTransactionBlock({
-            transactionBlock: await txb.build({ client: this.client }),
-            signer: this.sponsorKeypair,
-            options: { showEffects: true, showEvents: true }
-        });
-
-        if (result.effects?.status?.status !== "success") {
-            throw new Error(`Transaction failed: ${result.effects?.status?.error || "Unknown error"}`);
-        }
+        const result = await this.sponsorTransaction({ walletKeyPair, txb });
         return { success: true, digest: result.digest };
     }
 
@@ -513,8 +576,9 @@ export class GameRoom {
         roomId: string;
         winnerAddresses: string[];
         scores: number[];
+        currency: Currency;
     }) {
-        const { roomId, winnerAddresses, scores } = options;
+        const { roomId, winnerAddresses, scores, currency } = options;
 
         if (winnerAddresses.length !== scores.length) {
             throw new Error("winnerAddresses and scores must have the same length");
@@ -524,7 +588,7 @@ export class GameRoom {
         txb.moveCall({
             target: this.getTarget("complete_game"),
             arguments: [
-                txb.object(this.storeId),
+                txb.object(currency === "USDC" ? this.UsdcStoreId : this.UsdtStoreId),
                 txb.pure(roomId),
                 txb.pure(winnerAddresses),
                 txb.pure(scores.map((s) => BigInt(s))),
@@ -564,4 +628,58 @@ export class GameRoom {
             gameCompletedEvent
         };
     }
+
+    // Collect completion signature for special room approval
+    async approveGameRoomCompletion(options: {
+        walletKeyPair: any;
+        roomId: string;
+        currency: Currency;
+    }) {
+        const { walletKeyPair, roomId, currency } = options;
+        const signatureBytes = new TextEncoder().encode("This is the signature to be signed for this special game room " + roomId);
+        const txb = new TransactionBlock();
+        txb.moveCall({
+            target: this.getTarget("collect_completion_signature"),
+            arguments: [
+                txb.object(currency === "USDC" ? this.UsdcStoreId : this.UsdtStoreId),
+                txb.pure(roomId),
+                txb.pure(Array.from(signatureBytes)),
+                txb.object("0x6"), // Clock
+            ],
+        });
+        await this.dryRunTransaction(txb, walletKeyPair.getPublicKey().toSuiAddress());
+        const result = await this.client.signAndExecuteTransactionBlock({
+            signer: walletKeyPair,
+            transactionBlock: txb,
+            options: { showEffects: true, showEvents: true },
+        });
+        return { success: true, digest: result.digest } as { success: true; digest: string };
+    }
+
+    async sponsorTransaction(options: { walletKeyPair: any; txb: TransactionBlock }): Promise<SuiTransactionBlockResponse> {
+        const { walletKeyPair, txb } = options;
+        const userAddress = walletKeyPair.getPublicKey().toSuiAddress();
+        logger.debug("User address ", userAddress)
+        txb.setSender(userAddress)
+        const kindBytes = await txb.build({
+            client: this.client, onlyTransactionKind: true
+        })
+        const sponsoredTx = TransactionBlock.fromKind(kindBytes);
+        sponsoredTx.setGasBudget(10_000_000);
+        sponsoredTx.setSender(userAddress);
+        sponsoredTx.setGasOwner(this.sponsorAddress);
+        const buildBytes = await sponsoredTx.build({ client: this.client });
+        const { signature: userSignature } = await walletKeyPair.signTransactionBlock(buildBytes);
+        const { signature: sponsorSignature } = await this.sponsorKeypair.signTransactionBlock(buildBytes);
+        const result = await this.client.executeTransactionBlock({
+            transactionBlock: buildBytes,
+            signature: [userSignature, sponsorSignature],
+            options: { showEffects: true, showEvents: true },
+        })
+        if (result.effects?.status?.status !== "success") {
+            throw new Error(`Transaction failed: ${result.effects?.status?.error || "Unknown error"}`);
+        }
+        return result;
+    }
+
 }

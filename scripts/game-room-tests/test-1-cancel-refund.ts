@@ -16,6 +16,7 @@ import {
   retryWithBackoff,
   sleep
 } from "./utils";
+import { CURRENCY } from "../../src/constants";
 
 /**
  * Test 1: Room Creation → Join → Cancel → Refund
@@ -93,6 +94,8 @@ async function testRoomCreationJoinCancelRefund() {
         winnerSplitRule: winnerSplitRule as any,
         startTimeMs,
         endTimeMs,
+        isSpecial: false,
+        currency: CURRENCY.USDC as "USDC" | "USDT",
       });
     });
 
@@ -117,6 +120,8 @@ async function testRoomCreationJoinCancelRefund() {
         roomId: createResult.roomId!,
         roomCode: "",
         entryFee,
+        isSponsored: false,
+        currency: CURRENCY.USDC as "USDC" | "USDT",
       });
     });
 
@@ -139,6 +144,7 @@ async function testRoomCreationJoinCancelRefund() {
       return await gameRoom.cancelRoom({
         walletKeyPair: keypair1.keypair,
         roomId: createResult.roomId!,
+        currency: CURRENCY.USDC as "USDC" | "USDT",
       });
     });
 

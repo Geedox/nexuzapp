@@ -16,6 +16,9 @@ const AnalyticsPage = () => {
     null
   );
   const [recentGames, setRecentGames] = useState<RecentGame[]>([]);
+  const [totalGames, setTotalGames] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [gamesLoading, setGamesLoading] = useState(false);
   const [trendData, setTrendData] = useState<TrendData | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState<
     "week" | "month" | "year"
@@ -30,14 +33,15 @@ const AnalyticsPage = () => {
 
       try {
         setLoading(true);
-        const [analytics, games, trends] = await Promise.all([
+        const [analytics, gamesData, trends] = await Promise.all([
           getAnalyticsData(user.id),
-          getRecentGames(user.id, 10),
+          getRecentGames(user.id, 10, 0),
           getTrendData(user.id, selectedPeriod),
         ]);
 
         setAnalyticsData(analytics);
-        setRecentGames(games);
+        setRecentGames(gamesData.games);
+        setTotalGames(gamesData.total);
         setTrendData(trends);
       } catch (err) {
         console.error("Error fetching analytics data:", err);
@@ -68,6 +72,31 @@ const AnalyticsPage = () => {
       setTrendLoading(false);
     }
   };
+
+  // Handle page change for recent games
+  const handlePageChange = async (page: number) => {
+    if (!user?.id || page === currentPage) return;
+
+    setGamesLoading(true);
+    setCurrentPage(page);
+
+    try {
+      const offset = (page - 1) * 10;
+      const gamesData = await getRecentGames(user.id, 10, offset);
+      setRecentGames(gamesData.games);
+    } catch (err) {
+      console.error("Error fetching games for page:", err);
+      setError("Failed to load games data");
+    } finally {
+      setGamesLoading(false);
+    }
+  };
+
+  // Calculate pagination info
+  const itemsPerPage = 10;
+  const totalPages = Math.ceil(totalGames / itemsPerPage);
+  const startItem = (currentPage - 1) * itemsPerPage + 1;
+  const endItem = Math.min(currentPage * itemsPerPage, totalGames);
 
   // Format data for display
   const formattedAnalyticsData = analyticsData
@@ -223,13 +252,29 @@ const AnalyticsPage = () => {
       {/* Recent Activity */}
       <div className="bg-black/40 backdrop-blur-lg border border-primary/30 rounded-2xl overflow-hidden">
         <div className="p-6 border-b border-primary/20">
-          <h2 className="font-cyber text-xl font-bold text-primary">
-            Recent Game Activity
-          </h2>
+          <div className="flex justify-between items-center">
+            <h2 className="font-cyber text-xl font-bold text-primary">
+              Recent Game Activity
+            </h2>
+            {totalGames > 0 && (
+              <div className="text-sm text-muted-foreground font-cyber">
+                Showing {startItem}-{endItem} of {totalGames} games
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="space-y-2 p-6">
-          {recentGames.length > 0 ? (
+          {gamesLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+                <div className="font-cyber text-muted-foreground">
+                  Loading games...
+                </div>
+              </div>
+            </div>
+          ) : recentGames.length > 0 ? (
             recentGames.map((game, index) => (
               <div
                 key={index}
@@ -277,6 +322,33 @@ const AnalyticsPage = () => {
             </div>
           )}
         </div>
+
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="p-6 border-t border-primary/20">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1 || gamesLoading}
+                  className="px-3 py-2 rounded-lg font-cyber font-bold text-sm transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-r from-primary/20 to-accent/20 text-primary hover:from-primary/30 hover:to-accent/30 disabled:hover:from-primary/20 disabled:hover:to-accent/20"
+                >
+                  Previous
+                </button>
+                <span className="text-sm text-muted-foreground font-cyber px-2">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages || gamesLoading}
+                  className="px-3 py-2 rounded-lg font-cyber font-bold text-sm transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-r from-primary/20 to-accent/20 text-primary hover:from-primary/30 hover:to-accent/30 disabled:hover:from-primary/20 disabled:hover:to-accent/20"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Goals & Achievements */}

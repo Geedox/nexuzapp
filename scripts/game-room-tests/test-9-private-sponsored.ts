@@ -1,4 +1,4 @@
-import { SuiClient } from "@mysten/sui.js/client";
+import { CURRENCY } from "../../src/constants";
 import { GameRoom } from "../../src/integrations/smartcontracts/gameRoom";
 import {
     createKeypair,
@@ -7,27 +7,23 @@ import {
     logTestHeader,
     logTestResult,
     logBalanceChange,
-    calculateExpectedBalance,
     formatUSDC,
     toSmallestUnits,
-    calculatePlatformFee,
-    calculateRefundableAmount,
     validateEnvironment,
     createSuiClient,
     retryWithBackoff,
     sleep
 } from "./utils";
-import { CURRENCY } from "../../src/constants";
 
 /**
- * Test 8: Sponsored Game Room with No Winner
+ * Test 9: Private Sponsored Room
  * 
- * Purpose: Verify that when a sponsored game room is completed with no winners,
- * the sponsor receives a refund of the prize pool minus the platform fee.
+ * Purpose: Verify that private sponsored rooms work correctly with room codes, 
+ * requiring the correct code to join but no entry fees for participants.
  */
-async function testSponsoredGameRoomNoWinner(): Promise<void> {
-    const testName = "Sponsored Game Room with No Winner";
-    const testNumber = 8;
+async function testPrivateSponsoredRoom(): Promise<void> {
+    const testName = "Private Sponsored Room";
+    const testNumber = 9;
 
     logTestHeader(testName, testNumber);
 
@@ -57,11 +53,11 @@ async function testSponsoredGameRoomNoWinner(): Promise<void> {
 
         // Test parameters
         const sponsorAmount = 0.01; // 0.01 USDC prize pool
-        const sponsorAmountSmallest = toSmallestUnits(sponsorAmount);
-        const roomName = `Sponsored No Winner Test Room ${Date.now()}`;
-        const gameId = "test-game-8";
+        const roomName = `Private Sponsored Room ${Date.now()}`;
+        const gameId = "test-game-9";
         const maxPlayers = 2;
-        const isPrivate = false;
+        const isPrivate = true;
+        const roomCode = `PRIV${Date.now().toString().slice(-6)}`; // Generate unique room code
         const winnerSplitRule = "winner_takes_all";
         const startTimeMs = Date.now() + 60000; // Start in 1 minute
         const endTimeMs = Date.now() + 300000; // End in 5 minutes
@@ -70,17 +66,19 @@ async function testSponsoredGameRoomNoWinner(): Promise<void> {
         console.log(`  Sponsor Amount: ${formatUSDC(sponsorAmount)} USDC`);
         console.log(`  Room Name: ${roomName}`);
         console.log(`  Max Players: ${maxPlayers}`);
+        console.log(`  Room Code: ${roomCode}`);
         console.log(`  Winner Split Rule: ${winnerSplitRule}`);
         console.log(`  Entry Fee: 0 USDC (Sponsored)`);
+        console.log(`  Private: Yes`);
 
         // Create GameRoom instance
         console.log("\nCreating GameRoom instance...");
         const gameRoom = new GameRoom(client);
         console.log("GameRoom instance created successfully");
 
-        // Step 1: Create sponsored room
-        console.log("\nStep 1: Creating sponsored room...");
-        console.log(`Creating sponsored room with ${formatUSDC(sponsorAmount)} USDC prize pool...`);
+        // Step 1: Create private sponsored room
+        console.log("\nStep 1: Creating private sponsored room...");
+        console.log(`Creating private sponsored room with ${formatUSDC(sponsorAmount)} USDC prize pool and room code ${roomCode}...`);
 
         const createResult = await retryWithBackoff(async () => {
             return await gameRoom.createGameRoom({
@@ -90,7 +88,7 @@ async function testSponsoredGameRoomNoWinner(): Promise<void> {
                 entryFee: 0, // No entry fee for sponsored rooms
                 maxPlayers,
                 isPrivate,
-                roomCode: "",
+                roomCode,
                 isSponsored: true,
                 sponsorAmount,
                 winnerSplitRule: winnerSplitRule as any,
@@ -102,11 +100,12 @@ async function testSponsoredGameRoomNoWinner(): Promise<void> {
         });
 
         if (!createResult.success || !createResult.roomId) {
-            throw new Error(`Sponsored room creation failed: ${createResult}`);
+            throw new Error(`Private sponsored room creation failed: ${createResult}`);
         }
 
-        console.log(`Sponsored room created successfully: ${createResult.roomId}`);
+        console.log(`Private sponsored room created successfully: ${createResult.roomId}`);
         console.log(`Transaction digest: ${createResult.digest}`);
+        console.log(`Room code: ${roomCode}`);
         console.log(`Sponsor amount deducted: ${formatUSDC(sponsorAmount)} USDC`);
 
         // Wait a moment for transaction to be processed
@@ -120,26 +119,26 @@ async function testSponsoredGameRoomNoWinner(): Promise<void> {
         console.log(`Balance after room creation: ${formatUSDC(balanceAfterCreate1)} USDC`);
         console.log(`Expected balance: ${formatUSDC(initialBalance1 - sponsorAmount)} USDC`);
 
-        // Step 2: Join room (no entry fee required)
-        console.log("\nStep 2: Joining room...");
-        console.log("Joining room (no entry fee)...");
+        // Step 2: Join room with correct room code (no entry fee required)
+        console.log("\nStep 2: Joining private room with room code...");
+        console.log(`Joining room with code "${roomCode}" (no entry fee)...`);
 
         const joinResult = await retryWithBackoff(async () => {
             return await gameRoom.joinGameRoom({
-                isSponsored: true,
                 walletKeyPair: keypair2.keypair,
                 roomId: createResult.roomId!,
-                roomCode: "",
+                roomCode: roomCode,
                 entryFee: 0, // No entry fee for sponsored rooms
+                isSponsored: true,
                 currency: CURRENCY.USDC as "USDC" | "USDT",
             });
         });
 
         if (!joinResult.success) {
-            throw new Error(`Join room failed: ${joinResult}`);
+            throw new Error(`Join private room failed: ${joinResult}`);
         }
 
-        console.log("User joined successfully");
+        console.log("User joined private room successfully");
         console.log(`Transaction digest: ${joinResult.digest}`);
         console.log(`No entry fee deducted (sponsored room)`);
 
@@ -154,28 +153,29 @@ async function testSponsoredGameRoomNoWinner(): Promise<void> {
         console.log(`Balance after joining: ${formatUSDC(balanceAfterJoin2)} USDC`);
         console.log(`Expected balance: ${formatUSDC(initialBalance2)} USDC`);
 
-        // Step 3: Complete game with no winners
-        console.log("\nStep 3: Completing game with no winners...");
-        console.log("Completing game with no winners...");
+        // Step 3: Complete game with Key 2 as winner
+        console.log("\nStep 3: Completing game with Key 2 as winner...");
+        console.log("Completing game...");
 
         const completeResult = await retryWithBackoff(async () => {
             return await gameRoom.completeGame({
                 roomId: createResult.roomId!,
-                winnerAddresses: [], // Empty array = no winners
-                scores: [], // Empty array = no scores
+                winnerAddresses: [keypair2.address], // Key 2 wins
+                scores: [100], // Winner score
                 currency: CURRENCY.USDC as "USDC" | "USDT",
             });
         });
 
         if (!completeResult.success) {
-            throw new Error(`Game completion failed: ${completeResult}`);
+            throw new Error(`Complete game failed: ${completeResult}`);
         }
 
         console.log("Game completed successfully");
         console.log(`Transaction digest: ${completeResult.digest}`);
+        console.log(`Winner: Key 2 (Joiner)`);
 
         // Wait a moment for transaction to be processed
-        await sleep(2000);
+        await sleep(3000);
 
         // Step 4: Verify final balances
         console.log("\nStep 4: Verifying final balances...");
@@ -186,26 +186,24 @@ async function testSponsoredGameRoomNoWinner(): Promise<void> {
         const finalBalance1 = finalBalances.find(b => b.name === "Key 1 (Creator/Sponsor)")!.balance;
         const finalBalance2 = finalBalances.find(b => b.name === "Key 2 (Joiner)")!.balance;
 
-        // Calculate expected outcomes
-        const totalPrizePool = sponsorAmount; // Only sponsor amount (no entry fees)
-        // const platformFee = calculatePlatformFee(totalPrizePool); // 7% of sponsor amount
-        const refundableAmount = sponsorAmount;
+        // Calculate expected balances
+        // Platform fee: 7% of sponsor amount
+        const platformFee = sponsorAmount * 0.07;
+        const winnerPrize = sponsorAmount - platformFee;
+
+        // Key 1 (Sponsor): Initial - sponsor amount (no refund - not winner)
+        // Key 2 (Winner): Initial + winner prize (93% of sponsor amount)
+        const expectedBalance1 = initialBalance1 - sponsorAmount;
+        const expectedBalance2 = initialBalance2 + winnerPrize;
 
         console.log("\nPrize Pool Distribution:");
-        console.log(`  Total Prize Pool: ${formatUSDC(totalPrizePool)} USDC`);
-        // console.log(`  Platform Fee (7%): ${formatUSDC(platformFee)} USDC`);
-        console.log(`  Refundable Amount: ${formatUSDC(refundableAmount)} USDC`);
-        console.log(`  Sponsor Refund: ${formatUSDC(refundableAmount)} USDC`);
-
-        // Calculate expected balances
-        // Key 1 (Creator/Sponsor): Initial - sponsor amount + refund = Initial
-        // Key 2 (Joiner): Initial (no change - no entry fee paid, no refund received)
-        const expectedBalance1 = initialBalance1;
-        const expectedBalance2 = initialBalance2;
+        console.log(`  Total Prize Pool: ${formatUSDC(sponsorAmount)} USDC`);
+        console.log(`  Platform Fee (7%): ${formatUSDC(platformFee)} USDC`);
+        console.log(`  Winner Prize: ${formatUSDC(winnerPrize)} USDC`);
 
         console.log("\nBalance Verification:");
         logBalanceChange("Key 1 (Creator/Sponsor)", initialBalance1, finalBalance1, expectedBalance1);
-        logBalanceChange("Key 2 (Joiner)", initialBalance2, finalBalance2, expectedBalance2);
+        logBalanceChange("Key 2 (Winner)", initialBalance2, finalBalance2, expectedBalance2);
 
         // Check if test passed
         const balance1Correct = Math.abs(finalBalance1 - expectedBalance1) < 0.000001;
@@ -213,23 +211,24 @@ async function testSponsoredGameRoomNoWinner(): Promise<void> {
         const testPassed = balance1Correct && balance2Correct;
 
         // Log test result
-        logTestResult(testName, testPassed, {
+        const result = logTestResult(testName, testPassed, {
             roomId: createResult.roomId,
             createDigest: createResult.digest,
             joinDigest: joinResult.digest,
             completeDigest: completeResult.digest,
             balance1Correct,
             balance2Correct,
+            roomCode,
+            sponsorAmount,
+            platformFee,
+            winnerPrize,
             balanceAfterCreate: balanceAfterCreate1,
-            balanceAfterJoin: balanceAfterJoin2,
-            sponsorAmountDeducted: sponsorAmount,
-            sponsorAmountRefunded: refundableAmount,
-            // platformFee,
-            totalPrizePool,
-            expectedBalance1,
-            expectedBalance2
+            balanceAfterJoin: balanceAfterJoin2
         });
 
+        if (!testPassed) {
+            throw new Error("Test failed: Balance verification failed");
+        }
 
     } catch (error) {
         console.error(`\nTest failed with error:`, error);
@@ -240,7 +239,7 @@ async function testSponsoredGameRoomNoWinner(): Promise<void> {
 
 // Run the test if this file is executed directly
 if (import.meta.url === `file://${process.argv[1]}`) {
-    testSponsoredGameRoomNoWinner()
+    testPrivateSponsoredRoom()
         .then(() => {
             console.log("\nTest completed successfully");
             process.exit(0);
@@ -251,4 +250,4 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         });
 }
 
-export { testSponsoredGameRoomNoWinner };
+export { testPrivateSponsoredRoom };

@@ -1,5 +1,5 @@
 import { SuiClient } from "@mysten/sui.js/client";
-import { GameRoom } from "@/integrations/smartcontracts/gameRoom";
+import { GameRoom } from "../../src/integrations/smartcontracts/gameRoom";
 import {
   createKeypair,
   getBalances,
@@ -17,6 +17,7 @@ import {
   retryWithBackoff,
   sleep
 } from "./utils";
+import { CURRENCY } from "../../src/constants";
 
 /**
  * Test 6: Game Completion with Single Winner
@@ -94,6 +95,8 @@ async function testGameCompletionSingleWinner(): Promise<void> {
         winnerSplitRule: winnerSplitRule as any,
         startTimeMs,
         endTimeMs,
+        isSpecial: false,
+        currency: CURRENCY.USDC as "USDC" | "USDT",
       });
     });
 
@@ -118,6 +121,8 @@ async function testGameCompletionSingleWinner(): Promise<void> {
         roomId: createResult.roomId!,
         roomCode: "",
         entryFee,
+        isSponsored: false,
+        currency: CURRENCY.USDC as "USDC" | "USDT",
       });
     });
 
@@ -138,10 +143,10 @@ async function testGameCompletionSingleWinner(): Promise<void> {
 
     const completeResult = await retryWithBackoff(async () => {
       return await gameRoom.completeGame({
-        walletKeyPair: keypair1.keypair,
         roomId: createResult.roomId!,
         winnerAddresses: [keypair1.address], // Key 1 is the winner
         scores: [100], // Score for Key 1
+        currency: CURRENCY.USDC as "USDC" | "USDT",
       });
     });
 
@@ -191,7 +196,7 @@ async function testGameCompletionSingleWinner(): Promise<void> {
     const testPassed = balance1Correct && balance2Correct;
 
     // Log test result
-    const result = logTestResult(testName, testPassed, {
+    logTestResult(testName, testPassed, {
       roomId: createResult.roomId,
       createDigest: createResult.digest,
       joinDigest: joinResult.digest,
@@ -205,8 +210,6 @@ async function testGameCompletionSingleWinner(): Promise<void> {
       expectedBalance2,
       winnerAddress: keypair1.address
     });
-
-    return result;
 
   } catch (error) {
     console.error(`\nTest failed with error:`, error);
