@@ -539,6 +539,7 @@ export type Database = {
           actual_start_time: string | null
           admin_has_approved: boolean | null
           bracket_data: Json | null
+          complete_digest: string | null
           completed_matches: Json | null
           created_at: string | null
           creator_id: string | null
@@ -550,6 +551,7 @@ export type Database = {
           entry_fee: number
           game_id: string | null
           game_instance_id: string | null
+          game_mode: Database["public"]["Enums"]["game_mode"] | null
           game_name: string | null
           id: string
           is_private: boolean | null
@@ -576,6 +578,7 @@ export type Database = {
           start_signing: boolean | null
           start_time: string
           status: Database["public"]["Enums"]["room_status"] | null
+          time_limit_minutes: number | null
           timezone: string | null
           total_prize_pool: number | null
           tournament_ready: boolean | null
@@ -590,6 +593,7 @@ export type Database = {
           actual_start_time?: string | null
           admin_has_approved?: boolean | null
           bracket_data?: Json | null
+          complete_digest?: string | null
           completed_matches?: Json | null
           created_at?: string | null
           creator_id?: string | null
@@ -601,6 +605,7 @@ export type Database = {
           entry_fee: number
           game_id?: string | null
           game_instance_id?: string | null
+          game_mode?: Database["public"]["Enums"]["game_mode"] | null
           game_name?: string | null
           id?: string
           is_private?: boolean | null
@@ -627,6 +632,7 @@ export type Database = {
           start_signing?: boolean | null
           start_time: string
           status?: Database["public"]["Enums"]["room_status"] | null
+          time_limit_minutes?: number | null
           timezone?: string | null
           total_prize_pool?: number | null
           tournament_ready?: boolean | null
@@ -641,6 +647,7 @@ export type Database = {
           actual_start_time?: string | null
           admin_has_approved?: boolean | null
           bracket_data?: Json | null
+          complete_digest?: string | null
           completed_matches?: Json | null
           created_at?: string | null
           creator_id?: string | null
@@ -652,6 +659,7 @@ export type Database = {
           entry_fee?: number
           game_id?: string | null
           game_instance_id?: string | null
+          game_mode?: Database["public"]["Enums"]["game_mode"] | null
           game_name?: string | null
           id?: string
           is_private?: boolean | null
@@ -678,6 +686,7 @@ export type Database = {
           start_signing?: boolean | null
           start_time?: string
           status?: Database["public"]["Enums"]["room_status"] | null
+          time_limit_minutes?: number | null
           timezone?: string | null
           total_prize_pool?: number | null
           tournament_ready?: boolean | null
@@ -1418,6 +1427,7 @@ export type Database = {
     Enums: {
       currency_type: "USDC" | "USDT" | "NGN" | "ETH" | "BTC"
       friend_status: "pending" | "accepted" | "declined" | "blocked"
+      game_mode: "high-scores" | "multiplayer"
       game_status: "active" | "waiting" | "full" | "starting" | "finished"
       notification_type:
       | "friend_request"
@@ -1583,6 +1593,7 @@ export const Constants = {
     Enums: {
       currency_type: ["USDC", "USDT", "NGN", "ETH", "BTC"],
       friend_status: ["pending", "accepted", "declined", "blocked"],
+      game_mode: ["high-scores", "multiplayer"],
       game_status: ["active", "waiting", "full", "starting", "finished"],
       notification_type: [
         "friend_request",
@@ -1617,6 +1628,7 @@ export const Constants = {
     },
   },
 } as const
+
 
 
 

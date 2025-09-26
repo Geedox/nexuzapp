@@ -437,7 +437,6 @@ const RoomsPage = () => {
   const [selectedRoomId, setSelectedRoomId] = useState(null);
   const [roomCode, setRoomCode] = useState("");
   const [games, setGames] = useState([]);
-  const [loadingStats, setLoadingStats] = useState(true);
   const [userWins, setUserWins] = useState({}); // Track user wins per room
 
   // Winner celebration state
@@ -499,7 +498,7 @@ const RoomsPage = () => {
 
   // Handle URL search params for direct room access
   useEffect(() => {
-    const roomId = searchParams.get("roomid");
+    const roomId = searchParams.get("roomId");
     if (roomId && !selectedRoomId) {
       logger.info("Opening room from URL:", roomId);
       setSelectedRoomId(roomId);
@@ -552,7 +551,7 @@ const RoomsPage = () => {
     if (rooms && rooms.length > 0) {
       fetchUserWins();
     }
-  }, [rooms, user]);
+  }, [rooms, user, user.id]); // Only depend on user ID to prevent frequent re-renders
 
   // Calculate room statistics - Fixed to handle undefined rooms
   useEffect(() => {
@@ -576,8 +575,7 @@ const RoomsPage = () => {
       );
       setRoomStats(stats);
     }
-    setLoadingStats(false);
-  }, [rooms]);
+  }, [rooms]); // Only depend on rooms length to prevent frequent re-renders
 
   // Function to show win celebration for a specific room
   const showWinCelebration = (room) => {
@@ -898,7 +896,11 @@ const RoomsPage = () => {
     return `${year}-${month}-${day}T${hours}:${minutes}`;
   };
 
-  // Helper function to create a new Date from datetime-local input (handles timezone correctly)
+  /**
+   *  Helper function to create a new Date from datetime-local input (handles timezone correctly)
+   * @param inputValue - The input value from the datetime-local input
+   * @returns A new Date object in the local timezone
+   */
   const createDateFromInput = (inputValue: string) => {
     // datetime-local input gives us YYYY-MM-DDTHH:MM in local time
     // We need to create a Date object that represents the local time correctly
@@ -931,7 +933,7 @@ const RoomsPage = () => {
           setSelectedRoomId(null);
           // Remove roomid from URL when going back
           const newSearchParams = new URLSearchParams(searchParams);
-          newSearchParams.delete("roomid");
+          newSearchParams.delete("roomId");
           setSearchParams(newSearchParams);
           refreshRooms();
         }}
@@ -947,7 +949,7 @@ const RoomsPage = () => {
       <div className="space-y-8 animate-fade-in">
         <Banner pathname="rooms" />
         {/* Room Statistics */}
-        {!loadingStats && safeRooms.length > 0 && (
+        {safeRooms.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30 rounded-xl p-4">
               <p className="text-sm font-cyber text-purple-400 mb-1">
@@ -1709,56 +1711,158 @@ const RoomsPage = () => {
                                 ...formData,
                                 eliminationType: e.target.value as
                                   | "single"
-                                  | "double"
                                   | "swiss",
                               })
                             }
                             className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
                           >
                             <option value="single">Single Elimination</option>
-                            <option value="double">Double Elimination</option>
-                            <option value="swiss">Swiss System</option>
+                            <option value="swiss">
+                              Round Robin (Swiss System)
+                            </option>
                           </select>
+                          <p className="text-xs font-cyber text-muted-foreground mt-1">
+                            {formData.eliminationType === "single"
+                              ? "Players compete in elimination brackets - losers are out"
+                              : "Players compete in multiple rounds with performance-based pairing"}
+                          </p>
                         </div>
 
                         <div>
                           <label className="text-sm font-cyber text-primary mb-1 block">
-                            Match Time Limit (minutes)
+                            Tournament Mode
                           </label>
-                          <input
-                            type="number"
-                            value={formData.timeLimitMinutes}
+                          <select
+                            value={formData.playMode}
                             onChange={(e) =>
                               setFormData({
                                 ...formData,
-                                timeLimitMinutes:
-                                  parseInt(e.target.value) || 30,
+                                playMode: e.target.value as
+                                  | "single"
+                                  | "multiplayer",
                               })
                             }
+                            className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
+                          >
+                            <option value="multiplayer">Multiplayer</option>
+                            <option value="single">Single Player</option>
+                          </select>
+                          <p className="text-xs font-cyber text-muted-foreground mt-1">
+                            {formData.playMode === "multiplayer"
+                              ? "Players compete in direct matches with elimination brackets"
+                              : "Players compete for highest scores"}
+                          </p>
+                        </div>
+
+                        {formData.playMode === "multiplayer" && (
+                          <div>
+                            <label className="text-sm font-cyber text-primary mb-1 block">
+                              Players Per Match
+                            </label>
+                            <input
+                              type="number"
+                              value={formData.playersPerMatch}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  playersPerMatch: parseInt(e.target.value),
+                                })
+                              }
+                              className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
+                              min="2"
+                              max="4"
+                              step="2"
+                            />
+                            <p className="text-xs font-cyber text-muted-foreground mt-1">
+                              Number of players competing in each match
+                            </p>
+                          </div>
+                        )}
+
+                        <div>
+                          <label className="text-sm font-cyber text-primary mb-1 block">
+                            {formData.playMode === "multiplayer"
+                              ? "Match Time Limit"
+                              : "Round Duration"}{" "}
+                            (minutes)
+                          </label>
+                          <input
+                            type="number"
+                            value={
+                              formData.playMode === "multiplayer"
+                                ? formData.timeLimitMinutes
+                                : formData.roundDurationMinutes
+                            }
+                            onChange={(e) => {
+                              const value = parseInt(e.target.value) || 30;
+                              if (formData.playMode === "multiplayer") {
+                                setFormData({
+                                  ...formData,
+                                  timeLimitMinutes: value,
+                                });
+                              } else {
+                                setFormData({
+                                  ...formData,
+                                  roundDurationMinutes: value,
+                                });
+                              }
+                            }}
                             className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
                             min="5"
                             max="120"
                           />
+                          <p className="text-xs font-cyber text-muted-foreground mt-1">
+                            {formData.playMode === "multiplayer"
+                              ? "Maximum time allowed for each match"
+                              : "Duration of each scoring round"}
+                          </p>
                         </div>
 
+                        {formData.playMode === "single" && (
+                          <div>
+                            <label className="text-sm font-cyber text-primary mb-1 block">
+                              Number of Rounds
+                            </label>
+                            <input
+                              type="number"
+                              value={formData.tournamentRounds}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  tournamentRounds: parseInt(e.target.value),
+                                })
+                              }
+                              className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
+                              min="1"
+                              max="10"
+                            />
+                            <p className="text-xs font-cyber text-muted-foreground mt-1">
+                              Total number of scoring rounds in the tournament
+                            </p>
+                          </div>
+                        )}
+
                         <div>
-                          <label className="text-sm font-cyber text-primary mb-1 block">
-                            Round Duration (minutes)
+                          <label className="flex items-center gap-3 cursor-pointer group">
+                            <input
+                              type="checkbox"
+                              checked={formData.autoStart}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  autoStart: e.target.checked,
+                                })
+                              }
+                              className="w-5 h-5 rounded border-primary/30 text-primary focus:ring-primary"
+                            />
+                            <span className="text-sm font-cyber text-foreground group-hover:text-primary transition-colors">
+                              🚀 Auto-start when minimum players join
+                            </span>
                           </label>
-                          <input
-                            type="number"
-                            value={formData.roundDurationMinutes}
-                            onChange={(e) =>
-                              setFormData({
-                                ...formData,
-                                roundDurationMinutes:
-                                  parseInt(e.target.value) || 60,
-                              })
-                            }
-                            className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
-                            min="10"
-                            max="240"
-                          />
+                          <p className="text-xs font-cyber text-muted-foreground mt-1 ml-8">
+                            Tournament will start automatically when minimum
+                            players are reached
+                          </p>
                         </div>
                       </>
                     )}

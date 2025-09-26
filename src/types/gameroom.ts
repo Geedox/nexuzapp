@@ -1,8 +1,22 @@
 import { Database } from "@/integrations/supabase/types";
 import { Profile } from "@/contexts/ProfileContext";
+import {
+    TransactionEffects,
+    SuiEvent,
+    SuiObjectChange,
+} from "@mysten/sui.js/client";
+
 
 export type Wallet = Profile["sui_wallet_data"];
 
+export interface OnChainGameRoomResult {
+    success: boolean;
+    digest: string;
+    effects: TransactionEffects;
+    events: SuiEvent[];
+    changes: SuiObjectChange[];
+    gameCompletedEvent: any;
+}
 export interface GameRoom {
     id: string;
     name: string;
@@ -53,6 +67,13 @@ export interface GameRoom {
     participant_has_approved: boolean | null;
     mode: "regular" | "tournament" | "league";
     play_mode: "single" | "multiplayer" | string; // New field for single vs multiplayer
+    // Tournament-specific fields
+    tournament_rounds?: number | null;
+    round_duration_minutes?: number | null;
+    elimination_type?: string | null;
+    max_rounds?: number | null;
+    players_per_match?: number | null;
+    time_limit_minutes?: number | null;
 }
 
 

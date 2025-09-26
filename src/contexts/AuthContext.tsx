@@ -1,10 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { createContext, useContext, useEffect, useState } from 'react';
-import { User, Session } from '@supabase/supabase-js';
-import { supabase } from '@/integrations/supabase/client';
-import { profileService } from '@/lib/supabase';
-import { useToast } from '@/hooks/use-toast';
+import { createContext, useContext, useEffect, useState } from "react";
+import { User, Session } from "@supabase/supabase-js";
+import { supabase } from "@/integrations/supabase/client";
+import { profileService } from "@/lib/supabase";
+import { useToast } from "@/hooks/use-toast";
 
 interface AuthContextType {
   user: User | null;
@@ -21,7 +21,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 };
@@ -35,29 +35,31 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     // Set up auth state listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('Auth state changed:', event, session?.user?.id);
-        setSession(session);
-        setUser(session?.user ?? null);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log("Auth state changed:", event, session?.user?.id);
+      setSession(session);
+      setUser(session?.user ?? null);
 
-        if (session?.user) {
-          // Fetch user profile after authentication
-          setTimeout(async () => {
-            try {
-              const userProfile = await profileService.getProfile(session.user.id);
-              setProfile(userProfile);
-            } catch (error) {
-              console.error('Error fetching profile:', error);
-            }
-          }, 0);
-        } else {
-          setProfile(null);
-        }
-
-        setLoading(false);
+      if (session?.user) {
+        // Fetch user profile after authentication
+        setTimeout(async () => {
+          try {
+            const userProfile = await profileService.getProfile(
+              session.user.id
+            );
+            setProfile(userProfile);
+          } catch (error) {
+            console.error("Error fetching profile:", error);
+          }
+        }, 0);
+      } else {
+        setProfile(null);
       }
-    );
+
+      setLoading(false);
+    });
 
     // Check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -65,7 +67,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setUser(session?.user ?? null);
 
       if (session?.user) {
-        profileService.getProfile(session.user.id)
+        profileService
+          .getProfile(session.user.id)
           .then(setProfile)
           .catch(console.error);
       }
@@ -82,10 +85,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const redirectUrl = `nexuz.xyz/auth/callback`;
 
       const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
+        provider: "google",
         options: {
-          redirectTo: redirectUrl
-        }
+          redirectTo: redirectUrl,
+        },
       });
 
       if (error) {
@@ -96,7 +99,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         });
       }
     } catch (error) {
-      console.error('Error signing in with Google:', error);
+      console.error("Error signing in with Google:", error);
       toast({
         title: "Error",
         description: "Failed to sign in with Google",
@@ -121,7 +124,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         });
       }
     } catch (error) {
-      console.error('Error signing out:', error);
+      console.error("Error signing out:", error);
     }
   };
 
@@ -129,14 +132,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (!user) return;
 
     try {
-      const updatedProfile = await profileService.updateProfile(user.id, updates);
+      const updatedProfile = await profileService.updateProfile(
+        user.id,
+        updates
+      );
       setProfile(updatedProfile);
       toast({
         title: "Success",
         description: "Profile updated successfully",
       });
     } catch (error) {
-      console.error('Error updating profile:', error);
+      console.error("Error updating profile:", error);
       toast({
         title: "Error",
         description: "Failed to update profile",
