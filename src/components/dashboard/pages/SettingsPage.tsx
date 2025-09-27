@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Loader2, Check, X } from "lucide-react";
+import NotificationSettings from "@/components/notifications/NotificationSettings";
 
 const SettingsPage = () => {
   const { profile, setUsername, checkUsernameAvailability } = useProfile();
@@ -196,6 +197,14 @@ const SettingsPage = () => {
       </div>
 
       {/* Security Settings */}
+      {/* Notification Settings */}
+      <div className="bg-black/40 backdrop-blur-lg border border-primary/30 rounded-2xl p-6">
+        <h2 className="font-cyber text-xl font-bold text-primary mb-6">
+          🔔 Notification Settings
+        </h2>
+        <NotificationSettings />
+      </div>
+
       <div className="bg-black/40 backdrop-blur-lg border border-primary/30 rounded-2xl p-6">
         <h2 className="font-cyber text-xl font-bold text-primary mb-6">
           🔒 Security

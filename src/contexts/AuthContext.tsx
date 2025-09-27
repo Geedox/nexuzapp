@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 import { createContext, useContext, useEffect, useState } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
@@ -81,8 +79,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signInWithGoogle = async () => {
     try {
-      // const redirectUrl = `${window.location.origin}/dashboard`;
-      const redirectUrl = `nexuz.xyz/auth/callback`;
+      const redirectUrl = `${window.location.origin}/auth/callback`;
+      // const redirectUrl = `nexuz.xyz/auth/callback`;
 
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",

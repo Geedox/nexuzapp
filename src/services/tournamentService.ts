@@ -9,6 +9,7 @@ import { Currency, GameRoom as OnChainGameRoom } from "@/integrations/smartcontr
 import { NETWORK } from "@/constants";
 import { getFullnodeUrl, SuiClient } from "@mysten/sui.js/client";
 import { gameRoomService } from "./gameRoomService";
+import { notificationService } from "./notificationService";
 
 type Winner = {
   userId: string;
@@ -867,7 +868,7 @@ class TournamentService {
   }
 
   // Complete a match
-  async completeMatch(matchId: string, winnerId: string, loserId: string, scores?: Record<string, number>): Promise<TournamentMatch> {
+  async completeMatch(matchId: string, winnerId: string, loserId: string, roomName: string, scores?: Record<string, number>): Promise<TournamentMatch> {
     try {
       const { data: matchData, error: matchDataError } = await supabase
         .from("tournament_matches")
@@ -917,7 +918,7 @@ class TournamentService {
         logger.success(`Tournament completed for room ${match.room_id}`);
       } else {
         // Check if we need to advance winner to next round
-        await this.advanceWinnerToNextRound(match as TournamentMatch);
+        await this.advanceWinnerToNextRound(match as TournamentMatch, roomName);
       }
       return match as TournamentMatch;
     } catch (error) {
@@ -941,6 +942,18 @@ class TournamentService {
       const participants = room.participants;
       const winners = await this.determineTournamentWinner(participants, room, winnerId, loserId, scores);
       await this.submitWinnersToSmartContractAndDistributePrizes(winners, room as GameRoom);
+      const participantIds = participants.map(p => p.user_id).filter(Boolean);
+      try {
+        await notificationService.createBulkNotifications(participantIds, "room_completed", {
+          room_id: roomId,
+          room_name: room.name
+        }, {
+          sendEmail: true,
+          priority: "high"
+        })
+      } catch (error) {
+        logger.error("Error sending room completion notification", error)
+      }
     } catch (error) {
       logger.error("Error completing tournament:", error);
       throw error;
@@ -1077,9 +1090,9 @@ class TournamentService {
 
       if (participants.length === submittedScores.length) {
         // All participants have submitted scores, determine winner
-        const { data: room } = await supabase.from("game_rooms").select("play_mode").eq("id", roomId).single();
+        const { data: room } = await supabase.from("game_rooms").select("play_mode, name").eq("id", roomId).single();
         if (room.play_mode === "multiplayer")
-          await this.determineMatchWinner(matchId, submittedScores);
+          await this.determineMatchWinner(matchId, submittedScores, room.name);
       }
       logger.info(`Score submitted: ${score} for match ${matchId}`);
     } catch (error) {
@@ -1090,7 +1103,7 @@ class TournamentService {
   }
 
   // Determine winner of a highscore match
-  private async determineMatchWinner(matchId: string, scores: Record<string, number>): Promise<void> {
+  private async determineMatchWinner(matchId: string, scores: Record<string, number>, roomName: string): Promise<void> {
     try {
       // Find the participant with the highest score
       let winnerId: string | null = null;
@@ -1107,7 +1120,7 @@ class TournamentService {
       if (!winnerId) throw new Error("No winner determined");
 
       // Complete the match
-      await this.completeMatch(matchId, winnerId, loserId, scores);
+      await this.completeMatch(matchId, winnerId, loserId, roomName, scores);
 
       logger.info(`Highscore match ${matchId} completed. Winner: ${winnerId} with score: ${highestScore}`);
     } catch (error) {
@@ -1117,7 +1130,7 @@ class TournamentService {
   }
 
   // Advance winner to next round
-  private async advanceWinnerToNextRound(match: TournamentMatch): Promise<void> {
+  private async advanceWinnerToNextRound(match: TournamentMatch, roomName: string): Promise<void> {
     try {
       const nextRound = match.round_number + 1;
 
@@ -1172,6 +1185,29 @@ class TournamentService {
             .eq("id", availableMatch.id);
 
           if (updateError) throw updateError;
+
+          if (match.winner_id) {
+            await notificationService.createNotification(
+              match.winner_id,
+              "tournament_advance", { tournament_name: roomName, next_round: `Round ${match.round_number + 1}` },
+              {
+                sendEmail: true, priority: "high"
+              }
+            );
+          }
+
+          // Notify eliminated players
+          const eliminatedPlayerIds = [
+            match.player1_id,
+            match.player2_id,
+            match.player3_id,
+            match.player4_id,
+          ].filter((id) => id && id !== match.winner_id);
+
+          await notificationService.createBulkNotifications(eliminatedPlayerIds, "tournament_elimination", {
+            tournament_name: roomName,
+            final_rank: 0
+          }, { sendEmail: true, priority: "medium" })
         }
       }
     } catch (error) {

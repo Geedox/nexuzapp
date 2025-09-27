@@ -1,118 +1,110 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+import { EmailWithResend } from '../integrations/resend';
 
-import { supabase } from '@/integrations/supabase/client';
 
-interface EmailData {
-  user_id: string;
-  email_type: string;
-  recipient_email: string;
-  subject: string;
-  template_data: any;
-  scheduled_for?: string;
-}
+export class emailService {
+  private emailClient: EmailWithResend;
 
-export const emailService = {
-  async queueEmail(emailData: EmailData) {
-    const { data, error } = await supabase
-      .from('email_queue')
-      .insert(emailData)
-      .select()
-      .single();
-    
-    if (error) throw error;
-    return data;
-  },
+  constructor() {
+    this.emailClient = new EmailWithResend();
+  }
 
-  async sendWelcomeEmail(userId: string, userEmail: string, username: string) {
-    return this.queueEmail({
-      user_id: userId,
-      email_type: 'welcome',
-      recipient_email: userEmail,
-      subject: '🎮 Welcome to z Arena!',
-      template_data: {
-        username,
-        loginUrl: `${window.location.origin}/dashboard`
-      }
-    });
-  },
+  async sendWelcomeEmail(userEmail: string, username: string) {
+    try {
+      return await this.emailClient.sendWelcomeEmail(userEmail, username);
+    } catch (error) {
+      console.error('Failed to send welcome email:', error);
+      throw error;
+    }
+  }
 
-  async sendFriendRequestEmail(userId: string, recipientEmail: string, senderName: string) {
-    return this.queueEmail({
-      user_id: userId,
-      email_type: 'friend_request',
-      recipient_email: recipientEmail,
-      subject: `${senderName} sent you a friend request on Nexuz Arena`,
-      template_data: {
-        senderName,
-        acceptUrl: `${window.location.origin}/dashboard?tab=community`
-      }
-    });
-  },
+  async sendFriendRequestEmail(recipientEmail: string, senderName: string) {
+    try {
+      return await this.emailClient.sendFriendRequestEmail(recipientEmail, senderName);
+    } catch (error) {
+      console.error('Failed to send friend request email:', error);
+      throw error;
+    }
+  }
 
-  async sendRoomStartEmail(userId: string, recipientEmail: string, roomName: string, gameName: string) {
-    return this.queueEmail({
-      user_id: userId,
-      email_type: 'room_start',
-      recipient_email: recipientEmail,
-      subject: `🚀 Game Starting: ${roomName}`,
-      template_data: {
-        roomName,
-        gameName,
-        joinUrl: `${window.location.origin}/dashboard?tab=rooms`
-      }
-    });
-  },
+  async sendRoomStartEmail(roomId: string, recipientEmail: string, roomName: string, gameName: string) {
+    try {
+      return await this.emailClient.sendRoomStartEmail(recipientEmail, roomName, gameName, roomId);
+    } catch (error) {
+      console.error('Failed to send room start email:', error);
+      throw error;
+    }
+  }
 
-  async sendPaymentEmail(userId: string, recipientEmail: string, amount: number, currency: string, type: 'win' | 'deposit' | 'withdrawal') {
-    const subjects = {
-      win: `🏆 You won ${amount} ${currency}!`,
-      deposit: `💰 Deposit of ${amount} ${currency} confirmed`,
-      withdrawal: `💸 Withdrawal of ${amount} ${currency} processed`
-    };
+  async sendRoomReminderEmail(roomId: string, recipientEmail: string, roomName: string, startTime: string) {
+    try {
+      return await this.emailClient.sendRoomReminderEmail(recipientEmail, roomName, startTime, roomId);
+    } catch (error) {
+      console.error('Failed to send room reminder email:', error);
+      throw error;
+    }
+  }
 
-    return this.queueEmail({
-      user_id: userId,
-      email_type: `payment_${type}`,
-      recipient_email: recipientEmail,
-      subject: subjects[type],
-      template_data: {
-        amount,
-        currency,
-        type,
-        walletUrl: `${window.location.origin}/dashboard?tab=wallet`
-      }
-    });
-  },
+  // Additional email methods for the new notification types
+  async sendGameWonEmail(recipientEmail: string, gameName: string, prizeAmount?: string) {
+    try {
+      return await this.emailClient.sendGameWonEmail(recipientEmail, gameName, prizeAmount);
+    } catch (error) {
+      console.error('Failed to send game won email:', error);
+      throw error;
+    }
+  }
 
-  async sendWalletConnectedEmail(userId: string, recipientEmail: string, currency: string, walletAddress: string) {
-    return this.queueEmail({
-      user_id: userId,
-      email_type: 'wallet_connect',
-      recipient_email: recipientEmail,
-      subject: `🔗 ${currency} wallet connected successfully`,
-      template_data: {
-        currency,
-        walletAddress,
-        securityUrl: `${window.location.origin}/dashboard?tab=settings`
-      }
-    });
-  },
+  async sendTournamentAdvanceEmail(recipientEmail: string, tournamentName: string, nextRound: string, roomId: string) {
+    try {
+      return await this.emailClient.sendTournamentAdvanceEmail(recipientEmail, tournamentName, nextRound, roomId);
+    } catch (error) {
+      console.error('Failed to send tournament advance email:', error);
+      throw error;
+    }
+  }
 
-  async scheduleRoomReminderEmail(userId: string, recipientEmail: string, roomName: string, startTime: string) {
-    const reminderTime = new Date(startTime);
-    reminderTime.setMinutes(reminderTime.getMinutes() - 15); // 15 minutes before
+  async sendTournamentEliminationEmail(roomId: string, recipientEmail: string, tournamentName: string, finalRank: number) {
+    try {
+      return await this.emailClient.sendTournamentEliminationEmail(recipientEmail, tournamentName, finalRank, roomId);
+    } catch (error) {
+      console.error('Failed to send tournament elimination email:', error);
+      throw error;
+    }
+  }
 
-    return this.queueEmail({
-      user_id: userId,
-      email_type: 'room_reminder',
-      recipient_email: recipientEmail,
-      subject: `⏰ Game starting soon: ${roomName}`,
-      template_data: {
-        roomName,
-        startTime,
-        joinUrl: `${window.location.origin}/dashboard?tab=rooms`
-      },
-      scheduled_for: reminderTime.toISOString()
-    });
+  async sendHighscoreBeatenEmail(roomId: string, recipientEmail: string, gameName: string, playerName: string, newScore: number) {
+    try {
+      return await this.emailClient.sendHighscoreBeatenEmail(recipientEmail, gameName, playerName, newScore, roomId);
+    } catch (error) {
+      console.error('Failed to send highscore beaten email:', error);
+      throw error;
+    }
+  }
+
+  async sendPrizeDistributionEmail(recipientEmail: string, amount: string, tournamentName: string) {
+    try {
+      return await this.emailClient.sendPrizeDistributionEmail(recipientEmail, amount, tournamentName);
+    } catch (error) {
+      console.error('Failed to send prize distribution email:', error);
+      throw error;
+    }
+  }
+
+  async sendRoomCancelledEmail(recipientEmail: string, roomName: string, refundAmount?: string) {
+    try {
+      return await this.emailClient.sendRoomCancelledEmail(recipientEmail, roomName, refundAmount);
+    } catch (error) {
+      console.error('Failed to send room cancelled email:', error);
+      throw error;
+    }
+  }
+
+  async sendFriendRequestAcceptedEmail(recipientEmail: string, friendName: string) {
+    try {
+      return await this.emailClient.sendFriendRequestAcceptedEmail(recipientEmail, friendName);
+    } catch (error) {
+      console.error('Failed to send friend request accepted email:', error);
+      throw error;
+    }
   }
 };

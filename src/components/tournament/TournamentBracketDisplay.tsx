@@ -117,6 +117,7 @@ export const TournamentBracketDisplay: React.FC<
         match.id,
         winnerId,
         loserId,
+        room.name,
         scores
       );
 

@@ -191,7 +191,6 @@ export interface GameRoomContextType {
     leaveRoom: (roomId: string) => Promise<void>;
     cancelRoom: (roomId: string) => Promise<void>;
     getRoomDetails: (roomId: string) => Promise<GameRoom | null>;
-    getRoomParticipants: (roomId: string) => Promise<GameRoomParticipant[]>;
     updateGameScore: (
         roomId: string,
         score: number,

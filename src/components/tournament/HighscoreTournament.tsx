@@ -25,8 +25,7 @@ export const HighscoreTournament: React.FC<HighscoreTournamentProps> = ({
   participants,
   stats,
 }) => {
-  const { submitScore, completing, startTournament, starting } =
-    useTournament();
+  const { startTournament, starting } = useTournament();
   const { user } = useAuth();
 
   // Get current user's participant

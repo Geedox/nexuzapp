@@ -19,6 +19,8 @@ export interface TournamentContextType {
     completeMatch: (
         matchId: string,
         winnerId: string,
+        loserId: string,
+        roomName: string,
         scores?: Record<string, number>
     ) => Promise<void>;
     submitScore: (

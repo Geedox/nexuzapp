@@ -1,12 +1,13 @@
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/utils/logger";
-import type { Database, TablesInsert, Tables } from "@/integrations/supabase/types";
+import type { Database } from "@/integrations/supabase/types";
 import { GameRoom, GameRoomParticipant, OnChainGameRoomResult, Wallet } from "@/types/gameroom";
 import { Profile } from "@/contexts/ProfileContext";
 import { NETWORK } from "@/constants";
 import { getFullnodeUrl, SuiClient } from "@mysten/sui.js/client";
 import { GameRoom as OnChainGameRoom } from "@/integrations/smartcontracts/gameRoom";
 import { verifyCoinForRoomCreation } from "@/lib/utils";
+import { notificationService } from "./notificationService";
 
 class GameRoomService {
   private onChainGameRoom: OnChainGameRoom;
@@ -16,7 +17,7 @@ class GameRoomService {
   }
   // Function to automatically complete a single game
   autoCompleteGame = async (
-    room: GameRoom & { participants?: GameRoomParticipant[] }
+    room: GameRoom
   ) => {
     // Call smart contract first to complete the game on-chain
     let onChainResult: OnChainGameRoomResult | null = null;
@@ -96,7 +97,9 @@ class GameRoomService {
               `Successfully completed game on-chain for room ${room.id} with digest: ${onChainResult.digest}`
             );
           }
-          // Distribute prizes with on-chain transaction information
+          // Notify the room participants about completion
+          const participantUserIds = participants.map((participant) => participant.user_id);
+          await notificationService.createBulkNotifications(participantUserIds, "room_completed", { room_id: room.id, room_name: room.name }, { sendEmail: true, priority: "high" });
         }
         if (!participants || participants.length === 0) {
           // No participants - just mark as completed
@@ -131,8 +134,7 @@ class GameRoomService {
         .from("game_rooms")
         .select(
           `
-          *,
-          participants:game_room_participants(*)
+          *
         `
         )
         .in("status", ["waiting", "ongoing"])
@@ -147,7 +149,7 @@ class GameRoomService {
 
       for (const room of expiredRooms) {
         await this.autoCompleteGame(
-          room as GameRoom & { participants?: GameRoomParticipant[] }
+          room as GameRoom
         );
       }
     } catch (error) {
@@ -164,7 +166,7 @@ class GameRoomService {
       const { data: roomsToUpdate } = await supabase
         .from("game_rooms")
         .select(
-          "id, status, start_time, end_time, current_players, min_players_to_start, name, currency, on_chain_room_id, is_special, mode, elimination_type, max_rounds, players_per_match, round_duration_minutes, time_limit_minutes"
+          "*, participants:game_room_participants(*)"
         )
         .in("status", ["waiting", "ongoing"]);
 
@@ -242,7 +244,7 @@ class GameRoomService {
         ) {
           // Auto-complete the game instead of just updating status
           await this.autoCompleteGame(
-            room as GameRoom & { participants?: GameRoomParticipant[] }
+            room as unknown as GameRoom
           );
           continue; // Skip the manual status update since autoCompleteGame handles it
         }
@@ -250,6 +252,17 @@ class GameRoomService {
         // Update if status changed (for non-completion updates)
         if (newStatus !== room.status) {
           await supabase.from("game_rooms").update(updates).eq("id", room.id);
+          if (newStatus === "ongoing") {
+            const participantUserIds = room.participants?.map((participant) => participant.user_id);
+            try {
+              await notificationService.createBulkNotifications(participantUserIds, "room_start", { room_id: room.id, room_name: room.name }, { sendEmail: true, priority: "high" });
+            } catch (error) {
+              logger.error(
+                `Error notifying ${participantUserIds} about room start:`,
+                error
+              );
+            }
+          }
         }
       }
     } catch (error) {
@@ -614,6 +627,15 @@ class GameRoomService {
 
         // Mark user for profile update
         usersToUpdateProfile.add(winner.userId);
+        try {
+          await notificationService.createNotification(winner.userId, "prize_distributed", { prize_amount: earnings.toString(), room_name: room.name }, { sendEmail: true, priority: "high" })
+          logger.success(`Notified ${winner.userId} about prize distribution`);
+        } catch (error) {
+          logger.error(
+            `Error notifying ${winner.userId} about prize distribution:`,
+            error
+          );
+        }
       }
 
       // Update leaderboard for non-winners (they played a game but didn't win)
@@ -815,6 +837,31 @@ class GameRoomService {
     } catch (error) {
       logger.error("Error distributing prizes:", error);
       throw error;
+    }
+  };
+
+  // Get room participants
+  getRoomParticipants = async (
+    roomId: string
+  ): Promise<GameRoomParticipant[]> => {
+    try {
+      const { data, error } = await supabase
+        .from("game_room_participants")
+        .select(
+          `
+          *,
+          user:profiles(*)
+        `
+        )
+        .eq("room_id", roomId)
+        .eq("is_active", true)
+        .order("score", { ascending: false });
+
+      if (error) throw error;
+      return (data as unknown as GameRoomParticipant[]) || [];
+    } catch (error) {
+      logger.error("Error fetching participants:", error);
+      return [];
     }
   };
 }

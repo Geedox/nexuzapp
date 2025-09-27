@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/utils/logger";
 import { tournamentService } from "@/services/tournamentService";
+import { useNotification } from "@/hooks/useNotification";
 import type {
   TournamentMatch,
   TournamentBracket,
@@ -33,6 +34,14 @@ export const TournamentProvider = ({
   const [completing, setCompleting] = useState(false);
 
   const [subscription, setSubscription] = useState<any>(null);
+
+  // Get notification functions
+  const {
+    notifyTournamentAdvance,
+    notifyTournamentElimination,
+    notifyRoomStarted,
+    notifyRoomCompleted,
+  } = useNotification();
 
   // Get minimum participants for elimination type
   const getMinimumParticipants = useCallback(
@@ -195,6 +204,33 @@ export const TournamentProvider = ({
 
         if (roomError) throw roomError;
 
+        // Send tournament completion notification to all participants
+        try {
+          const { data: participants } = await supabase
+            .from("game_room_participants")
+            .select("user_id")
+            .eq("room_id", roomId)
+            .eq("is_active", true);
+
+          if (participants && tournamentRoom) {
+            const participantIds = participants
+              .map((p) => p.user_id)
+              .filter(Boolean) as string[];
+
+            await notifyRoomCompleted(
+              roomId,
+              tournamentRoom.name,
+              participantIds
+            );
+          }
+        } catch (notificationError) {
+          logger.error(
+            "Error sending tournament completion notifications:",
+            notificationError
+          );
+          // Don't throw error to prevent breaking tournament completion
+        }
+
         // Trigger prize distribution (this will be handled by the existing prize distribution system)
         logger.info("Tournament completed successfully");
 
@@ -211,7 +247,7 @@ export const TournamentProvider = ({
         setCompleting(false);
       }
     },
-    []
+    [notifyRoomCompleted, tournamentRoom]
   );
 
   // Create tournament matches for a room
@@ -288,6 +324,34 @@ export const TournamentProvider = ({
         // Fetch updated tournament data
         await fetchTournamentData(roomId);
 
+        // Send tournament start notification to all participants
+        try {
+          const { data: participants } = await supabase
+            .from("game_room_participants")
+            .select("user_id")
+            .eq("room_id", roomId)
+            .eq("is_active", true);
+
+          if (participants && tournamentRoom) {
+            const participantIds = participants
+              .map((p) => p.user_id)
+              .filter(Boolean) as string[];
+
+            await notifyRoomStarted(
+              roomId,
+              tournamentRoom.name,
+              tournamentRoom.game_name || "Tournament",
+              participantIds
+            );
+          }
+        } catch (notificationError) {
+          logger.error(
+            "Error sending tournament start notification:",
+            notificationError
+          );
+          // Don't throw error to prevent breaking tournament start
+        }
+
         logger.info("Tournament started successfully");
       } catch (error) {
         logger.error("Error starting tournament:", error);
@@ -305,13 +369,21 @@ export const TournamentProvider = ({
     async (
       matchId: string,
       winnerId: string,
+      loserId: string,
+      roomName: string,
       scores?: Record<string, number>
     ): Promise<void> => {
       setCompleting(true);
       try {
         logger.info("Completing match:", { matchId, winnerId, scores });
 
-        await tournamentService.completeMatch(matchId, winnerId, scores);
+        await tournamentService.completeMatch(
+          matchId,
+          winnerId,
+          loserId,
+          roomName,
+          scores
+        );
 
         // Check if tournament is complete
         const match = await tournamentService.getMatchById(matchId);
@@ -324,6 +396,47 @@ export const TournamentProvider = ({
           );
           if (bracket.isComplete) {
             await completeTournament(match.room_id);
+          } else {
+            try {
+              // Get match details to determine advancement/elimination
+              const completedMatch = await tournamentService.getMatchById(
+                matchId
+              );
+              if (completedMatch && tournamentRoom) {
+                // Notify winner of advancement
+                if (winnerId) {
+                  await notifyTournamentAdvance(
+                    winnerId,
+                    tournamentRoom.name,
+                    `Round ${completedMatch.round_number + 1}`
+                  );
+                }
+
+                // Notify eliminated players
+                const eliminatedPlayerIds = [
+                  completedMatch.player1_id,
+                  completedMatch.player2_id,
+                  completedMatch.player3_id,
+                  completedMatch.player4_id,
+                ].filter((id) => id && id !== winnerId);
+
+                for (const eliminatedId of eliminatedPlayerIds) {
+                  if (eliminatedId) {
+                    await notifyTournamentElimination(
+                      eliminatedId,
+                      tournamentRoom.name,
+                      completedMatch.round_number
+                    );
+                  }
+                }
+              }
+            } catch (notificationError) {
+              logger.error(
+                "Error sending match completion notifications:",
+                notificationError
+              );
+              // Don't throw error to prevent breaking match completion
+            }
           }
         }
 
@@ -335,7 +448,13 @@ export const TournamentProvider = ({
         setCompleting(false);
       }
     },
-    [fetchTournamentData, completeTournament]
+    [
+      fetchTournamentData,
+      completeTournament,
+      tournamentRoom,
+      notifyTournamentAdvance,
+      notifyTournamentElimination,
+    ]
   );
 
   // Submit score for highscore tournaments (match-based)

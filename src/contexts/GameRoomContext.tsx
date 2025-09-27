@@ -23,6 +23,8 @@ import {
 } from "@/types/gameroom";
 import { GameRoomContext } from "@/hooks/gameroom";
 import { tournamentService } from "@/services/tournamentService";
+import { useNotification } from "@/hooks/useNotification";
+import { useCommunityChatContext } from "./CommunityChatContext";
 
 export const GameRoomProvider = ({
   children,
@@ -48,6 +50,14 @@ export const GameRoomProvider = ({
   const { suiClient, refreshBalances, usdcBalance, usdtBalance, suiBalance } =
     useWallet();
   const { profile } = useProfile();
+  const {
+    notifyRoomCreated,
+    notifyPlayerJoined,
+    notifyPlayerLeft,
+    notifyRoomCancelled,
+    notifyHighscoreBeaten,
+  } = useNotification();
+  const { friends } = useCommunityChatContext();
   const [activeGameSessions, setActiveGameSessions] = useState<
     Map<string, GameSession>
   >(new Map());
@@ -415,10 +425,17 @@ export const GameRoomProvider = ({
       );
       const { data: roomData, error: roomError } = await supabase
         .from("game_rooms")
-        .select("mode")
+        .select("mode, game_name, game:games(*)")
         .eq("id", roomId)
         .single();
       if (roomError) throw roomError;
+      // The highest score in the room
+      const { data: highestScoreParticipant } = await supabase
+        .from("game_room_participants")
+        .select("score, user_id, id")
+        .eq("room_id", roomId)
+        .order("score", { ascending: false })
+        .single();
       // First, get the current participant data
       const { data: currentParticipant, error: fetchError } = await supabase
         .from("game_room_participants")
@@ -434,19 +451,26 @@ export const GameRoomProvider = ({
 
       logger.debug("Current participant data:", currentParticipant);
 
-      const currentScore = currentParticipant?.score || 0;
+      const currentScore = currentParticipant.score;
       const currentScoreNum = Number(currentScore);
       const newScoreNum = Number(score);
+      const highScoreBeaten =
+        currentParticipant.id !== highestScoreParticipant.id &&
+        newScoreNum > highestScoreParticipant.score;
       let result: {
         updated: boolean;
         previousScore: number;
         newScore: number;
         tournamentMatch: boolean;
+        highScoreBeaten: boolean;
+        highScoreBeatenUserId: string;
       } = {
         updated: false,
         previousScore: currentScoreNum,
         newScore: newScoreNum,
         tournamentMatch: false,
+        highScoreBeaten,
+        highScoreBeatenUserId: highestScoreParticipant.user_id,
       };
 
       // Only update if new score is higher
@@ -478,6 +502,7 @@ export const GameRoomProvider = ({
         logger.debug("Update result:", updateResult);
 
         result = {
+          ...result,
           updated: true,
           previousScore: currentScoreNum,
           newScore: newScoreNum,
@@ -488,6 +513,7 @@ export const GameRoomProvider = ({
           `Score ${newScoreNum} not higher than current ${currentScoreNum}, no update needed`
         );
         result = {
+          ...result,
           updated: false,
           previousScore: currentScoreNum,
           newScore: newScoreNum,
@@ -520,6 +546,7 @@ export const GameRoomProvider = ({
               await tournamentService.getMatchById(activeMatch.id)
             );
             result = {
+              ...result,
               updated: true,
               previousScore: currentScoreNum,
               newScore: newScoreNum,
@@ -527,6 +554,7 @@ export const GameRoomProvider = ({
             };
           } else {
             result = {
+              ...result,
               updated: false,
               previousScore: currentScoreNum,
               newScore: newScoreNum,
@@ -534,6 +562,23 @@ export const GameRoomProvider = ({
             };
           }
         }
+      }
+      // Send highscore beaten notification if applicable
+      try {
+        if (result.updated && result.highScoreBeaten && user && profile) {
+          await notifyHighscoreBeaten(
+            result.highScoreBeatenUserId,
+            roomData.game_name || roomData.game.name,
+            profile.display_name || profile.username,
+            result.newScore
+          );
+        }
+      } catch (notificationError) {
+        logger.error(
+          "Error sending highscore beaten notification:",
+          notificationError
+        );
+        // Don't throw error to prevent breaking score update
       }
       return result;
     } catch (error) {
@@ -1060,6 +1105,31 @@ export const GameRoomProvider = ({
           description: "Game room created successfully",
         });
 
+        // Send notification to friends/followers about new room
+        try {
+          if (user && profile) {
+            // Get user's friends id. If the user is the requester, add the addressee id, if the user is the addressee, add the requester id
+            const friendIds = friends.map((friend) =>
+              friend.requester_id !== profile.id
+                ? friend.requester_id
+                : friend.addressee_id
+            );
+            await notifyRoomCreated(
+              roomData.id,
+              roomData.name,
+              user.id,
+              profile.display_name || profile.username,
+              friendIds
+            );
+          }
+        } catch (notificationError) {
+          logger.error(
+            "Error sending room creation notification:",
+            notificationError
+          );
+          // Don't throw error to prevent breaking room creation
+        }
+
         return roomData as GameRoom;
       } else {
         throw new Error("On-chain room creation is required for USDC rooms");
@@ -1156,7 +1226,39 @@ export const GameRoomProvider = ({
         title: "Success",
         description: "Joined room successfully",
       });
-    } catch (error: unknown) {
+
+      // Notify other participants about player joining
+      try {
+        if (user && profile) {
+          const room = await getRoomDetails(roomId);
+          if (room) {
+            const participants = await gameRoomService.getRoomParticipants(
+              roomId
+            );
+            const participantIds = participants
+              .filter((p) => p.user_id !== user.id)
+              .map((p) => p.user_id)
+              .filter(Boolean) as string[];
+
+            if (participantIds.length > 0) {
+              await notifyPlayerJoined(
+                roomId,
+                room.name,
+                user.id,
+                profile.display_name || profile.username || "Unknown User",
+                participantIds
+              );
+            }
+          }
+        }
+      } catch (notificationError) {
+        logger.error(
+          "Error sending player joined notification:",
+          notificationError
+        );
+        // Don't throw error to prevent breaking room join
+      }
+    } catch (error) {
       logger.error("Error joining room:", error);
       toast({
         title: "Error",
@@ -1223,6 +1325,38 @@ export const GameRoomProvider = ({
         title: "Success",
         description: "Left room successfully",
       });
+
+      // Notify other participants about player leaving
+      try {
+        if (user && profile) {
+          const room = await getRoomDetails(roomId);
+          if (room) {
+            const participants = await gameRoomService.getRoomParticipants(
+              roomId
+            );
+            const participantIds = participants
+              .filter((p) => p.user_id !== user.id)
+              .map((p) => p.user_id)
+              .filter(Boolean) as string[];
+
+            if (participantIds.length > 0) {
+              await notifyPlayerLeft(
+                roomId,
+                room.name,
+                user.id,
+                profile.display_name || profile.username,
+                participantIds
+              );
+            }
+          }
+        }
+      } catch (notificationError) {
+        logger.error(
+          "Error sending player left notification:",
+          notificationError
+        );
+        // Don't throw error to prevent breaking room leave
+      }
     } catch (error) {
       logger.error("Error leaving room:", error);
       toast({
@@ -1340,6 +1474,36 @@ export const GameRoomProvider = ({
           title: "Success",
           description: "Room cancelled and all participants fully refunded",
         });
+
+        // Notify all participants about room cancellation
+        try {
+          if (user && profile) {
+            const room = await getRoomDetails(roomId);
+            if (room) {
+              const participants = await gameRoomService.getRoomParticipants(
+                roomId
+              );
+              const participantIds = participants
+                .map((p) => p.user_id)
+                .filter(Boolean) as string[];
+
+              if (participantIds.length > 0) {
+                await notifyRoomCancelled(
+                  roomId,
+                  room.name,
+                  room.entry_fee.toString(),
+                  participantIds
+                );
+              }
+            }
+          }
+        } catch (notificationError) {
+          logger.error(
+            "Error sending room cancelled notification:",
+            notificationError
+          );
+          // Don't throw error to prevent breaking room cancellation
+        }
       } else {
         throw new Error("Room cannot be cancelled without on-chain support");
       }
@@ -1379,31 +1543,6 @@ export const GameRoomProvider = ({
     } catch (error) {
       logger.error("Error fetching room details:", error);
       return null;
-    }
-  };
-
-  // Get room participants
-  const getRoomParticipants = async (
-    roomId: string
-  ): Promise<GameRoomParticipant[]> => {
-    try {
-      const { data, error } = await supabase
-        .from("game_room_participants")
-        .select(
-          `
-          *,
-          user:profiles(*)
-        `
-        )
-        .eq("room_id", roomId)
-        .eq("is_active", true)
-        .order("score", { ascending: false });
-
-      if (error) throw error;
-      return (data as unknown as GameRoomParticipant[]) || [];
-    } catch (error) {
-      logger.error("Error fetching participants:", error);
-      return [];
     }
   };
 
@@ -1685,7 +1824,6 @@ export const GameRoomProvider = ({
     return () => {
       clearInterval(expiredGamesInterval);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   // Set up real-time subscriptions
@@ -1780,7 +1918,6 @@ export const GameRoomProvider = ({
     leaveRoom,
     cancelRoom,
     getRoomDetails,
-    getRoomParticipants,
     updateGameScore,
     // Admin score management functions
     updateParticipantScore,

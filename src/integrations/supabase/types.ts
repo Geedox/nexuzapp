@@ -905,6 +905,44 @@ export type Database = {
           },
         ]
       }
+      notification_settings: {
+        Row: {
+          created_at: string | null
+          email_enabled: boolean | null
+          id: string
+          in_app_enabled: boolean | null
+          notification_type: Database["public"]["Enums"]["notification_type"]
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          email_enabled?: boolean | null
+          id?: string
+          in_app_enabled?: boolean | null
+          notification_type: Database["public"]["Enums"]["notification_type"]
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          email_enabled?: boolean | null
+          id?: string
+          in_app_enabled?: boolean | null
+          notification_type?: Database["public"]["Enums"]["notification_type"]
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_settings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           created_at: string | null
@@ -955,6 +993,7 @@ export type Database = {
           current_rank: string
           current_win_streak: number | null
           display_name: string | null
+          email: string | null
           email_verified: boolean | null
           experience_points: number | null
           id: string
@@ -962,6 +1001,7 @@ export type Database = {
           last_seen: string | null
           level: number | null
           longest_win_streak: number | null
+          notification_preferences: Json | null
           sui_wallet_data: Json | null
           total_earnings: number | null
           total_games_played: number | null
@@ -977,6 +1017,7 @@ export type Database = {
           current_rank?: string
           current_win_streak?: number | null
           display_name?: string | null
+          email?: string | null
           email_verified?: boolean | null
           experience_points?: number | null
           id: string
@@ -984,6 +1025,7 @@ export type Database = {
           last_seen?: string | null
           level?: number | null
           longest_win_streak?: number | null
+          notification_preferences?: Json | null
           sui_wallet_data?: Json | null
           total_earnings?: number | null
           total_games_played?: number | null
@@ -999,6 +1041,7 @@ export type Database = {
           current_rank?: string
           current_win_streak?: number | null
           display_name?: string | null
+          email?: string | null
           email_verified?: boolean | null
           experience_points?: number | null
           id?: string
@@ -1006,6 +1049,7 @@ export type Database = {
           last_seen?: string | null
           level?: number | null
           longest_win_streak?: number | null
+          notification_preferences?: Json | null
           sui_wallet_data?: Json | null
           total_earnings?: number | null
           total_games_played?: number | null
@@ -1436,6 +1480,19 @@ export type Database = {
       | "payment"
       | "wallet_connect"
       | "achievement"
+      | "room_created"
+      | "player_joined"
+      | "player_left"
+      | "room_completed"
+      | "room_cancelled"
+      | "highscore_beaten"
+      | "tournament_advance"
+      | "tournament_elimination"
+      | "game_won"
+      | "prize_distributed"
+      | "room_reminder"
+      | "friend_request_accepted"
+      | "friend_request_declined"
       room_mode: "regular" | "tournament" | "league"
       room_status:
       | "waiting"
@@ -1602,6 +1659,19 @@ export const Constants = {
         "payment",
         "wallet_connect",
         "achievement",
+        "room_created",
+        "player_joined",
+        "player_left",
+        "room_completed",
+        "room_cancelled",
+        "highscore_beaten",
+        "tournament_advance",
+        "tournament_elimination",
+        "game_won",
+        "prize_distributed",
+        "room_reminder",
+        "friend_request_accepted",
+        "friend_request_declined",
       ],
       room_mode: ["regular", "tournament", "league"],
       room_status: ["waiting", "starting", "ongoing", "completed", "cancelled"],
@@ -1628,9 +1698,6 @@ export const Constants = {
     },
   },
 } as const
-
-
-
 
 
 // Gaming avatars for chat rooms
