@@ -1,19 +1,20 @@
 // Base email template with Nexuz Arena branding
-const APP_URL = import.meta.env.VITE_APP_URL || "https://nexuz.xyz";
+const APP_URL = import.meta.env.VITE_APP_URL;
+// const APP_URL = process.env.VITE_APP_URL;
 const BaseEmailTemplate = ({
-    title,
-    content,
-    ctaText,
-    ctaUrl,
-    footerText
+  title,
+  content,
+  ctaText,
+  ctaUrl,
+  footerText
 }: {
-    title: string;
-    content: string;
-    ctaText?: string;
-    ctaUrl?: string;
-    footerText?: string;
+  title: string;
+  content: string;
+  ctaText?: string;
+  ctaUrl?: string;
+  footerText?: string;
 }) => {
-    return `
+  return `
       <!DOCTYPE html>
       <html lang="en">
       <head>
@@ -198,10 +199,10 @@ const BaseEmailTemplate = ({
 };
 
 export const TEMPLATES = {
-    // Welcome Email Template
-    welcome: (username: string) => BaseEmailTemplate({
-        title: "🎮 WELCOME TO THE ARENA!",
-        content: `
+  // Welcome Email Template
+  welcome: (username: string) => BaseEmailTemplate({
+    title: "🎮 WELCOME TO THE ARENA!",
+    content: `
       Welcome to <strong>Nexuz Arena</strong>, ${username}! 🚀<br><br>
       
       You've just entered the most advanced decentralized gaming multiverse ever created. 
@@ -216,15 +217,15 @@ export const TEMPLATES = {
       
       The arena awaits your arrival. Let's make history together!
     `,
-        ctaText: "ENTER THE ARENA",
-        ctaUrl: `${APP_URL}/dashboard`,
-        footerText: "Ready to start your gaming journey? Your adventure begins now!"
-    }),
+    ctaText: "ENTER THE ARENA",
+    ctaUrl: `${APP_URL}/dashboard`,
+    footerText: "Ready to start your gaming journey? Your adventure begins now!"
+  }),
 
-    // Friend Request Email Template
-    friendRequest: (senderName: string) => BaseEmailTemplate({
-        title: "👥 FRIEND REQUEST RECEIVED",
-        content: `
+  // Friend Request Email Template
+  friendRequest: (senderName: string) => BaseEmailTemplate({
+    title: "👥 FRIEND REQUEST RECEIVED",
+    content: `
       <strong>${senderName}</strong> wants to connect with you on Nexuz Arena! 🤝<br><br>
       
       Building your gaming network is crucial for success in the arena. 
@@ -237,15 +238,15 @@ export const TEMPLATES = {
       
       Don't miss out on the opportunity to expand your gaming circle!
     `,
-        ctaText: "VIEW REQUEST",
-        ctaUrl: `${APP_URL}/friends`,
-        footerText: "Connect with fellow gamers and dominate the arena together!"
-    }),
+    ctaText: "VIEW REQUEST",
+    ctaUrl: `${APP_URL}/friends`,
+    footerText: "Connect with fellow gamers and dominate the arena together!"
+  }),
 
-    // Room Start Email Template
-    roomStart: (roomName: string, gameName: string, roomId: string) => BaseEmailTemplate({
-        title: "🎯 GAME ROOM STARTED!",
-        content: `
+  // Room Start Email Template
+  roomStart: (roomName: string, gameName: string, roomId: string) => BaseEmailTemplate({
+    title: "🎯 GAME ROOM STARTED!",
+    content: `
       The <strong>${roomName}</strong> room has officially started! 🚀<br><br>
       
       <strong>Game:</strong> ${gameName}<br>
@@ -262,15 +263,15 @@ export const TEMPLATES = {
       
       The battle has begun. Will you emerge victorious?
     `,
-        ctaText: "JOIN THE BATTLE",
-        ctaUrl: `${APP_URL}/dashboard/rooms/${roomId}`,
-        footerText: "Every second counts in the arena. Don't let victory slip away!"
-    }),
+    ctaText: "JOIN THE BATTLE",
+    ctaUrl: `${APP_URL}/dashboard/rooms/${roomId}`,
+    footerText: "Every second counts in the arena. Don't let victory slip away!"
+  }),
 
-    // Room Reminder Email Template
-    roomReminder: (roomName: string, startTime: string, roomId: string) => BaseEmailTemplate({
-        title: "⏰ GAME ROOM REMINDER",
-        content: `
+  // Room Reminder Email Template
+  roomReminder: (roomName: string, startTime: string, roomId: string) => BaseEmailTemplate({
+    title: "⏰ GAME ROOM REMINDER",
+    content: `
       Don't forget! Your game room <strong>${roomName}</strong> starts soon! ⏰<br><br>
       
       <strong>Start Time:</strong> ${startTime}<br>
@@ -285,15 +286,15 @@ export const TEMPLATES = {
       
       Victory favors the prepared. Are you ready to dominate?
     `,
-        ctaText: "PREPARE FOR BATTLE",
-        ctaUrl: `${APP_URL}/dashboard/rooms/${roomId}`,
-        footerText: "Preparation is the key to victory in the arena!"
-    }),
+    ctaText: "PREPARE FOR BATTLE",
+    ctaUrl: `${APP_URL}/dashboard/rooms/${roomId}`,
+    footerText: "Preparation is the key to victory in the arena!"
+  }),
 
-    // Game Won Email Template
-    gameWon: (gameName: string, roomId: string, prizeAmount?: string) => BaseEmailTemplate({
-        title: "🏆 VICTORY ACHIEVED!",
-        content: `
+  // Game Won Email Template
+  gameWon: (gameName: string, roomId: string, prizeAmount?: string) => BaseEmailTemplate({
+    title: "🏆 VICTORY ACHIEVED!",
+    content: `
       <strong>CONGRATULATIONS!</strong> You've emerged victorious in ${gameName}! 🎉<br><br>
       
       Your skills, strategy, and determination have paid off. You've proven yourself 
@@ -309,15 +310,15 @@ export const TEMPLATES = {
       
       The arena celebrates your triumph. Keep the momentum going!
     `,
-        ctaText: "VIEW REWARDS",
-        ctaUrl: `${APP_URL}/dashboard/rooms/${roomId}`,
-        footerText: "Champions are made in moments like these. Keep dominating!"
-    }),
+    ctaText: "VIEW REWARDS",
+    ctaUrl: `${APP_URL}/dashboard/rooms/${roomId}`,
+    footerText: "Champions are made in moments like these. Keep dominating!"
+  }),
 
-    // Tournament Advance Email Template
-    tournamentAdvance: (tournamentName: string, nextRound: string, roomId: string) => BaseEmailTemplate({
-        title: "🚀 TOURNAMENT ADVANCE!",
-        content: `
+  // Tournament Advance Email Template
+  tournamentAdvance: (tournamentName: string, nextRound: string, roomId: string) => BaseEmailTemplate({
+    title: "🚀 TOURNAMENT ADVANCE!",
+    content: `
       <strong>INCREDIBLE!</strong> You've advanced to the next round! 🎯<br><br>
       
       <strong>Tournament:</strong> ${tournamentName}<br>
@@ -334,15 +335,15 @@ export const TEMPLATES = {
       
       The championship is within reach. Don't stop now!
     `,
-        ctaText: "VIEW TOURNAMENT",
-        ctaUrl: `${APP_URL}/dashboard/rooms/${roomId}`,
-        footerText: "Every round brings you closer to championship glory!"
-    }),
+    ctaText: "VIEW TOURNAMENT",
+    ctaUrl: `${APP_URL}/dashboard/rooms/${roomId}`,
+    footerText: "Every round brings you closer to championship glory!"
+  }),
 
-    // Tournament Elimination Email Template
-    tournamentElimination: (tournamentName: string, finalRank: number, roomId: string) => BaseEmailTemplate({
-        title: "💪 TOURNAMENT ELIMINATION",
-        content: `
+  // Tournament Elimination Email Template
+  tournamentElimination: (tournamentName: string, finalRank: number, roomId: string) => BaseEmailTemplate({
+    title: "💪 TOURNAMENT ELIMINATION",
+    content: `
       You've been eliminated from <strong>${tournamentName}</strong>, but your journey 
       doesn't end here! 💪<br><br>
       
@@ -360,15 +361,15 @@ export const TEMPLATES = {
       
       The arena awaits your return. Come back stronger!
     `,
-        ctaText: "FIND NEW TOURNAMENTS",
-        ctaUrl: `${APP_URL}/dashboard/rooms/${roomId}`,
-        footerText: "Every champion was once a beginner. Keep pushing forward!"
-    }),
+    ctaText: "FIND NEW TOURNAMENTS",
+    ctaUrl: `${APP_URL}/dashboard/rooms/${roomId}`,
+    footerText: "Every champion was once a beginner. Keep pushing forward!"
+  }),
 
-    // Highscore Beaten Email Template
-    highscoreBeaten: (gameName: string, playerName: string, newScore: number, roomId: string) => BaseEmailTemplate({
-        title: "📈 HIGHSCORE CHALLENGE!",
-        content: `
+  // Highscore Beaten Email Template
+  highscoreBeaten: (gameName: string, playerName: string, newScore: number, roomId: string) => BaseEmailTemplate({
+    title: "📈 HIGHSCORE CHALLENGE!",
+    content: `
       <strong>${playerName}</strong> has beaten your highscore in ${gameName}! 📈<br><br>
       
       <strong>New Highscore:</strong> ${newScore.toLocaleString()}<br>
@@ -385,15 +386,15 @@ export const TEMPLATES = {
       
       The arena respects only the strongest. Will you answer the call?
     `,
-        ctaText: "RECLAIM YOUR THRONE",
-        ctaUrl: `${APP_URL}/dashboard/rooms/${roomId}`,
-        footerText: "True champions never back down from a challenge!"
-    }),
+    ctaText: "RECLAIM YOUR THRONE",
+    ctaUrl: `${APP_URL}/dashboard/rooms/${roomId}`,
+    footerText: "True champions never back down from a challenge!"
+  }),
 
-    // Prize Distribution Email Template
-    prizeDistribution: (amount: string, roomName: string) => BaseEmailTemplate({
-        title: "💰 PRIZE DISTRIBUTED!",
-        content: `
+  // Prize Distribution Email Template
+  prizeDistribution: (amount: string, roomName: string) => BaseEmailTemplate({
+    title: "💰 PRIZE DISTRIBUTED!",
+    content: `
       <strong>Congratulations!</strong> Your prize has been distributed! 💰<br><br>
       
       <strong>Amount:</strong> ${amount}<br>
@@ -409,15 +410,15 @@ export const TEMPLATES = {
       
       Your success in the arena has been rewarded. Keep the momentum going!
     `,
-        ctaText: "VIEW WALLET",
-        ctaUrl: "https://nexuz.xyz/wallet",
-        footerText: "Success in the arena comes with real rewards. Keep competing!"
-    }),
+    ctaText: "VIEW WALLET",
+    ctaUrl: "https://nexuz.xyz/wallet",
+    footerText: "Success in the arena comes with real rewards. Keep competing!"
+  }),
 
-    // Room Cancelled Email Template
-    roomCancelled: (roomName: string, refundAmount?: string) => BaseEmailTemplate({
-        title: "⚠️ ROOM CANCELLED",
-        content: `
+  // Room Cancelled Email Template
+  roomCancelled: (roomName: string, refundAmount?: string) => BaseEmailTemplate({
+    title: "⚠️ ROOM CANCELLED",
+    content: `
       The game room <strong>${roomName}</strong> has been cancelled. ⚠️<br><br>
       
       <strong>Status:</strong> Cancelled<br>
@@ -436,15 +437,15 @@ export const TEMPLATES = {
       
       The arena is full of opportunities. Don't let this setback stop you!
     `,
-        ctaText: "FIND NEW GAMES",
-        ctaUrl: `${APP_URL}/dashboard/rooms`,
-        footerText: "Every cancelled room is a new opportunity waiting to be discovered!"
-    }),
+    ctaText: "FIND NEW GAMES",
+    ctaUrl: `${APP_URL}/dashboard/rooms`,
+    footerText: "Every cancelled room is a new opportunity waiting to be discovered!"
+  }),
 
-    // Friend Request Accepted Email Template
-    friendRequestAccepted: (friendName: string) => BaseEmailTemplate({
-        title: "✅ FRIEND REQUEST ACCEPTED!",
-        content: `
+  // Friend Request Accepted Email Template
+  friendRequestAccepted: (friendName: string) => BaseEmailTemplate({
+    title: "✅ FRIEND REQUEST ACCEPTED!",
+    content: `
       <strong>Great news!</strong> ${friendName} has accepted your friend request! ✅<br><br>
       
       You're now connected in the Nexuz Arena community! This opens up 
@@ -460,8 +461,8 @@ export const TEMPLATES = {
       Strong connections lead to greater success in the arena. 
       Welcome to your expanded gaming family!
     `,
-        ctaText: "VIEW FRIENDS",
-        ctaUrl: `${APP_URL}/friends`,
-        footerText: "Friendship in the arena is the foundation of legendary teams!"
-    })
+    ctaText: "VIEW FRIENDS",
+    ctaUrl: `${APP_URL}/friends`,
+    footerText: "Friendship in the arena is the foundation of legendary teams!"
+  })
 };

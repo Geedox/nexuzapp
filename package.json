@@ -14,7 +14,8 @@
     "test:game-room-completion": "tsx scripts/test-game-room-completion.ts",
     "test:fetch-room": "tsx scripts/game-room.ts",
     "transfer": "tsx scripts/game-room-tests/transfer.ts",
-    "test:supabase": "tsx scripts/supabase.ts"
+    "test:supabase": "tsx scripts/supabase.ts",
+    "test:resend": "tsx scripts/resend.ts"
   },
   "dependencies": {
     "@cetusprotocol/common-sdk": "^1.1.6",

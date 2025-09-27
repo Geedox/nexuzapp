@@ -110,6 +110,7 @@ class TournamentTimingService {
     private async handleMatchTimeout(matchId: string, roomId: string): Promise<void> {
         try {
             logger.info(`Match ${matchId} timed out`);
+            const { data: room } = await supabase.from("game_rooms").select("name").single()
 
             // Get the match details
             const match = await tournamentService.getMatchById(matchId);
@@ -129,6 +130,7 @@ class TournamentTimingService {
             const participants = [match.player1_id, match.player2_id, match.player3_id, match.player4_id].filter(Boolean);
 
             let winnerId: string | null = null;
+            let loserId: string | null = null;
             let highestScore = -1;
 
             // Find participant with highest score
@@ -136,8 +138,8 @@ class TournamentTimingService {
                 const score = scores[participantId!] || 0;
                 if (score > highestScore) {
                     highestScore = score;
-                    winnerId = participantId!;
-                }
+                    winnerId = participantId;
+                } else loserId = participantId
             }
 
             // If no scores submitted, advance first player (or random)
@@ -148,7 +150,7 @@ class TournamentTimingService {
 
             if (winnerId) {
                 // Complete the match with timeout status
-                await tournamentService.completeMatch(matchId, winnerId, scores);
+                await tournamentService.completeMatch(matchId, winnerId, loserId, room.name, scores);
                 logger.success(`Match ${matchId} completed due to timeout, winner: ${winnerId}`);
             } else {
                 // Mark match as timeout without winner

@@ -1,7 +1,7 @@
 import { EmailWithResend } from '../integrations/resend';
 
 
-export class emailService {
+export class EmailService {
   private emailClient: EmailWithResend;
 
   constructor() {

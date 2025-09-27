@@ -195,7 +195,7 @@ class GameRoomService {
           };
 
           // For tournament rooms, create tournament matches if not already created
-          if (room.mode === "tournament") {
+          if (room.mode === "tournament" && room.current_players >= room.max_players) {
             try {
               // Check if tournament matches already exist
               const { data: existingMatches } = await supabase

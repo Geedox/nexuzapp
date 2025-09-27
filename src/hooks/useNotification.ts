@@ -91,7 +91,7 @@ export const useNotification = () => {
             participantIds,
             'room_created',
             data,
-            { sendEmail: false, priority: 'medium' }
+            { sendEmail: true, priority: 'medium' }
         );
     }, [createBulkNotifications]);
 
@@ -113,7 +113,7 @@ export const useNotification = () => {
             participantIds.filter(id => id !== playerId), // Don't notify the player who joined
             'player_joined',
             data,
-            { sendEmail: false, priority: 'low' }
+            { sendEmail: true, priority: 'low' }
         );
     }, [createBulkNotifications]);
 

@@ -1,7 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/utils/logger";
 import type { Database, TablesInsert } from "@/integrations/supabase/types";
-import { emailService } from "@/lib/emailService";
+import { EmailService } from "@/lib/emailService";
 
 // Notification data interfaces
 interface NotificationData {
@@ -43,10 +43,10 @@ interface NotificationPreferences {
 }
 
 class NotificationService {
-    private emailService: emailService;
+    private emailService: EmailService;
 
     constructor() {
-        this.emailService = new emailService();
+        this.emailService = new EmailService();
     }
 
     // Notification templates for different event types
@@ -211,7 +211,7 @@ class NotificationService {
     }
 
     // Get user notification preferences
-    private async getUserNotificationPreferences(userId: string): Promise<NotificationPreferences> {
+    async getUserNotificationPreferences(userId: string): Promise<NotificationPreferences> {
         try {
             const { data: profile, error } = await supabase
                 .from('profiles')

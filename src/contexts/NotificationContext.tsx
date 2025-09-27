@@ -145,6 +145,13 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
     [notifications, refreshStats]
   );
 
+  const getNotificationPreferences = useCallback(async () => {
+    if (!user) return;
+    const preferences =
+      await notificationService.getUserNotificationPreferences(user.id);
+    setPreferences(preferences);
+  }, [user]);
+
   // Clear all notifications
   const clearAllNotifications = useCallback(async () => {
     if (!user) return;
@@ -292,6 +299,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
       loadNotifications();
       refreshStats();
       subscribeToNotifications();
+      getNotificationPreferences();
     } else {
       // Clear state when user logs out
       setNotifications([]);
