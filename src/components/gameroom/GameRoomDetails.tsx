@@ -9,11 +9,11 @@ import { AdminPanel } from "@/components/gameroom/AdminPanel";
 import { ApprovalSection } from "@/components/gameroom/ApprovalSection";
 import { TournamentProvider } from "@/contexts/TournamentContext";
 import { logger } from "@/utils";
+import { gameRoomService } from "@/services/gameRoomService";
 
 const GameRoomDetails = ({ roomId, onBack }) => {
   const {
     getRoomDetails,
-    getRoomParticipants,
     leaveRoom,
     cancelRoom,
     playGame,
@@ -66,7 +66,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
       try {
         const [roomData, participantsData] = await Promise.all([
           getRoomDetails(roomId),
-          getRoomParticipants(roomId),
+          gameRoomService.getRoomParticipants(roomId),
         ]);
 
         if (roomData) {
@@ -114,7 +114,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
         setLoading(false);
       }
     },
-    [roomId, getRoomDetails, getRoomParticipants, getSignatureStatus, toast]
+    [roomId, getRoomDetails, getSignatureStatus, toast]
   );
   // Function to check if room should auto-complete
   const checkForAutoCompletion = useCallback(async () => {
