@@ -13,11 +13,11 @@ export class EmailWithResend {
   private senderEmail: string;
 
   constructor() {
-    const resendApiKey = process.env.VITE_RESEND_API_KEY;
-    // const resendApiKey = import.meta.env.VITE_RESEND_API_KEY;
+    // const resendApiKey = process.env.VITE_RESEND_API_KEY;
+    const resendApiKey = import.meta.env.VITE_RESEND_API_KEY;
     this.resend = new Resend(resendApiKey);
-    // this.senderEmail = import.meta.env.VITE_SENDER_ADDRESS;
-    this.senderEmail = process.env.VITE_SENDER_ADDRESS;
+    this.senderEmail = import.meta.env.VITE_SENDER_ADDRESS;
+    // this.senderEmail = process.env.VITE_SENDER_ADDRESS;
   }
 
   private async sendEmail(options: EmailOptions) {
