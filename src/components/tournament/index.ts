@@ -1,3 +1,3 @@
 export { TournamentDisplay } from './TournamentDisplay';
-export { MultiplayerTournament } from './MultiplayerTournament';
-export { HighscoreTournament } from './HighscoreTournament';
+export { RoundRobin } from './RoundRobin';
+export { SingleElimination } from './SingleElimination';

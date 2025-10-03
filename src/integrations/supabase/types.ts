@@ -410,6 +410,18 @@ export type Database = {
           payout_transaction_id: string | null
           room_id: string | null
           score: number | null
+          tournament_draws: number | null
+          tournament_eliminated_round: number | null
+          tournament_final_position: number | null
+          tournament_goal_difference: number | null
+          tournament_goals_against: number | null
+          tournament_goals_for: number | null
+          tournament_losses: number | null
+          tournament_matches_played: number | null
+          tournament_performance_data: Json | null
+          tournament_points: number | null
+          tournament_seed: number | null
+          tournament_wins: number | null
           user_id: string | null
           wallet_id: string | null
         }
@@ -428,6 +440,18 @@ export type Database = {
           payout_transaction_id?: string | null
           room_id?: string | null
           score?: number | null
+          tournament_draws?: number | null
+          tournament_eliminated_round?: number | null
+          tournament_final_position?: number | null
+          tournament_goal_difference?: number | null
+          tournament_goals_against?: number | null
+          tournament_goals_for?: number | null
+          tournament_losses?: number | null
+          tournament_matches_played?: number | null
+          tournament_performance_data?: Json | null
+          tournament_points?: number | null
+          tournament_seed?: number | null
+          tournament_wins?: number | null
           user_id?: string | null
           wallet_id?: string | null
         }
@@ -446,6 +470,18 @@ export type Database = {
           payout_transaction_id?: string | null
           room_id?: string | null
           score?: number | null
+          tournament_draws?: number | null
+          tournament_eliminated_round?: number | null
+          tournament_final_position?: number | null
+          tournament_goal_difference?: number | null
+          tournament_goals_against?: number | null
+          tournament_goals_for?: number | null
+          tournament_losses?: number | null
+          tournament_matches_played?: number | null
+          tournament_performance_data?: Json | null
+          tournament_points?: number | null
+          tournament_seed?: number | null
+          tournament_wins?: number | null
           user_id?: string | null
           wallet_id?: string | null
         }
@@ -1138,12 +1174,20 @@ export type Database = {
           completed_at: string | null
           created_at: string | null
           id: string
+          is_draw: boolean | null
           match_data: Json | null
+          match_duration_minutes: number | null
           match_number: number
+          match_type: string | null
+          performance_metadata: Json | null
           player1_id: string | null
+          player1_score: number | null
           player2_id: string | null
+          player2_score: number | null
           player3_id: string | null
+          player3_score: number | null
           player4_id: string | null
+          player4_score: number | null
           room_id: string | null
           round_number: number
           started_at: string | null
@@ -1156,12 +1200,20 @@ export type Database = {
           completed_at?: string | null
           created_at?: string | null
           id?: string
+          is_draw?: boolean | null
           match_data?: Json | null
+          match_duration_minutes?: number | null
           match_number: number
+          match_type?: string | null
+          performance_metadata?: Json | null
           player1_id?: string | null
+          player1_score?: number | null
           player2_id?: string | null
+          player2_score?: number | null
           player3_id?: string | null
+          player3_score?: number | null
           player4_id?: string | null
+          player4_score?: number | null
           room_id?: string | null
           round_number: number
           started_at?: string | null
@@ -1174,12 +1226,20 @@ export type Database = {
           completed_at?: string | null
           created_at?: string | null
           id?: string
+          is_draw?: boolean | null
           match_data?: Json | null
+          match_duration_minutes?: number | null
           match_number?: number
+          match_type?: string | null
+          performance_metadata?: Json | null
           player1_id?: string | null
+          player1_score?: number | null
           player2_id?: string | null
+          player2_score?: number | null
           player3_id?: string | null
+          player3_score?: number | null
           player4_id?: string | null
+          player4_score?: number | null
           room_id?: string | null
           round_number?: number
           started_at?: string | null
@@ -1227,6 +1287,103 @@ export type Database = {
           {
             foreignKeyName: "tournament_matches_winner_id_fkey"
             columns: ["winner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tournament_standings: {
+        Row: {
+          average_score: number | null
+          best_score: number | null
+          consistency_rating: number | null
+          created_at: string | null
+          current_position: number | null
+          draws: number | null
+          eliminated_round: number | null
+          goal_difference: number | null
+          goals_against: number | null
+          goals_for: number | null
+          id: string
+          is_eliminated: boolean | null
+          losses: number | null
+          matches_played: number | null
+          participant_id: string
+          points: number | null
+          room_id: string
+          seed_position: number | null
+          updated_at: string | null
+          user_id: string
+          wins: number | null
+          worst_score: number | null
+        }
+        Insert: {
+          average_score?: number | null
+          best_score?: number | null
+          consistency_rating?: number | null
+          created_at?: string | null
+          current_position?: number | null
+          draws?: number | null
+          eliminated_round?: number | null
+          goal_difference?: number | null
+          goals_against?: number | null
+          goals_for?: number | null
+          id?: string
+          is_eliminated?: boolean | null
+          losses?: number | null
+          matches_played?: number | null
+          participant_id: string
+          points?: number | null
+          room_id: string
+          seed_position?: number | null
+          updated_at?: string | null
+          user_id: string
+          wins?: number | null
+          worst_score?: number | null
+        }
+        Update: {
+          average_score?: number | null
+          best_score?: number | null
+          consistency_rating?: number | null
+          created_at?: string | null
+          current_position?: number | null
+          draws?: number | null
+          eliminated_round?: number | null
+          goal_difference?: number | null
+          goals_against?: number | null
+          goals_for?: number | null
+          id?: string
+          is_eliminated?: boolean | null
+          losses?: number | null
+          matches_played?: number | null
+          participant_id?: string
+          points?: number | null
+          room_id?: string
+          seed_position?: number | null
+          updated_at?: string | null
+          user_id?: string
+          wins?: number | null
+          worst_score?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tournament_standings_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "game_room_participants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_standings_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "game_rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_standings_user_id_fkey"
+            columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -1698,7 +1855,6 @@ export const Constants = {
     },
   },
 } as const
-
 
 // Gaming avatars for chat rooms
 export const GAMING_AVATARS = [

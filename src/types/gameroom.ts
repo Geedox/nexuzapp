@@ -131,16 +131,13 @@ export interface CreateRoomData {
     gameName?: string;
     mode: "regular" | "tournament" | "league";
     playMode: "single" | "multiplayer"; // New field for single vs multiplayer
-    // Tournament-specific fields
-    tournamentRounds?: number;
-    roundDurationMinutes?: number;
-    eliminationType?: "single" | "double" | "swiss";
-    maxRounds?: number;
+    // Tournament-specific fields (rounds calculated automatically based on player count)
+    eliminationType?: "single" | "round_robin";
     playersPerMatch?: number;
-    timeLimitMinutes?: number;
     autoStart?: boolean;
     seedingEnabled?: boolean;
     spectatorMode?: boolean;
+    maxRounds?: number; // Number of rounds for round robin tournaments
 }
 
 export interface GameRoomFilters {

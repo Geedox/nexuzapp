@@ -38,6 +38,7 @@ import Decimal from "decimal.js";
 // Import Cetus SDK with correct exports
 import { CetusClmmSDK, Pool } from "@cetusprotocol/sui-clmm-sdk";
 import { Percentage, adjustForSlippage, d } from "@cetusprotocol/common-sdk";
+import { logger } from "@/utils";
 
 interface CetusSwapModalProps {
   open: boolean;
@@ -111,9 +112,9 @@ export const CetusSwapModal = ({
         sdk.setSenderAddress(profile.sui_wallet_data.address);
 
         setCetusSDK(sdk);
-        console.log("✅ Cetus Swap initialized successfully");
+        logger.success("✅ Cetus Swap initialized successfully");
       } catch (error) {
-        console.error("❌ Failed to initialize Swap:", error);
+        logger.error("❌ Failed to initialize Swap:", error);
         toast({
           title: "SDK Initialization Failed",
           description: "Failed to connect to Swap protocol. Please try again.",
@@ -161,7 +162,7 @@ export const CetusSwapModal = ({
 
     setIsCalculating(true);
     try {
-      console.log(`🔄 Calculating swap: ${amount} ${from} → ${to}`);
+      logger.info(`🔄 Calculating swap: ${amount} ${from} → ${to}`);
 
       const fromTokenAddress = COIN_TYPES[from as keyof typeof COIN_TYPES];
       const toTokenAddress = COIN_TYPES[to as keyof typeof COIN_TYPES];
@@ -171,7 +172,7 @@ export const CetusSwapModal = ({
       const poolId = POOL_IDS[pairKey];
 
       if (!poolId) {
-        console.log("❌ No pool ID found for this pair");
+        logger.warn("❌ No pool ID found for this pair");
         setToAmount("");
         setPoolInfo(null);
         setPreSwapResult(null);
@@ -183,7 +184,7 @@ export const CetusSwapModal = ({
         return;
       }
 
-      console.log("📊 Using pool ID:", poolId);
+      logger.info("📊 Using pool ID:", poolId);
 
       // Get pool data using exact method from docs
       const pools = await cetusSDK.Pool.getPoolByCoins([
@@ -192,7 +193,7 @@ export const CetusSwapModal = ({
       ]);
       const pool = pools[0];
       setPoolInfo(pool);
-      console.log("📊 Found  pool:", pool.id);
+      logger.info("📊 Found  pool:", pool.id);
 
       // Determine swap direction following docs exactly
       const a2b =

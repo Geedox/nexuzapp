@@ -32,8 +32,6 @@ class TournamentService {
     try {
       // Validate input data
       this.validateTournamentData(data);
-
-
       // Get all active participants
       const { data: participants, error: participantsError } = await supabase
         .from("game_room_participants")
@@ -57,7 +55,12 @@ class TournamentService {
       }
 
       // Calculate number of rounds needed
-      const totalRounds = this.calculateTotalRounds(participants.length, data.eliminationType);
+      let totalRounds = this.calculateTotalRounds(participants.length, data.eliminationType);
+
+      // For round robin, use the maxRounds from the data if provided
+      if (data.eliminationType === "round_robin" && data.maxRounds) {
+        totalRounds = data.maxRounds;
+      }
 
       // Generate bracket structure
       const bracket = this.generateBracket(participants, data.eliminationType, totalRounds);
@@ -129,15 +132,22 @@ class TournamentService {
         })
         .eq("id", data.roomId);
 
+      // checks if there is a match where there is a bye and advance handleBye on the match
+      const { data: matchesToAdvance, error: matchesToAdvanceError } = await supabase
+        .from("tournament_matches")
+        .select("*")
+        .eq("room_id", data.roomId)
+        .eq("status", "pending")
+        .eq("player1_id", null)
+        .eq("player2_id", null);
+
+      if (matchesToAdvanceError) throw matchesToAdvanceError;
+      if (!matchesToAdvance) return;
+      for (const match of matchesToAdvance) {
+        await this.advanceWinnerToNextRound(match as TournamentMatch, data.roomId);
+      }
+
       logger.success(`Created ${createdMatches.length} tournament matches for room ${data.roomId}`);
-
-      // Start tournament timing system
-      await this.startTournamentTiming(data.roomId, {
-        matchTimeLimitMinutes: data.timeLimitMinutes,
-        roundDurationMinutes: data.roundDurationMinutes,
-        autoAdvanceRounds: true,
-      });
-
       return createdMatches as TournamentMatch[];
 
     } catch (error) {
@@ -298,8 +308,18 @@ class TournamentService {
         is_eliminated: false,
         elimination_round: null,
         total_score: participant.score || 0,
-        matches_played: 0,
-        matches_won: 0,
+        matches_played: participant.tournament_matches_played || 0,
+        matches_won: participant.tournament_wins || 0,
+        tournament_points: participant.tournament_points || 0,
+        tournament_wins: participant.tournament_wins || 0,
+        tournament_draws: participant.tournament_draws || 0,
+        tournament_losses: participant.tournament_losses || 0,
+        tournament_matches_played: participant.tournament_matches_played || 0,
+        tournament_goals_for: participant.tournament_goals_for || 0,
+        tournament_goals_against: participant.tournament_goals_against || 0,
+        tournament_goal_difference: participant.tournament_goal_difference || 0,
+        tournament_final_position: participant.tournament_final_position || null,
+        tournament_performance_data: {},
         user: participant.user,
       }));
 
@@ -348,55 +368,15 @@ class TournamentService {
     }
   }
 
-  // Advance to next round
-  async advanceToNextRound(roomId: string): Promise<void> {
-    try {
-      const { data: room, error: roomError } = await supabase
-        .from("game_rooms")
-        .select("current_round, tournament_rounds")
-        .eq("id", roomId)
-        .single();
-
-      if (roomError) throw roomError;
-
-      const nextRound = (room.current_round || 1) + 1;
-
-      if (nextRound > (room.tournament_rounds || 0)) {
-        // Tournament complete
-        await supabase
-          .from("game_rooms")
-          .update({
-            status: "completed",
-            actual_end_time: new Date().toISOString(),
-          })
-          .eq("id", roomId);
-      } else {
-        // Advance to next round
-        await supabase
-          .from("game_rooms")
-          .update({
-            current_round: nextRound,
-          })
-          .eq("id", roomId);
-
-        // Start next round matches
-        await this.startNextRoundMatches(roomId, nextRound);
-      }
-    } catch (error) {
-      logger.error("Error advancing to next round:", error);
-      throw error;
-    }
-  }
-
   // Private helper methods
   private calculateTotalRounds(participantCount: number, eliminationType: string): number {
     switch (eliminationType) {
       case "single":
         return Math.ceil(Math.log2(participantCount));
-      case "double":
-        return Math.ceil(Math.log2(participantCount)) * 2;
-      case "swiss":
-        return Math.ceil(Math.log2(participantCount));
+      case "round_robin":
+        // For round robin, we'll use the maxRounds from the room data
+        // This will be set when creating the tournament
+        return Math.ceil(Math.log2(participantCount)); // Fallback to log2 if maxRounds not set
       default:
         return Math.ceil(Math.log2(participantCount));
     }
@@ -411,11 +391,9 @@ class TournamentService {
 
     switch (eliminationType) {
       case "single":
-        return this.generateSingleEliminationBracket(shuffledParticipants, totalRounds);
-      case "double":
-        return this.generateDoubleEliminationBracket(shuffledParticipants, totalRounds);
-      case "swiss":
-        return this.generateSwissBracket(shuffledParticipants, totalRounds);
+        return this.generateSingleEliminationBracket(shuffledParticipants);
+      case "round_robin":
+        return this.generateRoundRobinBracket(shuffledParticipants, totalRounds);
       default:
         throw new Error(`Unsupported elimination type: ${eliminationType}`);
     }
@@ -423,11 +401,13 @@ class TournamentService {
 
   private generateSingleEliminationBracket(
     participants: { user_id: string;[key: string]: unknown }[],
-    totalRounds: number
   ): { player1_id: string; player2_id: string | null; player3_id?: string | null; player4_id?: string | null; status: Status }[][] {
     const bracket: { player1_id: string; player2_id: string | null; status: Status }[][] = [];
     const currentRound = participants;
-
+    const numOfPlayers = participants.length;
+    const nearestPowerOfTwo = Math.pow(2, Math.ceil(Math.log2(numOfPlayers)));
+    // Calculate total rounds needed for a full bracket
+    const totalRounds = Math.log2(nearestPowerOfTwo);
     for (let round = 0; round < totalRounds; round++) {
       const roundMatches: { player1_id: string; player2_id: string | null; status: Status }[] = [];
 
@@ -468,272 +448,83 @@ class TournamentService {
     return bracket;
   }
 
-  private generateDoubleEliminationBracket(
+  private generateRoundRobinBracket(
     participants: { user_id: string;[key: string]: unknown }[],
     totalRounds: number
-  ): { player1_id: string; player2_id: string | null; player3_id?: string | null; player4_id?: string | null; status: Status }[][] {
-    const bracket: { player1_id: string; player2_id: string | null; status: Status }[][] = [];
-    const winnerRounds = Math.ceil(Math.log2(participants.length));
-    const loserRounds = (winnerRounds - 1) * 2;
+  ): {
+    player1_id: string;
+    player2_id: string | null;
+    status: Status;
+  }[][] {
+    const bracket: {
+      player1_id: string;
+      player2_id: string | null;
+      status: Status;
+    }[][] = [];
 
-    // Generate winner bracket rounds
-    for (let round = 0; round < winnerRounds; round++) {
-      const roundMatches: { player1_id: string; player2_id: string | null; status: Status }[] = [];
+    const players = [...participants];
+    const numPlayers = players.length;
 
-      if (round === 0) {
-        // First winner bracket round
-        for (let i = 0; i < participants.length; i += 2) {
-          if (i + 1 < participants.length) {
+    // If odd number of players, add a dummy "bye"
+    if (numPlayers % 2 !== 0) {
+      players.push({ user_id: "BYE" });
+    }
+
+    const n = players.length;
+
+    // Generate round-robin schedule (circle method)
+    const fixed = players[0];
+    const rotating = players.slice(1);
+
+    for (let repeat = 0; repeat < totalRounds; repeat++) {
+      for (let round = 0; round < n - 1; round++) {
+        const roundMatches: {
+          player1_id: string;
+          player2_id: string | null;
+          status: Status;
+        }[] = [];
+
+        const pairings = [fixed, ...rotating];
+        for (let i = 0; i < n / 2; i++) {
+          const p1 = pairings[i];
+          const p2 = pairings[n - 1 - i];
+
+          if (p1.user_id !== "BYE" && p2.user_id !== "BYE") {
             roundMatches.push({
-              player1_id: participants[i].user_id,
-              player2_id: participants[i + 1].user_id,
-              status: "active"
+              player1_id: p1.user_id,
+              player2_id: p2.user_id,
+              status: "pending",
             });
           } else {
+            // Bye round
+            const realPlayer = p1.user_id === "BYE" ? p2 : p1;
             roundMatches.push({
-              player1_id: participants[i].user_id,
+              player1_id: realPlayer.user_id,
               player2_id: null,
-              status: "active"
+              status: "pending",
             });
           }
         }
-      } else {
-        // Subsequent winner bracket rounds
-        const expectedMatches = Math.ceil(bracket[round - 1].length / 2);
-        for (let i = 0; i < expectedMatches; i++) {
-          roundMatches.push({
-            player1_id: null,
-            player2_id: null,
-            status: "pending"
-          });
-        }
+
+        bracket.push(roundMatches);
+
+        // Rotate players for next round
+        rotating.unshift(rotating.pop()!);
       }
-      bracket.push(roundMatches);
-    }
-
-    // Generate loser bracket rounds
-    for (let round = 0; round < loserRounds; round++) {
-      const roundMatches: { player1_id: string; player2_id: string | null; status: Status }[] = [];
-      // Calculate expected matches for loser bracket rounds
-      const expectedMatches = round % 2 === 0 ?
-        Math.ceil(participants.length / Math.pow(2, Math.floor(round / 2) + 2)) :
-        Math.ceil(participants.length / Math.pow(2, Math.floor(round / 2) + 3));
-
-      for (let i = 0; i < Math.max(1, expectedMatches); i++) {
-        roundMatches.push({
-          player1_id: null,
-          player2_id: null,
-          status: "active"
-        });
-      }
-      bracket.push(roundMatches);
-    }
-
-    // Final match (winner of winner bracket vs winner of loser bracket)
-    bracket.push([{
-      player1_id: null,
-      player2_id: null,
-      status: "active"
-    }]);
-
-    return bracket;
-  }
-
-  private generateSwissBracket(
-    participants: { user_id: string;[key: string]: unknown }[],
-    totalRounds: number
-  ): { player1_id: string; player2_id: string | null; player3_id?: string | null; player4_id?: string | null; status: Status }[][] {
-    const bracket: { player1_id: string; player2_id: string | null; status: Status }[][] = [];
-
-    for (let round = 0; round < totalRounds; round++) {
-      const roundMatches: { player1_id: string; player2_id: string | null; status: Status }[] = [];
-
-      if (round === 0) {
-        // First round - random pairing
-        const shuffled = [...participants].sort(() => Math.random() - 0.5);
-        for (let i = 0; i < shuffled.length; i += 2) {
-          if (i + 1 < shuffled.length) {
-            roundMatches.push({
-              player1_id: shuffled[i].user_id,
-              player2_id: shuffled[i + 1].user_id,
-              status: "active"
-            });
-          } else {
-            // Bye for odd player
-            roundMatches.push({
-              player1_id: shuffled[i].user_id,
-              player2_id: null,
-              status: "active"
-            });
-          }
-        }
-      } else {
-        // Subsequent rounds - pair by performance (will be handled by pairing algorithm)
-        const matchCount = Math.ceil(participants.length / 2);
-        for (let i = 0; i < matchCount; i++) {
-          roundMatches.push({
-            player1_id: null, // Will be filled by Swiss pairing algorithm
-            player2_id: null,
-            status: "pending"
-          });
-        }
-      }
-
-      bracket.push(roundMatches);
     }
 
     return bracket;
   }
 
-  private async checkRoundCompletion(roomId: string, roundNumber: number): Promise<void> {
-    try {
-      const { data: roundMatches, error } = await supabase
-        .from("tournament_matches")
-        .select("status")
-        .eq("room_id", roomId)
-        .eq("round_number", roundNumber);
-
-      if (error) throw error;
-
-      const allCompleted = roundMatches?.every(m =>
-        m.status === "completed" || m.status === "timeout"
-      );
-
-      if (allCompleted) {
-        await this.advanceToNextRound(roomId);
-      }
-    } catch (error) {
-      logger.error("Error checking round completion:", error);
-      throw error;
-    }
-  }
-
-  private async startNextRoundMatches(roomId: string, roundNumber: number): Promise<void> {
-    try {
-      // First, populate the next round matches with winners from previous round
-      await this.populateNextRoundMatches(roomId, roundNumber);
-
-      // Then set the status to pending to start the round
-      const { error } = await supabase
-        .from("tournament_matches")
-        .update({ status: "pending" })
-        .eq("room_id", roomId)
-        .eq("round_number", roundNumber);
-
-      if (error) throw error;
-    } catch (error) {
-      logger.error("Error starting next round matches:", error);
-      throw error;
-    }
-  }
-
-  private async populateNextRoundMatches(roomId: string, roundNumber: number): Promise<void> {
-    try {
-      // Get the previous round matches with winners
-      const { data: previousRoundMatches, error: prevError } = await supabase
-        .from("tournament_matches")
-        .select("*")
-        .eq("room_id", roomId)
-        .eq("round_number", roundNumber - 1)
-        .eq("status", "completed")
-        .order("match_number");
-
-      if (prevError) throw prevError;
-
-      if (!previousRoundMatches || previousRoundMatches.length === 0) {
-        throw new Error("No completed matches found in previous round");
-      }
-
-      // Get the current round matches that need to be populated
-      const { data: currentRoundMatches, error: currError } = await supabase
-        .from("tournament_matches")
-        .select("*")
-        .eq("room_id", roomId)
-        .eq("round_number", roundNumber)
-        .order("match_number");
-
-      if (currError) throw currError;
-
-      if (!currentRoundMatches || currentRoundMatches.length === 0) {
-        throw new Error("No matches found for current round");
-      }
-
-      // Get tournament type to determine advancement logic
-      const { data: room, error: roomError } = await supabase
-        .from("game_rooms")
-        .select("bracket_data")
-        .eq("id", roomId)
-        .single();
-
-      if (roomError) throw roomError;
-
-      const bracketData = room.bracket_data as { elimination_type?: string } | null;
-      const eliminationType = bracketData?.elimination_type || "single";
-
-      // Populate matches based on tournament type
-      await this.advanceWinnersToNextRound(
-        previousRoundMatches as TournamentMatch[],
-        currentRoundMatches as TournamentMatch[],
-        eliminationType,
-        roundNumber
-      );
-
-    } catch (error) {
-      logger.error("Error populating next round matches:", error);
-      throw error;
-    }
-  }
-
-  private async advanceWinnersToNextRound(
-    previousMatches: TournamentMatch[],
-    currentMatches: TournamentMatch[],
-    eliminationType: string,
-    roundNumber: number
-  ): Promise<void> {
-    const updates: { matchId: string; player1_id: string | null; player2_id: string | null; status: Status }[] = [];
-
-    switch (eliminationType) {
-      case "single":
-        // Single elimination: pair winners from previous round
-        for (let i = 0; i < currentMatches.length; i++) {
-          const match1Index = i * 2;
-          const match2Index = i * 2 + 1;
-
-          const player1_id = match1Index < previousMatches.length ?
-            (previousMatches[match1Index].winner_id || this.handleBye(previousMatches[match1Index])) : null;
-          const player2_id = match2Index < previousMatches.length ?
-            (previousMatches[match2Index].winner_id || this.handleBye(previousMatches[match2Index])) : null;
-
-          updates.push({
-            matchId: currentMatches[i].id,
-            player1_id,
-            player2_id,
-            status: "active"
-          });
-        }
-        break;
-
-
-      default:
-        throw new Error(`Unsupported elimination type: ${eliminationType}`);
-    }
-
-    // Apply updates
-    for (const update of updates) {
-      const { error } = await supabase
-        .from("tournament_matches")
-        .update({
-          player1_id: update.player1_id,
-          player2_id: update.player2_id,
-          status: update.status
-        })
-        .eq("id", update.matchId);
-
-      if (error) throw error;
-    }
-  }
-
+  /**
+   * Handles the bye situation for a match
+   * @param match - The match to handle
+   * @returns 
+   */
   private handleBye(match: TournamentMatch): string | null {
+    if (match.status === "completed") {
+      return match.winner_id;
+    }
     // If there's only one player (bye situation), that player advances
     if (match.player1_id && !match.player2_id) {
       return match.player1_id;
@@ -755,7 +546,7 @@ class TournamentService {
       throw new Error("Elimination type is required");
     }
 
-    if (!["single", "double", "swiss"].includes(data.eliminationType)) {
+    if (!["single", "round_robin"].includes(data.eliminationType)) {
       throw new Error("Invalid elimination type");
     }
 
@@ -786,7 +577,7 @@ class TournamentService {
     }
 
     // For elimination tournaments, require even number of players
-    if (eliminationType !== "swiss" && count % 2 !== 0) {
+    if (eliminationType !== "round_robin" && count % 2 !== 0) {
       throw new Error(`${eliminationType} elimination requires an even number of players`);
     }
 
@@ -797,14 +588,9 @@ class TournamentService {
           throw new Error("Single elimination requires at least 2 players");
         }
         break;
-      case "double":
-        if (count < 4) {
-          throw new Error("Double elimination requires at least 4 players");
-        }
-        break;
-      case "swiss":
-        if (count < 4) {
-          throw new Error("Swiss system requires at least 4 players");
+      case "round_robin":
+        if (count < 2) {
+          throw new Error("Round robin system requires at least 2 players");
         }
         break;
     }
@@ -828,23 +614,17 @@ class TournamentService {
           max: 64,
           recommended: [4, 8, 16, 32],
         };
-      case "double":
+      case "round_robin":
         return {
-          min: 4,
-          max: 32,
-          recommended: [4, 8, 16],
-        };
-      case "swiss":
-        return {
-          min: 4,
-          max: 64,
-          recommended: [6, 8, 12, 16],
+          min: 2,
+          max: 20,
+          recommended: [4, 6, 8, 10, 12],
         };
       default:
         return {
           min: 2,
           max: 64,
-          recommended: [4, 8, 16],
+          recommended: [2, 4, 8, 16],
         };
     }
   }
@@ -863,99 +643,6 @@ class TournamentService {
       return match as TournamentMatch;
     } catch (error) {
       logger.error("Error getting match by ID:", error);
-      throw error;
-    }
-  }
-
-  // Complete a match
-  async completeMatch(matchId: string, winnerId: string, loserId: string, roomName: string, scores?: Record<string, number>): Promise<TournamentMatch> {
-    try {
-      const { data: matchData, error: matchDataError } = await supabase
-        .from("tournament_matches")
-        .select("match_data")
-        .eq("id", matchId)
-        .single();
-
-      if (matchDataError) throw matchDataError;
-
-      // Handle match_data which might be a string or object
-      const matchDataJson = typeof matchData.match_data === 'string'
-        ? JSON.parse(matchData.match_data)
-        : matchData.match_data;
-      const { data: match, error } = await supabase
-        .from("tournament_matches")
-        .update({
-          winner_id: winnerId,
-          status: "completed",
-          completed_at: new Date().toISOString(),
-          match_data: {
-            ...matchDataJson,
-            scores: scores,
-          },
-        })
-        .eq("id", matchId)
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      // Get room details to check if this is the last round
-      const { data: room, error: roomError } = await supabase
-        .from("game_rooms")
-        .select("tournament_rounds, current_round, status")
-        .eq("id", match.room_id)
-        .single();
-
-      if (roomError) throw roomError;
-
-      // Check if this is the final round
-      const isLastRound = room.current_round >= room.tournament_rounds;
-      if (isLastRound) {
-        // This is the final match - complete the entire tournament
-        logger.info(`Final match completed for room ${match.room_id}. Completing tournament.`);
-        // Complete the tournament using the existing game completion logic
-        await this.completeTournament(match.room_id, winnerId, loserId, scores);
-        logger.success(`Tournament completed for room ${match.room_id}`);
-      } else {
-        // Check if we need to advance winner to next round
-        await this.advanceWinnerToNextRound(match as TournamentMatch, roomName);
-      }
-      return match as TournamentMatch;
-    } catch (error) {
-      logger.error("Error completing match:", error);
-      throw error;
-    }
-  }
-
-  async completeTournament(roomId: string, winnerId: string, loserId: string, scores: Record<string, number>): Promise<void> {
-    try {
-      // Get room and participants data
-      const { data: room, error: roomError } = await supabase
-        .from("game_rooms")
-        .select(`
-          *,
-          participants:game_room_participants(*, user:profiles(*))
-        `)
-        .eq("id", roomId)
-        .single();
-      if (roomError) throw roomError;
-      const participants = room.participants;
-      const winners = await this.determineTournamentWinner(participants, room, winnerId, loserId, scores);
-      await this.submitWinnersToSmartContractAndDistributePrizes(winners, room as GameRoom);
-      const participantIds = participants.map(p => p.user_id).filter(Boolean);
-      try {
-        await notificationService.createBulkNotifications(participantIds, "room_completed", {
-          room_id: roomId,
-          room_name: room.name
-        }, {
-          sendEmail: true,
-          priority: "high"
-        })
-      } catch (error) {
-        logger.error("Error sending room completion notification", error)
-      }
-    } catch (error) {
-      logger.error("Error completing tournament:", error);
       throw error;
     }
   }
@@ -1035,7 +722,13 @@ class TournamentService {
     }
   }
 
-  // Submit score for highscore tournaments (match-based)
+  /**
+   *  
+   * @param roomId - The ID of the room
+   * @param matchId - The ID of the match
+   * @param score - The score to submit
+   * @returns void
+   * */
   async submitScore(roomId: string, matchId: string, score: number): Promise<void> {
     try {
       // Get current user
@@ -1090,9 +783,8 @@ class TournamentService {
 
       if (participants.length === submittedScores.length) {
         // All participants have submitted scores, determine winner
-        const { data: room } = await supabase.from("game_rooms").select("play_mode, name").eq("id", roomId).single();
-        if (room.play_mode === "multiplayer")
-          await this.determineMatchWinner(matchId, submittedScores, room.name);
+        const { data: room } = await supabase.from("game_rooms").select("name").eq("id", roomId).single();
+        await this.determineMatchWinner(matchId, submittedScores, room.name);
       }
       logger.info(`Score submitted: ${score} for match ${matchId}`);
     } catch (error) {
@@ -1102,7 +794,36 @@ class TournamentService {
     }
   }
 
-  // Determine winner of a highscore match
+  /**
+   * Submits scores for the participants in the match and advance the match 
+   * @param roomId - The ID of the room
+   * @param matchId - The ID of the match
+   * @param scores - The scores of the participants
+   * @returns void
+   */
+  async submitMultiplayerScore(roomId: string, matchId: string, scores: Record<string, number>): Promise<void> {
+    try {
+      const match = await this.getMatchById(matchId);
+      if (!match) throw new Error("Match not found");
+      if (match.room_id !== roomId) throw new Error("Match does not belong to this room");
+      const { data: room, error: roomError } = await supabase.from("game_rooms").select("name").eq("id", roomId).single();
+      if (roomError) throw roomError;
+      await this.determineMatchWinner(matchId, scores, room.name);
+      logger.success(`Multiplayer score submitted: ${scores} for match ${matchId}`);
+    } catch (error) {
+      logger.error("Error submitting multiplayer score:", error);
+      throw error;
+    }
+
+  }
+
+  /**
+   * Determine winner of a highscore match
+   * @param matchId - The ID of the match
+   * @param scores - The scores of the participants
+   * @param roomName - The name of the room
+   * @returns void
+   */
   private async determineMatchWinner(matchId: string, scores: Record<string, number>, roomName: string): Promise<void> {
     try {
       // Find the participant with the highest score
@@ -1115,12 +836,12 @@ class TournamentService {
           winnerId = userId;
         }
       }
-      const loserId = Object.keys(scores).find((userId) => userId !== winnerId);
+
 
       if (!winnerId) throw new Error("No winner determined");
 
       // Complete the match
-      await this.completeMatch(matchId, winnerId, loserId, roomName, scores);
+      await this.completeMatch(matchId, winnerId, roomName, scores);
 
       logger.info(`Highscore match ${matchId} completed. Winner: ${winnerId} with score: ${highestScore}`);
     } catch (error) {
@@ -1129,11 +850,65 @@ class TournamentService {
     }
   }
 
+  // Complete a match
+  async completeMatch(matchId: string, winnerId: string, roomName: string, scores?: Record<string, number>): Promise<TournamentMatch> {
+    try {
+      const { data: matchData, error: matchDataError } = await supabase
+        .from("tournament_matches")
+        .select("match_data")
+        .eq("id", matchId)
+        .single();
+
+      if (matchDataError) throw matchDataError;
+
+      // Handle match_data which might be a string or object
+      const matchDataJson = typeof matchData.match_data === 'string'
+        ? JSON.parse(matchData.match_data)
+        : matchData.match_data;
+      const { data: match, error } = await supabase
+        .from("tournament_matches")
+        .update({
+          winner_id: winnerId,
+          status: "completed",
+          completed_at: new Date().toISOString(),
+          match_data: {
+            ...matchDataJson,
+            scores: scores,
+          },
+        })
+        .eq("id", matchId)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Get room details to check if this is the last round
+      const { data: room, error: roomError } = await supabase
+        .from("game_rooms")
+        .select("tournament_rounds, elimination_type, current_round, status, name")
+        .eq("id", match.room_id)
+        .single();
+
+      if (roomError) throw roomError;
+      if (room.elimination_type === "single") await this.advanceWinnerToNextRound(match as TournamentMatch, room.name);
+      else this.updateRoundRobinStandings(match as TournamentMatch, room.name)
+      await this.checkRoundCompletion(match.room_id, room.current_round);
+      return match as TournamentMatch;
+    } catch (error) {
+      logger.error("Error completing match:", error);
+      throw error;
+    }
+  }
+
   // Advance winner to next round
   private async advanceWinnerToNextRound(match: TournamentMatch, roomName: string): Promise<void> {
     try {
       const nextRound = match.round_number + 1;
-
+      // check if match has a bye and handleBye on the match
+      let winnerId = match.winner_id;
+      if (!winnerId) {
+        winnerId = this.handleBye(match);
+      }
       // Check if there's a next round
       const { data: nextRoundMatches, error: nextRoundError } = await supabase
         .from("tournament_matches")
@@ -1155,13 +930,13 @@ class TournamentService {
           // Add winner to the next match
           const updates: any = {};
           if (availableMatch.player1_id === null) {
-            updates.player1_id = match.winner_id;
+            updates.player1_id = winnerId;
           } else if (availableMatch.player2_id === null) {
-            updates.player2_id = match.winner_id;
+            updates.player2_id = winnerId;
           } else if (availableMatch.player3_id === null) {
-            updates.player3_id = match.winner_id;
+            updates.player3_id = winnerId;
           } else if (availableMatch.player4_id === null) {
-            updates.player4_id = match.winner_id;
+            updates.player4_id = winnerId;
           }
 
           // Check if match should start based on player count
@@ -1186,7 +961,7 @@ class TournamentService {
 
           if (updateError) throw updateError;
 
-          if (match.winner_id) {
+          if (winnerId) {
             await notificationService.createNotification(
               match.winner_id,
               "tournament_advance", { tournament_name: roomName, next_round: `Round ${match.round_number + 1}` },
@@ -1202,7 +977,7 @@ class TournamentService {
             match.player2_id,
             match.player3_id,
             match.player4_id,
-          ].filter((id) => id && id !== match.winner_id);
+          ].filter((id) => id && id !== winnerId);
 
           await notificationService.createBulkNotifications(eliminatedPlayerIds, "tournament_elimination", {
             tournament_name: roomName,
@@ -1212,6 +987,345 @@ class TournamentService {
       }
     } catch (error) {
       logger.error("Error advancing winner to next round:", error);
+      throw error;
+    }
+  }
+
+  private async updateRoundRobinStandings(match: TournamentMatch, roomName: string): Promise<void> {
+    try {
+      const scores = match.match_data?.scores || {};
+      const roomId = match.room_id;
+
+      // Get all participants in this room
+      const { data: participants, error: participantsError } = await supabase
+        .from("game_room_participants")
+        .select("*")
+        .eq("room_id", roomId)
+        .eq("is_active", true);
+
+      if (participantsError) throw participantsError;
+      if (!participants) return;
+
+      // Get match participants
+      const matchParticipants = [
+        match.player1_id,
+        match.player2_id,
+        match.player3_id,
+        match.player4_id
+      ].filter(Boolean);
+
+      // Update each participant's tournament stats
+      for (const participantId of matchParticipants) {
+        const participant = participants.find(p => p.user_id === participantId);
+        if (!participant) continue;
+
+        const playerScore = scores[participantId];
+        const currentStats = {
+          tournament_matches_played: participant.tournament_matches_played,
+          tournament_wins: participant.tournament_wins,
+          tournament_draws: participant.tournament_draws,
+          tournament_losses: participant.tournament_losses,
+          tournament_points: participant.tournament_points,
+          tournament_goals_for: participant.tournament_goals_for,
+          tournament_goals_against: participant.tournament_goals_against,
+          tournament_goal_difference: participant.tournament_goal_difference,
+        };
+
+        // Determine match result for this player
+        const isWinner = match.winner_id === participantId;
+        const isDraw = match.winner_id === null; // Assuming null winner means draw
+
+        // Update stats based on match result
+        const updatedStats = {
+          tournament_matches_played: currentStats.tournament_matches_played + 1,
+          tournament_goals_for: currentStats.tournament_goals_for + playerScore,
+          tournament_goals_against: currentStats.tournament_goals_against + this.calculateGoalsAgainst(participantId, matchParticipants, scores),
+          tournament_wins: currentStats.tournament_wins,
+          tournament_draws: currentStats.tournament_draws,
+          tournament_losses: currentStats.tournament_losses,
+          tournament_points: currentStats.tournament_points,
+          tournament_goal_difference: 0, // Will be calculated below
+        };
+
+        if (isDraw) {
+          updatedStats.tournament_draws = currentStats.tournament_draws + 1;
+          updatedStats.tournament_points = currentStats.tournament_points + 1; // 1 point for draw
+        } else if (isWinner) {
+          updatedStats.tournament_wins = currentStats.tournament_wins + 1;
+          updatedStats.tournament_points = currentStats.tournament_points + 2; // 2 points for win
+        } else {
+          updatedStats.tournament_losses = currentStats.tournament_losses + 1;
+          // 0 points for loss (no change)
+        }
+
+        // Calculate goal difference
+        updatedStats.tournament_goal_difference = updatedStats.tournament_goals_for - updatedStats.tournament_goals_against;
+
+        // Update participant in database
+        const { data: updatedParticipant, error: updateError } = await supabase
+          .from("game_room_participants")
+          .update(updatedStats)
+          .eq("id", participant.id);
+
+        if (updateError) {
+          logger.error(`Error updating participant ${participantId} stats:`, updateError);
+          throw updateError;
+        }
+
+        logger.debug(`Updated tournament stats for participant ${participantId}:`, updatedStats);
+      }
+
+      // Update final standings/positions after all participants are updated
+      await this.updateTournamentPositions(roomId);
+
+      logger.success(`Updated round robin standings for room ${roomId}`);
+    } catch (error) {
+      logger.error("Error updating round robin standings:", error);
+      throw error;
+    }
+  }
+
+  // Helper method to calculate goals against for a player
+  private calculateGoalsAgainst(playerId: string, matchParticipants: string[], scores: Record<string, number>): number {
+    let goalsAgainst = 0;
+
+    for (const opponentId of matchParticipants) {
+      if (opponentId !== playerId) {
+        goalsAgainst += scores[opponentId] || 0;
+      }
+    }
+
+    return goalsAgainst;
+  }
+
+  // Update tournament positions based on current standings
+  private async updateTournamentPositions(roomId: string): Promise<void> {
+    try {
+      // Get all participants with their updated stats
+      const { data: participants, error: participantsError } = await supabase
+        .from("game_room_participants")
+        .select("*")
+        .eq("room_id", roomId)
+        .eq("is_active", true);
+
+      if (participantsError) throw participantsError;
+      if (!participants) return;
+
+      // Sort participants by tournament points (descending), then goal difference (descending), then goals for (descending)
+      const sortedParticipants = participants.sort((a, b) => {
+        // Primary sort: tournament points
+        if ((b.tournament_points || 0) !== (a.tournament_points || 0)) {
+          return (b.tournament_points || 0) - (a.tournament_points || 0);
+        }
+
+        // Secondary sort: goal difference
+        if ((b.tournament_goal_difference || 0) !== (a.tournament_goal_difference || 0)) {
+          return (b.tournament_goal_difference || 0) - (a.tournament_goal_difference || 0);
+        }
+
+        // Tertiary sort: goals for
+        return (b.tournament_goals_for || 0) - (a.tournament_goals_for || 0);
+      });
+
+      // Update positions
+      for (let i = 0; i < sortedParticipants.length; i++) {
+        const participant = sortedParticipants[i];
+        const position = i + 1;
+
+        const { error: updateError } = await supabase
+          .from("game_room_participants")
+          .update({
+            tournament_final_position: position,
+            tournament_seed: position, // Use position as seed for round robin
+          })
+          .eq("id", participant.id);
+
+        if (updateError) {
+          logger.error(`Error updating position for participant ${participant.user_id}:`, updateError);
+          throw updateError;
+        }
+      }
+
+      logger.debug(`Updated tournament positions for room ${roomId}`);
+    } catch (error) {
+      logger.error("Error updating tournament positions:", error);
+      throw error;
+    }
+  }
+
+  private async checkRoundCompletion(roomId: string, roundNumber: number): Promise<void> {
+    try {
+      const { data: roundMatches, error } = await supabase
+        .from("tournament_matches")
+        .select("status")
+        .eq("room_id", roomId)
+        .eq("round_number", roundNumber);
+
+      if (error) throw error;
+
+      const allCompleted = roundMatches?.every(m =>
+        m.status === "completed" || m.status === "timeout"
+      );
+
+      if (allCompleted) {
+        await this.advanceToNextRound(roomId);
+      }
+    } catch (error) {
+      logger.error("Error checking round completion:", error);
+      throw error;
+    }
+  }
+
+  // Advance to next round
+  async advanceToNextRound(roomId: string): Promise<void> {
+    try {
+      const { data: room, error: roomError } = await supabase
+        .from("game_rooms")
+        .select("current_round, tournament_rounds, elimination_type")
+        .eq("id", roomId)
+        .single();
+
+      if (roomError) throw roomError;
+
+      const nextRound = (room.current_round || 1) + 1;
+
+      if (nextRound > (room.tournament_rounds || 0)) {
+        // Tournament complete
+        await this.completeTournament(roomId)
+      } else {
+        // Advance to next round
+        await supabase
+          .from("game_rooms")
+          .update({
+            current_round: nextRound,
+          })
+          .eq("id", roomId);
+
+        // Start next round matches
+        await this.startNextRoundMatches(roomId, nextRound);
+      }
+    } catch (error) {
+      logger.error("Error advancing to next round:", error);
+      throw error;
+    }
+  }
+
+  private async startNextRoundMatches(roomId: string, roundNumber: number): Promise<void> {
+    try {
+      // First, populate the next round matches with winners from previous round
+      await this.setAllNextRoundMatchesToActive(roomId, roundNumber);
+
+      // Then set the status to active to start the round
+      const { error } = await supabase
+        .from("tournament_matches")
+        .update({ status: "active" })
+        .eq("room_id", roomId)
+        .eq("round_number", roundNumber);
+
+      if (error) throw error;
+    } catch (error) {
+      logger.error("Error starting next round matches:", error);
+      throw error;
+    }
+  }
+
+  private async setAllNextRoundMatchesToActive(roomId: string, roundNumber: number): Promise<void> {
+    try {
+      const { data: matchesToUpdate, error: matchesToUpdateError } = await supabase
+        .from("tournament_matches")
+        .select("*")
+        .eq("room_id", roomId)
+        .eq("round_number", roundNumber)
+        .eq("status", "pending");
+
+      if (matchesToUpdateError) throw matchesToUpdateError;
+      if (!matchesToUpdate) return;
+      for (const match of matchesToUpdate) {
+        await supabase
+          .from("tournament_matches")
+          .update({ status: "active" })
+          .eq("id", match.id);
+      }
+
+    } catch (error) {
+      logger.error("Error populating next round matches:", error);
+      throw error;
+    }
+  }
+
+  async completeTournament(roomId: string): Promise<void> {
+    try {
+      // Get room and participants data
+      const { data: room, error: roomError } = await supabase
+        .from("game_rooms")
+        .select(`
+          *,
+          participants:game_room_participants(*, user:profiles(*))
+        `)
+        .eq("id", roomId)
+        .single();
+      if (roomError) throw roomError;
+      const participants = room.participants;
+
+      // For round robin tournaments, determine top performers based on standings
+      let rank1 = null;
+      let rank2 = null;
+      const scores: Record<string, number> = {};
+
+      if (room.elimination_type === "round_robin") {
+        // Sort participants by tournament points to get top performers
+        const sortedParticipants = participants.sort((a, b) => {
+          const pointsA = a.tournament_points || 0;
+          const pointsB = b.tournament_points || 0;
+          if (pointsB !== pointsA) return pointsB - pointsA;
+
+          const goalDiffA = a.tournament_goal_difference || 0;
+          const goalDiffB = b.tournament_goal_difference || 0;
+          if (goalDiffB !== goalDiffA) return goalDiffB - goalDiffA;
+
+          return (b.tournament_goals_for || 0) - (a.tournament_goals_for || 0);
+        });
+
+        rank1 = sortedParticipants[0]?.user_id;
+        scores[rank1] = sortedParticipants[0]?.tournament_points;
+        rank2 = sortedParticipants[1]?.user_id;
+        scores[rank2] = sortedParticipants[1]?.tournament_points;
+      } else if (room.elimination_type === "single") {
+        // get last tournament match
+        const { data: lastMatch, error: lastMatchError } = await supabase
+          .from("tournament_matches")
+          .select("*")
+          .eq("room_id", roomId)
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .single();
+
+        if (lastMatchError) throw lastMatchError;
+        rank1 = lastMatch.winner_id;
+        const matchData = lastMatch.match_data as TournamentMatch["match_data"];
+        // sort the scores by descending order
+        const sortedScores = Object.keys(matchData.scores).sort((a, b) => matchData.scores[b] - matchData.scores[a]);
+        rank2 = sortedScores[1];
+        scores[rank1] = matchData.scores[rank1];
+        scores[rank2] = matchData.scores[rank2];
+      }
+
+      const winners = await this.determineTournamentWinner(participants, room, rank1, rank2, scores);
+      await this.submitWinnersToSmartContractAndDistributePrizes(winners, room as GameRoom);
+      const participantIds = participants.map(p => p.user_id).filter(Boolean);
+      try {
+        await notificationService.createBulkNotifications(participantIds, "room_completed", {
+          room_id: roomId,
+          room_name: room.name
+        }, {
+          sendEmail: true,
+          priority: "high"
+        })
+      } catch (error) {
+        logger.error("Error sending room completion notification", error)
+      }
+    } catch (error) {
+      logger.error("Error completing tournament:", error);
       throw error;
     }
   }

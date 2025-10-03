@@ -13,6 +13,7 @@ import type {
 } from "@/types/tournament";
 import type { GameRoom } from "@/types/gameroom";
 import { TournamentContext } from "@/hooks/tournament";
+import { RealtimeChannel } from "@supabase/supabase-js";
 
 export const TournamentProvider = ({
   children,
@@ -33,7 +34,7 @@ export const TournamentProvider = ({
   const [starting, setStarting] = useState(false);
   const [completing, setCompleting] = useState(false);
 
-  const [subscription, setSubscription] = useState<any>(null);
+  // const [subscription, setSubscription] = useState<any>(null);
 
   // Get notification functions
   const {
@@ -49,10 +50,8 @@ export const TournamentProvider = ({
       switch (eliminationType) {
         case "single":
           return 2;
-        case "double":
-          return 4;
-        case "swiss":
-          return 4;
+        case "round_robin":
+          return 2;
         default:
           return 2;
       }
@@ -62,8 +61,8 @@ export const TournamentProvider = ({
 
   // Fetch tournament data
   const fetchTournamentData = useCallback(
-    async (roomId: string): Promise<void> => {
-      // setLoading(true);
+    async (roomId: string, silent: boolean = false): Promise<void> => {
+      setLoading(!silent);
       try {
         logger.info("Fetching tournament data for room:", roomId);
 
@@ -263,7 +262,7 @@ export const TournamentProvider = ({
           logger.info(`Created ${matches.length} tournament matches`);
 
           // Fetch the updated tournament data
-          await fetchTournamentData(data.roomId);
+          await fetchTournamentData(data.roomId, false);
         }
       } catch (error) {
         logger.error("Error creating tournament:", error);
@@ -291,13 +290,29 @@ export const TournamentProvider = ({
           roomId
         );
         if (existingMatches.length === 0) {
+          // Get current participants to calculate rounds
+          const { data: participants, error: participantsError } =
+            await supabase
+              .from("game_room_participants")
+              .select("*")
+              .eq("room_id", roomId)
+              .eq("is_active", true);
+
+          if (participantsError) throw participantsError;
+
+          const participantCount = participants?.length || 0;
+          const eliminationType = tournamentRoom?.elimination_type || "single";
+
+          // Calculate rounds automatically based on participant count
+          const calculatedRounds = Math.ceil(Math.log2(participantCount));
+
           await createTournament({
             roomId,
-            eliminationType: tournamentRoom?.elimination_type || "single",
-            maxRounds: tournamentRoom?.max_rounds || 1,
+            eliminationType,
+            maxRounds: calculatedRounds,
             playersPerMatch: tournamentRoom?.players_per_match || 2,
-            roundDurationMinutes: tournamentRoom?.round_duration_minutes || 2,
-            timeLimitMinutes: tournamentRoom?.time_limit_minutes || 1,
+            roundDurationMinutes: 60, // Default 60 minutes per round
+            timeLimitMinutes: 30, // Default 30 minutes per match
           });
         }
 
@@ -322,7 +337,7 @@ export const TournamentProvider = ({
         if (roomError) throw roomError;
 
         // Fetch updated tournament data
-        await fetchTournamentData(roomId);
+        await fetchTournamentData(roomId, false);
 
         // Send tournament start notification to all participants
         try {
@@ -377,18 +392,12 @@ export const TournamentProvider = ({
       try {
         logger.info("Completing match:", { matchId, winnerId, scores });
 
-        await tournamentService.completeMatch(
-          matchId,
-          winnerId,
-          loserId,
-          roomName,
-          scores
-        );
+        await tournamentService.completeMatch(matchId, winnerId, roomName);
 
         // Check if tournament is complete
         const match = await tournamentService.getMatchById(matchId);
         if (match) {
-          await fetchTournamentData(match.room_id);
+          await fetchTournamentData(match.room_id, true);
 
           // Check if tournament is complete
           const bracket = await tournamentService.getTournamentBracket(
@@ -466,7 +475,7 @@ export const TournamentProvider = ({
         await tournamentService.submitScore(roomId, matchId, score);
 
         // Fetch updated tournament data
-        await fetchTournamentData(roomId);
+        await fetchTournamentData(roomId, true);
 
         logger.info("Score submitted successfully");
       } catch (error) {
@@ -479,11 +488,7 @@ export const TournamentProvider = ({
 
   // Subscribe to tournament updates
   const subscribeToTournamentUpdates = useCallback(
-    (roomId: string): void => {
-      if (subscription) {
-        subscription.unsubscribe();
-      }
-
+    (roomId: string): RealtimeChannel => {
       const newSubscription = supabase
         .channel(`tournament-${roomId}`)
         .on(
@@ -496,7 +501,7 @@ export const TournamentProvider = ({
           },
           async () => {
             logger.info("Tournament match updated, refetching data");
-            await fetchTournamentData(roomId);
+            await fetchTournamentData(roomId, true);
           }
         )
         .on(
@@ -509,33 +514,25 @@ export const TournamentProvider = ({
           },
           async () => {
             logger.info("Tournament participants updated, refetching data");
-            await fetchTournamentData(roomId);
+            await fetchTournamentData(roomId, true);
           }
         )
         .subscribe();
-
-      setSubscription(newSubscription);
+      return newSubscription;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [subscription] // Remove fetchTournamentData to prevent circular dependency
+    [] // Remove fetchTournamentData to prevent circular dependency
   );
 
   // Unsubscribe from tournament updates
-  const unsubscribeFromTournamentUpdates = useCallback((): void => {
-    if (subscription) {
-      subscription.unsubscribe();
-      setSubscription(null);
-    }
-  }, [subscription]);
-
-  // Cleanup subscription on unmount
-  useEffect(() => {
-    return () => {
+  const unsubscribeFromTournamentUpdates = useCallback(
+    (subscription: RealtimeChannel): void => {
       if (subscription) {
         subscription.unsubscribe();
       }
-    };
-  }, [subscription]);
+    },
+    []
+  );
 
   const value: TournamentContextType = {
     // Tournament state

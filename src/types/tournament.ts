@@ -1,4 +1,5 @@
 import { GameRoom } from "./gameroom";
+import { RealtimeChannel } from "@supabase/supabase-js";
 
 export interface TournamentContextType {
     // Tournament state
@@ -32,8 +33,8 @@ export interface TournamentContextType {
 
     // Tournament data fetching
     fetchTournamentData: (roomId: string) => Promise<void>;
-    subscribeToTournamentUpdates: (roomId: string) => void;
-    unsubscribeFromTournamentUpdates: () => void;
+    subscribeToTournamentUpdates: (roomId: string) => RealtimeChannel;
+    unsubscribeFromTournamentUpdates: (subscription: RealtimeChannel) => void;
 
     // Validation
     validateTournamentStart: (
@@ -82,6 +83,7 @@ export interface TournamentRound {
     isActive: boolean;
 }
 
+// TournamentParticipant interface
 export interface TournamentParticipant {
     id: string;
     user_id: string;
@@ -92,6 +94,16 @@ export interface TournamentParticipant {
     total_score: number;
     matches_played: number;
     matches_won: number;
+    tournament_points: number;
+    tournament_wins: number;
+    tournament_draws: number;
+    tournament_losses: number;
+    tournament_matches_played: number;
+    tournament_goals_for: number;
+    tournament_goals_against: number;
+    tournament_goal_difference: number;
+    tournament_final_position: number | null;
+    tournament_performance_data: Record<string, any>;
     user?: {
         id: string;
         username?: string;
@@ -101,9 +113,35 @@ export interface TournamentParticipant {
     };
 }
 
+// Add new interface for standings
+export interface TournamentStanding {
+    id: string;
+    room_id: string;
+    participant_id: string;
+    user_id: string;
+    points: number;
+    matches_played: number;
+    wins: number;
+    draws: number;
+    losses: number;
+    goals_for: number;
+    goals_against: number;
+    goal_difference: number;
+    current_position: number;
+    seed_position: number;
+    is_eliminated: boolean;
+    eliminated_round: number | null;
+    average_score: number;
+    best_score: number;
+    worst_score: number;
+    consistency_rating: number;
+    created_at: string;
+    updated_at: string;
+}
+
 export interface CreateTournamentData {
     roomId: string;
-    eliminationType: "single" | "swiss" | string;
+    eliminationType: "single" | "round_robin" | string;
     maxRounds?: number;
     playersPerMatch?: number;
     roundDurationMinutes?: number;

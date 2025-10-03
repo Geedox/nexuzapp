@@ -18,6 +18,7 @@ import { GameProvider } from "./contexts/GameContext";
 import AdminLogin from "./pages/AdminLogin";
 import AdminDashboard from "./pages/AdminDashboard";
 import { GameRoomProvider } from "./contexts/GameRoomContext";
+import { TournamentProvider } from "./contexts/TournamentContext";
 import { NotificationProvider } from "./contexts/NotificationContext";
 import WinnerCelebrationProvider from "./hooks/WinnerCelebration";
 import DashboardHome from "@/components/dashboard/DashboardHome";
@@ -84,86 +85,97 @@ const App = () => {
                     <GameProvider>
                       <NotificationProvider>
                         <GameRoomProvider>
-                          <TooltipProvider>
-                            <Toaster />
-                            <Sonner />
-                            <BrowserRouter>
-                              <Routes>
-                                <Route
-                                  path="/"
-                                  element={
-                                    <ProtectedRoute requireAuth={false}>
-                                      <Index />
-                                    </ProtectedRoute>
-                                  }
-                                />
-                                <Route
-                                  path="/dashboard"
-                                  element={
-                                    <ProtectedRoute requireAuth={true}>
-                                      <Dashboard />
-                                    </ProtectedRoute>
-                                  }
-                                >
-                                  <Route index element={<DashboardHome />} />
-                                  <Route path="games" element={<GamesPage />} />
+                          <TournamentProvider>
+                            <TooltipProvider>
+                              <Toaster />
+                              <Sonner />
+                              <BrowserRouter>
+                                <Routes>
                                   <Route
-                                    path="leaderboards"
-                                    element={<LeaderboardsPage />}
-                                  />
-                                  <Route
-                                    path="wallet"
-                                    element={<WalletPage />}
-                                  />
-                                  <Route
-                                    path="community"
-                                    element={<CommunityPage />}
-                                  />
-                                  <Route path="rooms" element={<RoomsPage />} />
-                                  <Route
-                                    path="creators"
-                                    element={<CreatorsPage />}
-                                  />
-                                  <Route
-                                    path="analytics"
-                                    element={<AnalyticsPage />}
-                                  />
-                                  <Route
-                                    path="settings"
-                                    element={<SettingsPage />}
-                                  />
-                                  <Route
-                                    path="support"
-                                    element={<SupportPage />}
-                                  />
-                                  <Route
-                                    path="marketplace"
+                                    path="/"
                                     element={
-                                      <MarketplacePage
-                                        onOpenCart={() => setIsCartOpen(true)}
-                                        onAddToCart={handleAddToCart}
-                                        cartItemsCount={cartItemsCount}
-                                      />
+                                      <ProtectedRoute requireAuth={false}>
+                                        <Index />
+                                      </ProtectedRoute>
                                     }
                                   />
-                                </Route>
-                                <Route
-                                  path="/payment-callback"
-                                  element={
-                                    <ProtectedRoute requireAuth={true}>
-                                      <PaymentCallback />
-                                    </ProtectedRoute>
-                                  }
-                                />
-                                <Route path="*" element={<NotFound />} />
-                                <Route path="/admin" element={<AdminLogin />} />
-                                <Route
-                                  path="/admin/dashboard"
-                                  element={<AdminDashboard />}
-                                />
-                              </Routes>
-                            </BrowserRouter>
-                          </TooltipProvider>
+                                  <Route
+                                    path="/dashboard"
+                                    element={
+                                      <ProtectedRoute requireAuth={true}>
+                                        <Dashboard />
+                                      </ProtectedRoute>
+                                    }
+                                  >
+                                    <Route index element={<DashboardHome />} />
+                                    <Route
+                                      path="games"
+                                      element={<GamesPage />}
+                                    />
+                                    <Route
+                                      path="leaderboards"
+                                      element={<LeaderboardsPage />}
+                                    />
+                                    <Route
+                                      path="wallet"
+                                      element={<WalletPage />}
+                                    />
+                                    <Route
+                                      path="community"
+                                      element={<CommunityPage />}
+                                    />
+                                    <Route
+                                      path="rooms"
+                                      element={<RoomsPage />}
+                                    />
+                                    <Route
+                                      path="creators"
+                                      element={<CreatorsPage />}
+                                    />
+                                    <Route
+                                      path="analytics"
+                                      element={<AnalyticsPage />}
+                                    />
+                                    <Route
+                                      path="settings"
+                                      element={<SettingsPage />}
+                                    />
+                                    <Route
+                                      path="support"
+                                      element={<SupportPage />}
+                                    />
+                                    <Route
+                                      path="marketplace"
+                                      element={
+                                        <MarketplacePage
+                                          onOpenCart={() => setIsCartOpen(true)}
+                                          onAddToCart={handleAddToCart}
+                                          cartItemsCount={cartItemsCount}
+                                        />
+                                      }
+                                    />
+                                  </Route>
+                                  <Route
+                                    path="/payment-callback"
+                                    element={
+                                      <ProtectedRoute requireAuth={true}>
+                                        <PaymentCallback />
+                                      </ProtectedRoute>
+                                    }
+                                  />
+                                  <Route path="*" element={<NotFound />} />
+                                  <Route
+                                    path="/admin"
+                                    element={<AdminLogin />}
+                                  />
+                                  <Route
+                                    path="/admin/dashboard"
+                                    element={<AdminDashboard />}
+                                  />
+                                </Routes>
+                              </BrowserRouter>
+                            </TooltipProvider>
+                          </TournamentProvider>
                         </GameRoomProvider>
                       </NotificationProvider>
                     </GameProvider>

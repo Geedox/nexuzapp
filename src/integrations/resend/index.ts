@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { TEMPLATES } from "./templates";
+import { logger } from "@/utils";
 
 interface EmailOptions {
   to: string;
@@ -29,10 +30,10 @@ export class EmailWithResend {
         html: options.html,
       });
 
-      console.log("Email sent successfully:", result);
+      logger.success("Email sent successfully:", result);
       return result;
     } catch (error) {
-      console.error("Failed to send email:", error);
+      logger.error("Failed to send email:", error);
       throw error;
     }
   }

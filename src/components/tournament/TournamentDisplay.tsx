@@ -1,18 +1,17 @@
 import React, { useEffect, useState } from "react";
 import { useTournament } from "@/hooks/tournament";
-import { MultiplayerTournament } from "./MultiplayerTournament";
-import { HighscoreTournament } from "./HighscoreTournament";
+import { SingleElimination } from "./SingleElimination";
+import { RoundRobin } from "./RoundRobin";
 import type { GameRoom } from "@/types/gameroom";
 import { logger } from "@/utils/logger";
+import { RealtimeChannel } from "@supabase/supabase-js";
 
 interface TournamentDisplayProps {
   room: GameRoom;
-  onTournamentComplete?: () => void;
 }
 
 export const TournamentDisplay: React.FC<TournamentDisplayProps> = ({
   room,
-  onTournamentComplete,
 }) => {
   const {
     currentTournament,
@@ -34,24 +33,47 @@ export const TournamentDisplay: React.FC<TournamentDisplayProps> = ({
     canStart: boolean;
     reason?: string;
   } | null>(null);
+  const [subscription, setSubscription] = useState<RealtimeChannel | null>(
+    null
+  );
 
   // Determine tournament mode from room data
   const tournamentMode = room.play_mode || "multiplayer";
   const isHighscoreTournament = tournamentMode === "single";
+  const eliminationType = room.elimination_type;
 
-  // Fetch tournament data when component mounts
+  // Fetch tournament data when component mounts and subscribe to realtime updates
   useEffect(() => {
     if (room.id) {
+      logger.info("Fetching tournament data for room:", room.id);
       fetchTournamentData(room.id);
-      subscribeToTournamentUpdates(room.id);
+
+      // Subscribe to tournament updates for realtime changes
+      logger.info("Subscribing to tournament updates for room:", room.id);
+      const newSubscription = subscribeToTournamentUpdates(room.id);
+      setSubscription(newSubscription);
+
       logger.info("Current Tournament:", currentTournament);
     }
 
     return () => {
-      unsubscribeFromTournamentUpdates();
+      logger.info("Unsubscribing from tournament updates");
+      unsubscribeFromTournamentUpdates(subscription);
+      setSubscription(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [room.id]); // Only depend on room.id to prevent infinite loops
+  }, [room.id]);
+
+  // Log tournament updates for debugging
+  useEffect(() => {
+    if (currentTournament) {
+      logger.debug("Tournament updated:", {
+        rounds: currentTournament.rounds.length,
+        currentRound: currentTournament.currentRound,
+        isComplete: currentTournament.isComplete,
+      });
+    }
+  }, [currentTournament]);
 
   // Validate tournament start capability
   useEffect(() => {
@@ -85,7 +107,7 @@ export const TournamentDisplay: React.FC<TournamentDisplayProps> = ({
   // Show loading state
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-8">
+      <div className="flex items-center justify-center p-8 h-20">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary mx-auto mb-4"></div>
           <p className="text-muted-foreground font-cyber">
@@ -206,15 +228,15 @@ export const TournamentDisplay: React.FC<TournamentDisplayProps> = ({
         </div>
 
         {/* Tournament Content */}
-        {isHighscoreTournament ? (
-          <HighscoreTournament
+        {eliminationType === "single" ? (
+          <SingleElimination
             room={room}
             tournament={currentTournament}
             participants={tournamentParticipants}
             stats={tournamentStats}
           />
         ) : (
-          <MultiplayerTournament
+          <RoundRobin
             room={room}
             tournament={currentTournament}
             participants={tournamentParticipants}

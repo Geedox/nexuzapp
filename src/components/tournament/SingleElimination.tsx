@@ -12,14 +12,14 @@ import { logger } from "@/utils";
 import { toast } from "@/hooks/use-toast";
 import { TournamentBracketDisplay } from "./TournamentBracketDisplay";
 
-interface HighscoreTournamentProps {
+interface SingleEliminationProps {
   room: GameRoom;
   tournament: TournamentBracket;
   participants: TournamentParticipant[];
   stats: TournamentStats;
 }
 
-export const HighscoreTournament: React.FC<HighscoreTournamentProps> = ({
+export const SingleElimination: React.FC<SingleEliminationProps> = ({
   room,
   tournament,
   participants,

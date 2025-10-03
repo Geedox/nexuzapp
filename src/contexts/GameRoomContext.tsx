@@ -301,31 +301,29 @@ export const GameRoomProvider = ({
               new Map(prev).set(sessionToken, session)
             );
             logger.debug("Restored session from localStorage:", sessionToken);
-          }
-        }
-
-        if (!session) {
-          logger.error("Invalid session token:", sessionToken);
-          logger.debug(
-            "Available sessions in state:",
-            Array.from(activeGameSessions.keys())
-          );
-          logger.debug(
-            "Available sessions in storage:",
-            Object.keys(getSessionsFromStorage())
-          );
-
-          // Send error back to game
-          if (event.source) {
-            event.source.postMessage(
-              {
-                type: "SCORE_SUBMISSION_ERROR",
-                error: "Invalid session token",
-              },
-              { targetOrigin: event.origin }
+          } else {
+            logger.error("Invalid session token:", sessionToken);
+            logger.debug(
+              "Available sessions in state:",
+              Array.from(activeGameSessions.keys())
             );
+            logger.debug(
+              "Available sessions in storage:",
+              Object.keys(getSessionsFromStorage())
+            );
+
+            // Send error back to game
+            if (event.source) {
+              event.source.postMessage(
+                {
+                  type: "SCORE_SUBMISSION_ERROR",
+                  error: "Invalid session token",
+                },
+                { targetOrigin: event.origin }
+              );
+            }
+            return;
           }
-          return;
         }
 
         if (session.userId !== userId || session.roomId !== roomId) {
@@ -413,7 +411,8 @@ export const GameRoomProvider = ({
     roomId: string,
     score: number,
     userId?: string,
-    gameId?: string
+    gameId?: string,
+    multiplayerScores?: Record<string, number>
   ) => {
     const userIdToUse = userId || user?.id;
 
@@ -425,17 +424,25 @@ export const GameRoomProvider = ({
       );
       const { data: roomData, error: roomError } = await supabase
         .from("game_rooms")
-        .select("mode, game_name, game:games(*)")
+        .select("mode, play_mode, game_name, game:games(*)")
         .eq("id", roomId)
         .single();
       if (roomError) throw roomError;
       // The highest score in the room
-      const { data: highestScoreParticipant } = await supabase
-        .from("game_room_participants")
-        .select("score, user_id, id")
-        .eq("room_id", roomId)
-        .order("score", { ascending: false })
-        .single();
+      const { data: highestScoreParticipantData, error: highestScoreError } =
+        await supabase
+          .from("game_room_participants")
+          .select("score, user_id, id")
+          .eq("room_id", roomId)
+          .order("score", { ascending: false })
+          .limit(1);
+      if (highestScoreError) {
+        logger.debug(
+          "Error fetching highest score participant:",
+          highestScoreError
+        );
+        // throw highestScoreError;
+      }
       // First, get the current participant data
       const { data: currentParticipant, error: fetchError } = await supabase
         .from("game_room_participants")
@@ -450,11 +457,12 @@ export const GameRoomProvider = ({
       }
 
       logger.debug("Current participant data:", currentParticipant);
-
+      const highestScoreParticipant = highestScoreParticipantData[0];
       const currentScore = currentParticipant.score;
       const currentScoreNum = Number(currentScore);
       const newScoreNum = Number(score);
       const highScoreBeaten =
+        highestScoreParticipant &&
         currentParticipant.id !== highestScoreParticipant.id &&
         newScoreNum > highestScoreParticipant.score;
       let result: {
@@ -536,11 +544,19 @@ export const GameRoomProvider = ({
           );
           logger.debug("Active match:", activeMatch);
           if (activeMatch) {
-            await tournamentService.submitScore(
-              roomId,
-              activeMatch.id,
-              newScoreNum
-            );
+            if (roomData.play_mode === "multiplayer") {
+              await tournamentService.submitMultiplayerScore(
+                roomId,
+                activeMatch.id,
+                multiplayerScores
+              );
+            } else {
+              await tournamentService.submitScore(
+                roomId,
+                activeMatch.id,
+                newScoreNum
+              );
+            }
             logger.debug(
               "Score submitted: ",
               await tournamentService.getMatchById(activeMatch.id)
@@ -887,10 +903,10 @@ export const GameRoomProvider = ({
         // Validate elimination type
         if (
           !data.eliminationType ||
-          !["single", "swiss"].includes(data.eliminationType)
+          !["single", "round_robin"].includes(data.eliminationType)
         ) {
           throw new Error(
-            "Tournament elimination type must be 'single' or 'swiss'"
+            "Tournament elimination type must be 'single' or 'round_robin'"
           );
         }
 
@@ -919,19 +935,6 @@ export const GameRoomProvider = ({
             throw new Error(
               "Players per match must be at least 2 for multiplayer tournaments"
             );
-          }
-          if (!data.timeLimitMinutes || data.timeLimitMinutes < 5) {
-            throw new Error("Match time limit must be at least 5 minutes");
-          }
-        } else if (data.playMode === "single") {
-          // Highscore tournament validation
-          if (!data.tournamentRounds || data.tournamentRounds < 1) {
-            throw new Error(
-              "Number of rounds must be at least 1 for highscore tournaments"
-            );
-          }
-          if (!data.roundDurationMinutes || data.roundDurationMinutes < 5) {
-            throw new Error("Round duration must be at least 5 minutes");
           }
         }
 
@@ -1044,14 +1047,12 @@ export const GameRoomProvider = ({
           admin_has_approved: false,
           mode: data.mode as Database["public"]["Enums"]["room_mode"],
           play_mode: data.playMode,
-          // Tournament-specific fields
-          tournament_rounds:
-            data.mode === "tournament" ? data.tournamentRounds : null,
-          round_duration_minutes:
-            data.mode === "tournament" ? data.roundDurationMinutes : null,
+          // Tournament-specific fields (rounds will be calculated when tournament starts)
+          tournament_rounds: null, // Will be set when tournament starts based on player count
+          round_duration_minutes: null,
           elimination_type:
             data.mode === "tournament" ? data.eliminationType : null,
-          max_rounds: data.mode === "tournament" ? data.maxRounds : null,
+          max_rounds: null, // Will be calculated automatically
           players_per_match:
             data.mode === "tournament" ? data.playersPerMatch : null,
         };
@@ -1860,25 +1861,9 @@ export const GameRoomProvider = ({
       )
       .subscribe();
 
-    const tournamentSubscription = supabase
-      .channel("tournament_changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "tournament_matches",
-        },
-        () => {
-          fetchRooms(true);
-        }
-      )
-      .subscribe();
-
     return () => {
       roomsSubscription.unsubscribe();
       participantsSubscription.unsubscribe();
-      tournamentSubscription.unsubscribe();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);

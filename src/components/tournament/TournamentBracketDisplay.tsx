@@ -9,6 +9,7 @@ import { GameRoom } from "@/types/gameroom";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 import { tournamentService } from "@/services/tournamentService";
+import { useGameRoom } from "@/hooks/gameroom";
 
 interface TournamentBracketDisplayProps {
   tournament: TournamentBracket;
@@ -28,7 +29,7 @@ export const TournamentBracketDisplay: React.FC<
   );
   const { user } = useAuth();
   const [advancingMatch, setAdvancingMatch] = useState<string | null>(null);
-
+  const { playGame } = useGameRoom();
   // Check if current user is admin (room creator)
   const isAdmin = user?.id === room.creator_id;
 
@@ -74,6 +75,33 @@ export const TournamentBracketDisplay: React.FC<
   // Handle advancing a match (admin only)
   const handleAdvanceMatch = async (match: TournamentMatch) => {
     if (!isAdmin) return;
+    // if both scores are zero, return
+    if (
+      match.match_data?.scores &&
+      Object.values(match.match_data.scores).every((score) => score === 0)
+    ) {
+      toast({
+        title: "No scores submitted",
+        description: "Cannot advance match without scores",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // if all scores are equal, return and toast cannot determine winner
+    if (
+      match.match_data?.scores &&
+      Object.values(match.match_data.scores).every(
+        (score) => score === Object.values(match.match_data.scores)[0]
+      )
+    ) {
+      toast({
+        title: "Cannot determine winner",
+        description: "Cannot advance match without a clear winner",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setAdvancingMatch(match.id);
     try {
@@ -116,7 +144,6 @@ export const TournamentBracketDisplay: React.FC<
       await tournamentService.completeMatch(
         match.id,
         winnerId,
-        loserId,
         room.name,
         scores
       );
@@ -363,6 +390,19 @@ export const TournamentBracketDisplay: React.FC<
             )}
           </div>
 
+          {/* Play Game Button for Participants */}
+          {isCurrentUserMatch && match.status === "active" && (
+            <div className="mt-2">
+              <button
+                onClick={() => playGame(room.id)}
+                className="w-full bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white text-xs font-cyber font-bold py-2 px-3 rounded-lg transition-all duration-200 flex items-center justify-center gap-2"
+              >
+                <span>🎮</span>
+                Play Game
+              </button>
+            </div>
+          )}
+
           {/* Admin Buttons */}
           {isAdmin && (
             <div className="mt-2 space-y-2">
@@ -387,6 +427,7 @@ export const TournamentBracketDisplay: React.FC<
               {/* Advance Match Button */}
               {match.status === "active" &&
                 match.match_data?.scores &&
+                // room.play_mode === "single" &&
                 Object.keys(match.match_data.scores).length > 0 && (
                   <button
                     onClick={() => handleAdvanceMatch(match)}
@@ -498,9 +539,9 @@ export const TournamentBracketDisplay: React.FC<
 
       {/* Bracket Display */}
       <div className="overflow-x-auto">
-        <div className="flex gap-8 min-w-max">
+        <div className="flex justify-center gap-8 flex-wrap">
           {tournament.rounds.map((round) => (
-            <div key={round.roundNumber} className="flex-shrink-0 w-80">
+            <div key={round.roundNumber} className="flex-shrink-0 min-w-60">
               {renderRound(round)}
             </div>
           ))}

@@ -7,7 +7,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { TournamentDisplay } from "@/components/tournament";
 import { AdminPanel } from "@/components/gameroom/AdminPanel";
 import { ApprovalSection } from "@/components/gameroom/ApprovalSection";
-import { TournamentProvider } from "@/contexts/TournamentContext";
 import { logger } from "@/utils";
 import { gameRoomService } from "@/services/gameRoomService";
 
@@ -133,7 +132,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
       now >= endTime &&
       (room.status === "ongoing" || room.status === "waiting")
     ) {
-      console.log("Room should auto-complete, refreshing data...");
+      logger.info("Room should auto-complete, refreshing data...");
       // Refresh room data to get the updated status after auto-completion
       await loadRoomData(false);
     }
@@ -176,7 +175,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
           filter: `id=eq.${roomId}`,
         },
         () => {
-          console.log("Room updated, refreshing data...");
+          logger.info("Room updated, refreshing data...");
           loadRoomData(false);
         }
       )
@@ -189,7 +188,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
           filter: `room_id=eq.${roomId}`,
         },
         () => {
-          console.log("Participants updated, refreshing data...");
+          logger.info("Participants updated, refreshing data...");
           loadRoomData(false);
         }
       )
@@ -237,7 +236,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
         loadRoomData(false);
       }, 1000);
     } catch (error) {
-      console.error("Error launching game:", error);
+      logger.error("Error launching game:", error);
     } finally {
       setIsLaunchingGame(false);
     }
@@ -252,7 +251,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
       });
       onBack();
     } catch (error) {
-      console.error("Error leaving room:", error);
+      logger.error("Error leaving room:", error);
       toast({
         title: "Error",
         description: "Failed to leave room",
@@ -270,7 +269,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
       });
       onBack();
     } catch (error) {
-      console.error("Error cancelling room:", error);
+      logger.error("Error cancelling room:", error);
       toast({
         title: "Error",
         description: "Failed to cancel room",
@@ -293,7 +292,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
       // Refresh room data
       await loadRoomData(false);
     } catch (error) {
-      console.error("Error completing special room:", error);
+      logger.error("Error completing special room:", error);
       toast({
         title: "Error",
         description: "Failed to complete special room",
@@ -311,7 +310,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
       await loadRoomData(false);
       await getSignatureStatus();
     } catch (error) {
-      console.error("Error initiating completion:", error);
+      logger.error("Error initiating completion:", error);
     }
   };
 
@@ -753,7 +752,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
       {/* Action Buttons */}
       <div className="flex gap-4">
         {/* Play Game Button - Updated to use new tab functionality */}
-        {canPlayGame && !room.is_special && (
+        {canPlayGame && !room.is_special && room.mode !== "tournament" && (
           <button
             onClick={handlePlayGame}
             disabled={isLaunchingGame}
@@ -983,10 +982,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
         </div>
       )}
 
-      {/* Tournament Content */}
-      <TournamentProvider>
-        {room?.mode === "tournament" && <TournamentDisplay room={room} />}
-      </TournamentProvider>
+      {room?.mode === "tournament" && <TournamentDisplay room={room} />}
 
       {/* Regular Room Content */}
       {activeTab === "overview" && (
