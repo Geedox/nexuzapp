@@ -26,3 +26,4 @@ export const CURRENCY: Record<string, string> = {
 }
 
 export const SESSION_STORAGE_KEY = "nexuz_game_sessions";
+export const ROOM_ID = "room_id";

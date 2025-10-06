@@ -11,7 +11,6 @@ import { useTransaction } from "@/contexts/TransactionContext";
 import type { Database, TablesInsert } from "@/integrations/supabase/types";
 import { logger } from "@/utils/logger";
 import { verifyCoinForRoomCreation } from "@/lib/utils";
-import { SESSION_STORAGE_KEY } from "@/constants";
 import { gameRoomService } from "@/services/gameRoomService";
 import {
   GameRoomFilters,
@@ -25,6 +24,7 @@ import { GameRoomContext } from "@/hooks/gameroom";
 import { tournamentService } from "@/services/tournamentService";
 import { useNotification } from "@/hooks/useNotification";
 import { useCommunityChatContext } from "./CommunityChatContext";
+import { storage } from "@/lib/session-storage";
 
 export const GameRoomProvider = ({
   children,
@@ -97,68 +97,6 @@ export const GameRoomProvider = ({
   };
   const { refreshTransactions } = useTransaction();
 
-  const saveSessionToStorage = (sessionToken: string, session: GameSession) => {
-    try {
-      const existingSessions = getSessionsFromStorage();
-      existingSessions[sessionToken] = session;
-      localStorage.setItem(
-        SESSION_STORAGE_KEY,
-        JSON.stringify(existingSessions)
-      );
-    } catch (error) {
-      logger.error("Failed to save session to storage:", error);
-    }
-  };
-
-  const getSessionsFromStorage = (): Record<string, GameSession> => {
-    try {
-      const stored = localStorage.getItem(SESSION_STORAGE_KEY);
-      if (!stored) return {};
-
-      const sessions = JSON.parse(stored);
-      const now = new Date();
-
-      // Clean up expired sessions
-      const validSessions: Record<string, GameSession> = {};
-      Object.entries(sessions).forEach(([token, session]: [string, any]) => {
-        if (new Date(session.expiresAt) > now) {
-          validSessions[token] = {
-            ...session,
-            startTime: new Date(session.startTime),
-            expiresAt: new Date(session.expiresAt),
-          };
-        }
-      });
-
-      // Save cleaned sessions back
-      if (Object.keys(validSessions).length !== Object.keys(sessions).length) {
-        localStorage.setItem(
-          SESSION_STORAGE_KEY,
-          JSON.stringify(validSessions)
-        );
-      }
-
-      return validSessions;
-    } catch (error) {
-      logger.error("Failed to get sessions from storage:", error);
-      return {};
-    }
-  };
-
-  const removeSessionFromStorage = (sessionToken: string) => {
-    try {
-      const sessions = getSessionsFromStorage();
-      delete sessions[sessionToken];
-      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessions));
-    } catch (error) {
-      logger.error("Failed to remove session from storage:", error);
-    }
-  };
-
-  const generateSessionToken = (): string => {
-    return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  };
-
   // Updated playGame function
   const playGame = async (roomId: string): Promise<void> => {
     if (!user) throw new Error("User not authenticated");
@@ -194,7 +132,7 @@ export const GameRoomProvider = ({
       }
 
       // Generate session token
-      const sessionToken = generateSessionToken();
+      const sessionToken = storage.generateSessionToken();
 
       // Create game session with expiration (24 hours)
       const expiresAt = new Date();
@@ -213,7 +151,7 @@ export const GameRoomProvider = ({
       setActiveGameSessions((prev) =>
         new Map(prev).set(sessionToken, gameSession)
       );
-      saveSessionToStorage(sessionToken, gameSession);
+      storage.saveSessionToStorage(sessionToken, gameSession);
 
       // Rest of your URL construction code remains the same...
       const gameUrl = new URL(room.game?.game_url || "");
@@ -292,7 +230,7 @@ export const GameRoomProvider = ({
         let session = activeGameSessions.get(sessionToken);
 
         if (!session) {
-          const storedSessions = getSessionsFromStorage();
+          const storedSessions = storage.getSessionsFromStorage();
           session = storedSessions[sessionToken];
 
           // If found in storage, restore to state
@@ -309,7 +247,7 @@ export const GameRoomProvider = ({
             );
             logger.debug(
               "Available sessions in storage:",
-              Object.keys(getSessionsFromStorage())
+              Object.keys(storage.getSessionsFromStorage())
             );
 
             // Send error back to game
@@ -696,7 +634,7 @@ export const GameRoomProvider = ({
 
   useEffect(() => {
     // Restore sessions from localStorage on component mount
-    const storedSessions = getSessionsFromStorage();
+    const storedSessions = storage.getSessionsFromStorage();
     const sessionsMap = new Map();
 
     Object.entries(storedSessions).forEach(([token, session]) => {
@@ -748,7 +686,7 @@ export const GameRoomProvider = ({
           const newMap = new Map(prev);
           sessionsToDelete.forEach((token) => {
             newMap.delete(token);
-            removeSessionFromStorage(token); // ADD THIS LINE - cleanup localStorage too
+            storage.removeSessionFromStorage(token); // ADD THIS LINE - cleanup localStorage too
           });
           return newMap;
         });

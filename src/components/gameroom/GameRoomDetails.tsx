@@ -9,6 +9,7 @@ import { AdminPanel } from "@/components/gameroom/AdminPanel";
 import { ApprovalSection } from "@/components/gameroom/ApprovalSection";
 import { logger } from "@/utils";
 import { gameRoomService } from "@/services/gameRoomService";
+import { useTournament } from "@/hooks/tournament";
 
 const GameRoomDetails = ({ roomId, onBack }) => {
   const {
@@ -20,6 +21,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
     initiateRoomCompletion,
     getSignaturesAndStatus,
   } = useGameRoom();
+  const { fetchTournamentData } = useTournament();
   const { user } = useAuth();
   const { toast } = useToast();
   const [room, setRoom] = useState<GameRoom | null>(null);
@@ -66,6 +68,7 @@ const GameRoomDetails = ({ roomId, onBack }) => {
         const [roomData, participantsData] = await Promise.all([
           getRoomDetails(roomId),
           gameRoomService.getRoomParticipants(roomId),
+          fetchTournamentData(roomId, true),
         ]);
 
         if (roomData) {
@@ -113,7 +116,8 @@ const GameRoomDetails = ({ roomId, onBack }) => {
         setLoading(false);
       }
     },
-    [roomId, getRoomDetails, getSignatureStatus, toast]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [getRoomDetails, roomId, fetchTournamentData, getSignatureStatus]
   );
   // Function to check if room should auto-complete
   const checkForAutoCompletion = useCallback(async () => {
@@ -147,7 +151,8 @@ const GameRoomDetails = ({ roomId, onBack }) => {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [roomId, loadRoomData]); // Include loadRoomData as dependency
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId]); // Include loadRoomData as dependency
 
   // Check for auto-completion more frequently
   useEffect(() => {
@@ -725,19 +730,23 @@ const GameRoomDetails = ({ roomId, onBack }) => {
       </div>
 
       {/* Special Room Admin Panel */}
-      {room.is_special && isCreator && actualStatus === "ongoing" && (
-        <AdminPanel
-          room={room}
-          participants={participants}
-          onParticipantsUpdate={handleParticipantsUpdate}
-          onInitiateCompletion={handleInitiateCompletion}
-          isCompletingRoom={isCompletingSpecialRoom}
-          setShowCompletionConfirmation={setShowCompletionConfirmation}
-        />
-      )}
+      {room.is_special &&
+        room.mode !== "tournament" &&
+        isCreator &&
+        actualStatus === "ongoing" && (
+          <AdminPanel
+            room={room}
+            participants={participants}
+            onParticipantsUpdate={handleParticipantsUpdate}
+            onInitiateCompletion={handleInitiateCompletion}
+            isCompletingRoom={isCompletingSpecialRoom}
+            setShowCompletionConfirmation={setShowCompletionConfirmation}
+          />
+        )}
 
       {/* Approval Section for Special Rooms */}
       {room.is_special &&
+        room.mode !== "tournament" &&
         (isCreator || isParticipant) &&
         actualStatus === "ongoing" && (
           <ApprovalSection

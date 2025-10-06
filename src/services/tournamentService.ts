@@ -1,7 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/utils/logger";
 import type { Database, TablesInsert } from "@/integrations/supabase/types";
-import { CreateTournamentData, TournamentMatch, TournamentBracket, TournamentRound, TournamentParticipant, TournamentStats } from "@/types/tournament";
+import { CreateTournamentData, TournamentMatch, TournamentBracket, TournamentRound, TournamentParticipant, TournamentStats, MatchApprovalStatus } from "@/types/tournament";
 import { tournamentTimingService } from "./tournamentTimingService";
 import { GameRoom, GameRoomParticipant, Wallet } from "@/types/gameroom";
 import { Profile } from "@/contexts/ProfileContext";
@@ -51,7 +51,8 @@ class TournamentService {
       // Check if tournament already exists
       const existingMatches = await this.getTournamentMatches(data.roomId);
       if (existingMatches.length > 0) {
-        throw new Error("Tournament already exists for this room");
+        logger.warn("Tournament already exists for this room");
+        return existingMatches;
       }
 
       // Calculate number of rounds needed
@@ -73,19 +74,6 @@ class TournamentService {
         const roundMatches = bracket[round - 1] || [];
 
         for (const match of roundMatches) {
-          const scores: Record<string, number> = {};
-          if (match.player1_id) {
-            scores[match.player1_id] = 0;
-          }
-          if (match.player2_id) {
-            scores[match.player2_id] = 0;
-          }
-          if (match.player3_id) {
-            scores[match.player3_id] = 0;
-          }
-          if (match.player4_id) {
-            scores[match.player4_id] = 0;
-          }
           matches.push({
             room_id: data.roomId,
             round_number: round,
@@ -100,10 +88,15 @@ class TournamentService {
               elimination_type: data.eliminationType,
               players_per_match: data.playersPerMatch,
               round_duration_minutes: data.roundDurationMinutes,
-              scores: scores,
+              scores: {},
             },
           });
         }
+      }
+      const anotherCheck = await this.getTournamentMatches(data.roomId);
+      if (anotherCheck.length > 0) {
+        logger.warn("Tournament already exists for this room");
+        return anotherCheck;
       }
 
       const { data: createdMatches, error: matchesError } = await supabase
@@ -111,7 +104,11 @@ class TournamentService {
         .insert(matches)
         .select();
 
-      if (matchesError) throw matchesError;
+      if (matchesError) {
+        logger.debug("Matches addition error", matchesError)
+        throw matchesError;
+      }
+
 
       // Update room with tournament data
       await supabase
@@ -133,25 +130,18 @@ class TournamentService {
         .eq("id", data.roomId);
 
       // checks if there is a match where there is a bye and advance handleBye on the match
-      const { data: matchesToAdvance, error: matchesToAdvanceError } = await supabase
-        .from("tournament_matches")
-        .select("*")
-        .eq("room_id", data.roomId)
-        .eq("status", "pending")
-        .eq("player1_id", null)
-        .eq("player2_id", null);
-
-      if (matchesToAdvanceError) throw matchesToAdvanceError;
-      if (!matchesToAdvance) return;
-      for (const match of matchesToAdvance) {
-        await this.advanceWinnerToNextRound(match as TournamentMatch, data.roomId);
+      const matchesToAdvance = createdMatches.filter(match => match.player1_id === null || match.player2_id === null);
+      if (matchesToAdvance.length > 0) {
+        for (const match of matchesToAdvance) {
+          await this.advanceWinnerToNextRound(match as TournamentMatch, data.roomId);
+        }
       }
-
       logger.success(`Created ${createdMatches.length} tournament matches for room ${data.roomId}`);
       return createdMatches as TournamentMatch[];
 
     } catch (error) {
       logger.error("Error creating tournament matches:", error);
+      logger.trace((error as Error).stack)
       throw error;
     }
   }
@@ -779,10 +769,14 @@ class TournamentService {
 
       // Check if all participants have submitted scores if game mode is multiplayer
       const participants = [match.player1_id, match.player2_id, match.player3_id, match.player4_id].filter(Boolean);
+      logger.debug(`PArticipants: ${participants}, length: ${participants.length}`)
       const submittedScores = (matchData.match_data as TournamentMatch["match_data"]).scores;
+      logger.debug("Submitted scores", submittedScores);
+      logger.debug(`Submitted Scores: ${submittedScores}, length: ${submittedScores.length}`)
 
-      if (participants.length === submittedScores.length) {
+      if (participants.length === Object.keys(submittedScores).length) {
         // All participants have submitted scores, determine winner
+        logger.debug("Yes yes, match up complete, determining winner")
         const { data: room } = await supabase.from("game_rooms").select("name").eq("id", roomId).single();
         await this.determineMatchWinner(matchId, submittedScores, room.name);
       }
@@ -801,20 +795,80 @@ class TournamentService {
    * @param scores - The scores of the participants
    * @returns void
    */
-  async submitMultiplayerScore(roomId: string, matchId: string, scores: Record<string, number>): Promise<void> {
+  async submitMultiplayerScore(roomId: string, matchId: string, scores: Record<string, number>, approved: boolean = false): Promise<void> {
     try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) throw new Error("User not authenticated");
+
       const match = await this.getMatchById(matchId);
       if (!match) throw new Error("Match not found");
       if (match.room_id !== roomId) throw new Error("Match does not belong to this room");
-      const { data: room, error: roomError } = await supabase.from("game_rooms").select("name").eq("id", roomId).single();
+
+      const { data: room, error: roomError } = await supabase.from("game_rooms").select("name, is_special, creator_id").eq("id", roomId).single();
       if (roomError) throw roomError;
-      await this.determineMatchWinner(matchId, scores, room.name);
-      logger.success(`Multiplayer score submitted: ${scores} for match ${matchId}`);
+
+      // If not approved yet, add approval metadata to match data
+      if (!approved) {
+        const currentMatchData = match.match_data || {};
+        const updatedMatchData = {
+          ...currentMatchData,
+          scores: scores,
+          admin_submitted_at: new Date().toISOString(),
+          admin_submitter_id: user.id,
+          approvals: [], // Reset approvals when new scores are submitted
+          approval_status: {
+            required_approvals: this.getRequiredApprovalsForMatch(match),
+            collected_approvals: 0,
+            is_fully_approved: false,
+            pending_approvals: [
+              match.player1_id,
+              match.player2_id,
+              match.player3_id,
+              match.player4_id
+            ].filter(Boolean),
+            approved_by: [],
+            rejected_by: []
+          }
+        };
+
+        // Update match data with approval metadata
+        const { error: updateError } = await supabase
+          .from("tournament_matches")
+          .update({
+            match_data: updatedMatchData as any
+          })
+          .eq("id", matchId);
+
+        if (updateError) throw updateError;
+
+        // Notify participants about score submission
+        const participantIds = [
+          match.player1_id,
+          match.player2_id,
+          match.player3_id,
+          match.player4_id
+        ].filter(Boolean) as string[];
+
+        if (participantIds.length > 0) {
+          await notificationService.createBulkNotifications(participantIds, "tournament_advance", {
+            match_id: matchId,
+            room_id: roomId,
+            room_name: room.name
+          });
+        }
+
+        logger.success(`Multiplayer scores submitted by admin: ${JSON.stringify(scores)} for match ${matchId}`);
+      } else {
+        // Scores are approved, proceed with match completion
+        if (!room.is_special || (room.is_special && approved)) {
+          await this.determineMatchWinner(matchId, scores, room.name);
+        }
+        logger.success(`Multiplayer score approved and match completed: ${JSON.stringify(scores)} for match ${matchId}`);
+      }
     } catch (error) {
       logger.error("Error submitting multiplayer score:", error);
       throw error;
     }
-
   }
 
   /**
@@ -826,6 +880,7 @@ class TournamentService {
    */
   private async determineMatchWinner(matchId: string, scores: Record<string, number>, roomName: string): Promise<void> {
     try {
+      logger.debug(`determining winner matchID: ${matchId}, scores: ${scores}, room name: ${roomName}`)
       // Find the participant with the highest score
       let winnerId: string | null = null;
       let highestScore = -1;
@@ -836,7 +891,7 @@ class TournamentService {
           winnerId = userId;
         }
       }
-
+      logger.info("Winner: ", winnerId)
 
       if (!winnerId) throw new Error("No winner determined");
 
@@ -853,6 +908,7 @@ class TournamentService {
   // Complete a match
   async completeMatch(matchId: string, winnerId: string, roomName: string, scores?: Record<string, number>): Promise<TournamentMatch> {
     try {
+      logger.info("Completing match")
       const { data: matchData, error: matchDataError } = await supabase
         .from("tournament_matches")
         .select("match_data")
@@ -1339,6 +1395,303 @@ class TournamentService {
       logger.error("Error stopping tournament timing:", error);
       throw error;
     }
+  }
+
+  /**
+   * Approve admin score submission for a match
+   */
+  async approveMatchScores(matchId: string): Promise<void> {
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) throw new Error("User not authenticated");
+
+      const match = await this.getMatchById(matchId);
+      if (!match) throw new Error("Match not found");
+
+      // Verify user is a participant in this match
+      const isParticipant = match.player1_id === user.id ||
+        match.player2_id === user.id ||
+        match.player3_id === user.id ||
+        match.player4_id === user.id;
+
+      if (!isParticipant) throw new Error("User is not a participant in this match");
+
+      // Check if scores have been submitted by admin
+      if (!match.match_data?.admin_submitted_at) {
+        throw new Error("No scores have been submitted by admin yet");
+      }
+
+      // Check if user has already approved
+      const existingApproval = match.match_data?.approvals?.find(
+        approval => approval.participant_id === user.id
+      );
+
+      if (existingApproval) {
+        throw new Error("You have already submitted your approval for this match");
+      }
+
+      // Add approval to match data
+      const currentMatchData = match.match_data || {};
+      const approvals = currentMatchData.approvals || [];
+      const newApproval = {
+        participant_id: user.id,
+        approved_at: new Date().toISOString(),
+        approved: true
+      };
+
+      const updatedApprovals = [...approvals, newApproval];
+      const requiredApprovals = this.getRequiredApprovalsForMatch(match);
+      const collectedApprovals = updatedApprovals.filter(a => a.approved).length;
+      const isFullyApproved = collectedApprovals >= requiredApprovals;
+
+      const updatedMatchData: TournamentMatch["match_data"] = {
+        ...currentMatchData,
+        approvals: updatedApprovals,
+        approval_status: {
+          required_approvals: requiredApprovals,
+          collected_approvals: collectedApprovals,
+          is_fully_approved: isFullyApproved,
+          pending_approvals: [
+            match.player1_id,
+            match.player2_id,
+            match.player3_id,
+            match.player4_id
+          ].filter(Boolean).filter(id => id !== user.id),
+          approved_by: [],
+          rejected_by: []
+        }
+      };
+
+      // Update match data
+      const { error: updateError } = await supabase
+        .from("tournament_matches")
+        .update({
+          match_data: updatedMatchData as any
+        })
+        .eq("id", matchId);
+
+      if (updateError) throw updateError;
+
+      logger.success(`Match scores approved by user ${user.id} for match ${matchId}`);
+
+      // If fully approved, auto-complete the match
+      if (isFullyApproved) {
+        await this.checkAndCompleteMatchIfApproved(matchId);
+
+        // Notify all participants about full approval
+        const participantIds = [
+          match.player1_id,
+          match.player2_id,
+          match.player3_id,
+          match.player4_id
+        ].filter(Boolean) as string[];
+
+        if (participantIds.length > 0) {
+          const { data: room } = await supabase.from("game_rooms").select("name").eq("id", match.room_id).single();
+          if (room) {
+            await notificationService.createBulkNotifications(participantIds, "tournament_advance", {
+              match_id: matchId,
+              room_id: match.room_id,
+              room_name: room.name
+            });
+          }
+        }
+      }
+
+    } catch (error) {
+      logger.error("Error approving match scores:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Reject admin score submission for a match
+   */
+  async rejectMatchScores(matchId: string, reason?: string): Promise<void> {
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) throw new Error("User not authenticated");
+
+      const match = await this.getMatchById(matchId);
+      if (!match) throw new Error("Match not found");
+
+      // Verify user is a participant in this match
+      const isParticipant = match.player1_id === user.id ||
+        match.player2_id === user.id ||
+        match.player3_id === user.id ||
+        match.player4_id === user.id;
+
+      if (!isParticipant) throw new Error("User is not a participant in this match");
+
+      // Check if scores have been submitted by admin
+      if (!match.match_data?.admin_submitted_at) {
+        throw new Error("No scores have been submitted by admin yet");
+      }
+
+      // Check if user has already approved/rejected
+      const existingApproval = match.match_data?.approvals?.find(
+        approval => approval.participant_id === user.id
+      );
+
+      if (existingApproval) {
+        throw new Error("You have already submitted your approval for this match");
+      }
+
+      // Add rejection to match data
+      const currentMatchData = match.match_data || {};
+      const approvals = currentMatchData.approvals || [];
+      const newApproval = {
+        participant_id: user.id,
+        approved_at: new Date().toISOString(),
+        approved: false,
+        reason: reason
+      };
+
+      const updatedApprovals = [...approvals, newApproval];
+
+      const updatedMatchData: TournamentMatch["match_data"] = {
+        ...currentMatchData,
+        approvals: updatedApprovals,
+        approval_status: {
+          ...currentMatchData.approval_status,
+          is_fully_approved: false, // Rejection means not fully approved
+          pending_approvals: [
+            match.player1_id,
+            match.player2_id,
+            match.player3_id,
+            match.player4_id
+          ].filter(Boolean).filter(id => id !== user.id),
+          approved_by: [],
+          rejected_by: []
+        }
+      };
+
+      // Update match data
+      const { error: updateError } = await supabase
+        .from("tournament_matches")
+        .update({
+          match_data: updatedMatchData as any
+        })
+        .eq("id", matchId);
+
+      if (updateError) throw updateError;
+
+      logger.success(`Match scores rejected by user ${user.id} for match ${matchId}`);
+
+      // Notify admin about rejection
+      const { data: room } = await supabase.from("game_rooms").select("creator_id, name").eq("id", match.room_id).single();
+      if (room) {
+        await notificationService.createNotification(room.creator_id, "tournament_elimination" as any, {
+          match_id: matchId,
+          room_id: match.room_id,
+          room_name: room.name
+        });
+      }
+
+    } catch (error) {
+      logger.error("Error rejecting match scores:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if a match can be advanced (has scores and approvals)
+   */
+  async canAdvanceMatch(matchId: string): Promise<boolean> {
+    try {
+      const match = await this.getMatchById(matchId);
+      if (!match) return false;
+
+      // Check if scores have been submitted
+      if (!match.match_data?.admin_submitted_at) return false;
+
+      // Check if fully approved
+      return match.match_data?.approval_status?.is_fully_approved || false;
+    } catch (error) {
+      logger.error("Error checking if match can be advanced:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Get approval status for a match
+   */
+  async getMatchApprovalStatus(matchId: string): Promise<MatchApprovalStatus | null> {
+    try {
+      const match = await this.getMatchById(matchId);
+      if (!match) return null;
+
+      const matchData = match.match_data || {};
+      const approvals = matchData.approvals || [];
+      const requiredApprovals = this.getRequiredApprovalsForMatch(match);
+
+      const approvedBy = approvals.filter(a => a.approved).map(a => a.participant_id);
+      const rejectedBy = approvals.filter(a => !a.approved).map(a => a.participant_id);
+
+      // Get all participant IDs for this match
+      const participantIds = [
+        match.player1_id,
+        match.player2_id,
+        match.player3_id,
+        match.player4_id
+      ].filter(Boolean) as string[];
+
+      const pendingApprovals = participantIds.filter(
+        id => !approvedBy.includes(id) && !rejectedBy.includes(id)
+      );
+
+      return {
+        required_approvals: requiredApprovals,
+        collected_approvals: approvedBy.length,
+        is_fully_approved: approvedBy.length >= requiredApprovals,
+        pending_approvals: pendingApprovals,
+        approved_by: approvedBy,
+        rejected_by: rejectedBy
+      };
+    } catch (error) {
+      logger.error("Error getting match approval status:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Auto-complete match if fully approved
+   */
+  async checkAndCompleteMatchIfApproved(matchId: string): Promise<void> {
+    try {
+      const match = await this.getMatchById(matchId);
+      if (!match) return;
+
+      const approvalStatus = await this.getMatchApprovalStatus(matchId);
+      if (!approvalStatus?.is_fully_approved) return;
+
+      // Auto-call submitMultiplayerScore with approved: true
+      const { data: room } = await supabase.from("game_rooms").select("name").eq("id", match.room_id).single();
+      if (room && match.match_data?.scores) {
+        await this.submitMultiplayerScore(match.room_id, matchId, match.match_data.scores, true);
+        logger.success(`Match ${matchId} auto-completed after full approval`);
+      }
+    } catch (error) {
+      logger.error("Error auto-completing approved match:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get required number of approvals for a match
+   */
+  private getRequiredApprovalsForMatch(match: TournamentMatch): number {
+    // For now, require approval from at least one participant
+    // This can be made configurable later
+    const participantCount = [
+      match.player1_id,
+      match.player2_id,
+      match.player3_id,
+      match.player4_id
+    ].filter(Boolean).length;
+
+    // Require approval from at least 1 participant, or all participants if less than 3
+    return Math.min(Math.max(1, participantCount - 1), participantCount);
   }
 
 }

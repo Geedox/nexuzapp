@@ -509,12 +509,13 @@ class GameRoomService {
         const createdObjects = onChainResult.changes.filter(
           (c) => c.type === "created"
         );
-        const participantPayoutId = createdObjects.find(
+        const participantPayout = createdObjects.find(
           (c) =>
             c.owner ===
             (participantProfile.sui_wallet_data as Profile["sui_wallet_data"])
               ?.address
-        ).digest;
+        );
+        const participantPayoutId = participantPayout ? participantPayout.digest : null
 
         // Update participant with final position and earnings
         const { error: participantError } = await supabase

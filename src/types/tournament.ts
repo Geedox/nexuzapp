@@ -32,7 +32,7 @@ export interface TournamentContextType {
     completeTournament: (roomId: string) => Promise<void>;
 
     // Tournament data fetching
-    fetchTournamentData: (roomId: string) => Promise<void>;
+    fetchTournamentData: (roomId: string, silent?: boolean) => Promise<void>;
     subscribeToTournamentUpdates: (roomId: string) => RealtimeChannel;
     unsubscribeFromTournamentUpdates: (subscription: RealtimeChannel) => void;
 
@@ -62,6 +62,11 @@ export interface TournamentMatch {
         players_per_match?: number;
         round_duration_minutes?: number;
         scores?: Record<string, number>;
+        // Approval fields
+        admin_submitted_at?: string;
+        admin_submitter_id?: string;
+        approvals?: MatchApproval[];
+        approval_status?: MatchApprovalStatus;
         metadata?: Record<string, unknown>;
     };
     created_at: string | null;
@@ -156,4 +161,21 @@ export interface TournamentStats {
     totalRounds: number;
     isComplete: boolean;
     winner?: string;
+}
+
+// Approval-related interfaces
+export interface MatchApprovalStatus {
+    required_approvals: number;
+    collected_approvals: number;
+    is_fully_approved: boolean;
+    pending_approvals: string[]; // participant IDs who haven't approved yet
+    approved_by: string[]; // participant IDs who have approved
+    rejected_by: string[]; // participant IDs who have rejected
+}
+
+export interface MatchApproval {
+    participant_id: string;
+    approved_at: string;
+    approved: boolean;
+    reason?: string; // Optional reason for rejection
 }

@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import type {
   TournamentBracket,
   TournamentMatch,
   TournamentParticipant,
+  MatchApprovalStatus,
 } from "@/types/tournament";
 import { tournamentTimingService } from "@/services/tournamentTimingService";
 import { GameRoom } from "@/types/gameroom";
@@ -10,6 +11,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 import { tournamentService } from "@/services/tournamentService";
 import { useGameRoom } from "@/hooks/gameroom";
+import { AdminScoreSubmissionDialog } from "./AdminScoreSubmissionDialog";
+import { ParticipantApprovalDialog } from "./ParticipantApprovalDialog";
+import { supabase } from "@/integrations/supabase/client";
+import { RealtimeChannel } from "@supabase/supabase-js";
+import { logger } from "@/utils/logger";
+import { ApprovalStatusDisplay } from "./ApprovalStatus";
 
 interface TournamentBracketDisplayProps {
   tournament: TournamentBracket;
@@ -30,36 +37,39 @@ export const TournamentBracketDisplay: React.FC<
   const { user } = useAuth();
   const [advancingMatch, setAdvancingMatch] = useState<string | null>(null);
   const { playGame } = useGameRoom();
+
+  // Dialog states
+  const [showAdminScoreDialog, setShowAdminScoreDialog] = useState(false);
+  const [showParticipantApprovalDialog, setShowParticipantApprovalDialog] =
+    useState(false);
+  const [selectedMatch, setSelectedMatch] = useState<TournamentMatch | null>(
+    null
+  );
+
+  // Real-time subscription state
+  const [subscription, setSubscription] = useState<RealtimeChannel | null>(
+    null
+  );
+
   // Check if current user is admin (room creator)
   const isAdmin = user?.id === room.creator_id;
 
-  // Handle starting a match (admin only)
-  const handleStartMatch = async (match: TournamentMatch) => {
+  // Handle starting a match (admin only) - Open admin score submission dialog
+  const handleAddScores = async (match: TournamentMatch) => {
     if (!isAdmin) return;
+    setSelectedMatch(match);
+    setShowAdminScoreDialog(true);
+  };
 
-    setAdvancingMatch(match.id);
-    try {
-      await tournamentService.startMatch(match.id);
-
-      toast({
-        title: "Match started",
-        description: `Match ${match.match_number} has been started`,
-      });
-    } catch (error) {
-      console.error("Error starting match:", error);
-      toast({
-        title: "Failed to start match",
-        description: "Please try again",
-        variant: "destructive",
-      });
-    } finally {
-      setAdvancingMatch(null);
-    }
+  // Handle approval status click
+  const handleApprovalClick = async (match: TournamentMatch) => {
+    setSelectedMatch(match);
+    setShowParticipantApprovalDialog(true);
   };
 
   // Check if a match is ready to start
-  const isMatchReadyToStart = (match: TournamentMatch): boolean => {
-    if (match.status !== "pending") return false;
+  const isMatchReady = (match: TournamentMatch): boolean => {
+    if (match.status === "pending") return false;
 
     const playersPerMatch = match.match_data?.players_per_match || 2;
     const currentPlayerCount = [
@@ -68,13 +78,45 @@ export const TournamentBracketDisplay: React.FC<
       match.player3_id,
       match.player4_id,
     ].filter(Boolean).length;
-
-    return currentPlayerCount === playersPerMatch;
+    logger.debug(
+      `players per match: ${playersPerMatch}, current players: ${currentPlayerCount}`
+    );
+    const res = currentPlayerCount >= playersPerMatch;
+    logger.info("Can start match", res);
+    return res;
   };
 
   // Handle advancing a match (admin only)
   const handleAdvanceMatch = async (match: TournamentMatch) => {
     if (!isAdmin) return;
+
+    // Check if scores have been submitted by admin
+    if (!match.match_data?.admin_submitted_at) {
+      toast({
+        title: "No scores submitted",
+        description: "Please submit scores first before advancing the match",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check if scores are fully approved
+    const approvalStatus = await tournamentService.getMatchApprovalStatus(
+      match.id
+    );
+    if (!approvalStatus?.is_fully_approved) {
+      toast({
+        title: "Scores not approved",
+        description: `Scores need approval from ${
+          approvalStatus?.required_approvals || 0
+        } participants. Currently approved by ${
+          approvalStatus?.collected_approvals || 0
+        }.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     // if both scores are zero, return
     if (
       match.match_data?.scores &&
@@ -231,6 +273,34 @@ export const TournamentBracketDisplay: React.FC<
 
     return () => clearInterval(interval);
   }, [tournament.rounds]);
+
+  // Real-time subscription for tournament match updates
+  useEffect(() => {
+    if (!room.id) return;
+
+    const channel = supabase
+      .channel(`tournament_matches_${room.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "tournament_matches",
+          filter: `room_id=eq.${room.id}`,
+        },
+        (payload) => {
+          logger.info("Tournament match updated:", payload);
+        }
+      )
+      .subscribe();
+
+    setSubscription(channel);
+
+    return () => {
+      channel.unsubscribe();
+      setSubscription(null);
+    };
+  }, [room.id]);
 
   // Helper function to get match status styling
   const getMatchStatusClass = (status: string) => {
@@ -390,36 +460,49 @@ export const TournamentBracketDisplay: React.FC<
             )}
           </div>
 
-          {/* Play Game Button for Participants */}
-          {isCurrentUserMatch && match.status === "active" && (
+          {/* Approval Status Display */}
+          {match.match_data?.admin_submitted_at && (
             <div className="mt-2">
-              <button
-                onClick={() => playGame(room.id)}
-                className="w-full bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white text-xs font-cyber font-bold py-2 px-3 rounded-lg transition-all duration-200 flex items-center justify-center gap-2"
-              >
-                <span>🎮</span>
-                Play Game
-              </button>
+              <ApprovalStatusDisplay
+                match={match}
+                currentUserId={currentUserId}
+                onApprovalClick={() => handleApprovalClick(match)}
+              />
             </div>
           )}
 
-          {/* Admin Buttons */}
-          {isAdmin && (
-            <div className="mt-2 space-y-2">
-              {/* Start Match Button */}
-              {isMatchReadyToStart(match) && (
+          {/* Play Game Button for Participants */}
+          {isCurrentUserMatch &&
+            match.status === "active" &&
+            !room.is_special && (
+              <div className="mt-2">
                 <button
-                  onClick={() => handleStartMatch(match)}
+                  onClick={() => playGame(room.id)}
+                  className="w-full bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white text-xs font-cyber font-bold py-2 px-3 rounded-lg transition-all duration-200 flex items-center justify-center gap-2"
+                >
+                  <span>🎮</span>
+                  Play Game
+                </button>
+              </div>
+            )}
+
+          {/* Admin Buttons */}
+          {isAdmin && room.is_special && (
+            <div className="mt-2 space-y-2">
+              {/* Add Scores Button */}
+              {isMatchReady(match) && room.is_special && (
+                <button
+                  onClick={() => handleAddScores(match)}
                   disabled={advancingMatch === match.id}
                   className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 disabled:from-gray-500 disabled:to-gray-600 text-white text-xs font-cyber font-bold py-2 px-3 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {advancingMatch === match.id ? (
                     <div className="flex items-center justify-center gap-2">
                       <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></div>
-                      Starting...
+                      Adding scores...
                     </div>
                   ) : (
-                    "Start Match"
+                    "Add scores"
                   )}
                 </button>
               )}
@@ -428,7 +511,8 @@ export const TournamentBracketDisplay: React.FC<
               {match.status === "active" &&
                 match.match_data?.scores &&
                 // room.play_mode === "single" &&
-                Object.keys(match.match_data.scores).length > 0 && (
+                Object.keys(match.match_data.scores).length > 0 &&
+                room.is_special && (
                   <button
                     onClick={() => handleAdvanceMatch(match)}
                     disabled={advancingMatch === match.id}
@@ -569,6 +653,39 @@ export const TournamentBracketDisplay: React.FC<
           />
         </div>
       </div>
+
+      {/* Dialog Components */}
+      {selectedMatch && (
+        <>
+          <AdminScoreSubmissionDialog
+            match={selectedMatch}
+            isOpen={showAdminScoreDialog}
+            onClose={() => {
+              setShowAdminScoreDialog(false);
+              setSelectedMatch(null);
+            }}
+            onScoresSubmitted={() => {
+              // Refresh tournament data or handle success
+              setShowAdminScoreDialog(false);
+              setSelectedMatch(null);
+            }}
+          />
+
+          <ParticipantApprovalDialog
+            match={selectedMatch}
+            isOpen={showParticipantApprovalDialog}
+            onClose={() => {
+              setShowParticipantApprovalDialog(false);
+              setSelectedMatch(null);
+            }}
+            onApprovalSubmitted={() => {
+              // Refresh tournament data or handle success
+              setShowParticipantApprovalDialog(false);
+              setSelectedMatch(null);
+            }}
+          />
+        </>
+      )}
     </div>
   );
 };

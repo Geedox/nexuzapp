@@ -12,6 +12,7 @@ import { logger } from "@/utils";
 import { toast } from "@/hooks/use-toast";
 import { TournamentBracketDisplay } from "./TournamentBracketDisplay";
 import { ChevronDown, Trophy, Medal, Award } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 
 interface RoundRobinProps {
   room: GameRoom;
@@ -27,6 +28,9 @@ interface PlayerStanding {
   draws: number;
   losses: number;
   gamesPlayed: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  goalDifference: number;
 }
 
 export const RoundRobin: React.FC<RoundRobinProps> = ({
@@ -91,71 +95,25 @@ export const RoundRobin: React.FC<RoundRobinProps> = ({
     participants.forEach((participant) => {
       standingsMap.set(participant.user_id, {
         participant,
-        points: 0,
-        wins: 0,
-        draws: 0,
-        losses: 0,
-        gamesPlayed: 0,
-      });
-    });
-
-    // Process all completed matches
-    tournament.rounds.forEach((round) => {
-      round.matches.forEach((match) => {
-        if (match.status === "completed" && match.winner_id) {
-          const player1 = match.player1_id;
-          const player2 = match.player2_id;
-          const winner = match.winner_id;
-          const scores = match.match_data?.scores || {};
-
-          if (player1 && player2) {
-            const player1Score = scores[player1] || 0;
-            const player2Score = scores[player2] || 0;
-
-            // Update player 1
-            const standing1 = standingsMap.get(player1);
-            if (standing1) {
-              standing1.gamesPlayed++;
-
-              if (winner === player1) {
-                standing1.wins++;
-                standing1.points += 2; // 2 points for win
-              } else if (winner === player2) {
-                standing1.losses++;
-                // 0 points for loss
-              } else {
-                standing1.draws++;
-                standing1.points += 1; // 1 point for draw
-              }
-            }
-
-            // Update player 2
-            const standing2 = standingsMap.get(player2);
-            if (standing2) {
-              standing2.gamesPlayed++;
-
-              if (winner === player2) {
-                standing2.wins++;
-                standing2.points += 2; // 2 points for win
-              } else if (winner === player1) {
-                standing2.losses++;
-                // 0 points for loss
-              } else {
-                standing2.draws++;
-                standing2.points += 1; // 1 point for draw
-              }
-            }
-          }
-        }
+        points: participant.tournament_points,
+        wins: participant.tournament_wins,
+        draws: participant.tournament_draws,
+        losses: participant.tournament_losses,
+        gamesPlayed: participant.tournament_matches_played,
+        goalsFor: participant.tournament_goals_for,
+        goalsAgainst: participant.tournament_goals_against,
+        goalDifference: participant.tournament_goal_difference,
       });
     });
 
     // Sort by points (descending), then goal difference (descending), then wins (descending)
     return Array.from(standingsMap.values()).sort((a, b) => {
       if (b.points !== a.points) return b.points - a.points;
+      if (b.goalDifference !== a.goalDifference)
+        return b.goalDifference - a.goalDifference;
       return b.wins - a.wins;
     });
-  }, [tournament.rounds, participants]);
+  }, [participants]);
 
   // Check if user is admin/creator of the room
   const isAdmin = useMemo(
@@ -468,6 +426,15 @@ export const RoundRobin: React.FC<RoundRobinProps> = ({
                   <th className="text-center py-3 px-2 font-cyber font-bold text-primary">
                     Pts
                   </th>
+                  <th className="text-center py-3 px-2 font-cyber font-bold text-primary">
+                    SF
+                  </th>
+                  <th className="text-center py-3 px-2 font-cyber font-bold text-primary">
+                    SA
+                  </th>
+                  <th className="text-center py-3 px-2 font-cyber font-bold text-primary">
+                    SD
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -539,6 +506,26 @@ export const RoundRobin: React.FC<RoundRobinProps> = ({
                           {standing.points}
                         </div>
                       </td>
+                      <td className="py-3 px-2 text-center font-cyber font-bold text-green-400">
+                        {standing.goalsFor}
+                      </td>
+                      <td className="py-3 px-2 text-center font-cyber font-bold text-red-400">
+                        {standing.goalsAgainst}
+                      </td>
+                      <td className="py-3 px-2 text-center">
+                        <div
+                          className={`font-cyber font-bold px-2 py-1 rounded text-sm ${
+                            standing.goalDifference > 0
+                              ? "bg-green-500/20 text-green-400"
+                              : standing.goalDifference < 0
+                              ? "bg-red-500/20 text-red-400"
+                              : "bg-gray-500/20 text-gray-400"
+                          }`}
+                        >
+                          {standing.goalDifference > 0 ? "+" : ""}
+                          {standing.goalDifference}
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
@@ -584,7 +571,11 @@ export const RoundRobin: React.FC<RoundRobinProps> = ({
       );
     }
 
-    if (!currentUserActiveMatch) {
+    if (
+      !currentUserActiveMatch &&
+      room.status !== "completed" &&
+      room.status !== "cancelled"
+    ) {
       return (
         <div className="text-center py-8">
           <div className="text-4xl mb-4">⏳</div>
@@ -600,89 +591,91 @@ export const RoundRobin: React.FC<RoundRobinProps> = ({
     }
 
     // If user has an active match, show match completion interface
-    const match = currentUserActiveMatch;
-    const player1 = getParticipant(match.player1_id);
-    const player2 = getParticipant(match.player2_id);
-    const player3 = getParticipant(match.player3_id);
-    const player4 = getParticipant(match.player4_id);
-    const players = [player1, player2, player3, player4].filter(Boolean);
+    if (currentUserActiveMatch) {
+      const match = currentUserActiveMatch;
+      const player1 = getParticipant(match.player1_id);
+      const player2 = getParticipant(match.player2_id);
+      const player3 = getParticipant(match.player3_id);
+      const player4 = getParticipant(match.player4_id);
+      const players = [player1, player2, player3, player4].filter(Boolean);
 
-    return (
-      <div className="bg-gradient-to-br from-card to-secondary border border-primary/20 rounded-xl p-6">
-        <h3 className="text-lg font-cyber font-bold text-primary mb-4">
-          Complete Your Match
-        </h3>
+      return (
+        <div className="bg-gradient-to-br from-card to-secondary border border-primary/20 rounded-xl p-6">
+          <h3 className="text-lg font-cyber font-bold text-primary mb-4">
+            Complete Your Match
+          </h3>
 
-        <div className="space-y-3">
-          {players.map((player, index) => {
-            if (!player) return null;
+          <div className="space-y-3">
+            {players.map((player, index) => {
+              if (!player) return null;
 
-            return (
-              <div
-                key={player.id}
-                className="flex items-center justify-between p-3 rounded-lg bg-primary/10 border border-primary/20"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-gradient-to-br from-primary to-accent rounded-full flex items-center justify-center text-background font-cyber font-bold text-sm">
-                    {index + 1}
-                  </div>
-                  <div>
-                    <div className="font-cyber font-bold text-foreground">
-                      {player.user?.display_name ||
-                        player.user?.username ||
-                        "Unknown Player"}
+              return (
+                <div
+                  key={player.id}
+                  className="flex items-center justify-between p-3 rounded-lg bg-primary/10 border border-primary/20"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-gradient-to-br from-primary to-accent rounded-full flex items-center justify-center text-background font-cyber font-bold text-sm">
+                      {index + 1}
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      Seed #{player.seed}
+                    <div>
+                      <div className="font-cyber font-bold text-foreground">
+                        {player.user?.display_name ||
+                          player.user?.username ||
+                          "Unknown Player"}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Seed #{player.seed}
+                      </div>
                     </div>
                   </div>
+
+                  <button
+                    onClick={() => setSelectedWinner(player.user_id)}
+                    className={`px-3 py-1 rounded-lg text-xs font-cyber font-bold transition-all ${
+                      selectedWinner === player.user_id
+                        ? "bg-accent text-background"
+                        : "bg-primary/20 text-primary hover:bg-primary/30"
+                    }`}
+                  >
+                    Select Winner
+                  </button>
                 </div>
+              );
+            })}
+          </div>
 
-                <button
-                  onClick={() => setSelectedWinner(player.user_id)}
-                  className={`px-3 py-1 rounded-lg text-xs font-cyber font-bold transition-all ${
-                    selectedWinner === player.user_id
-                      ? "bg-accent text-background"
-                      : "bg-primary/20 text-primary hover:bg-primary/30"
-                  }`}
-                >
-                  Select Winner
-                </button>
-              </div>
-            );
-          })}
-        </div>
-
-        {selectedWinner && (
-          <div className="mt-4 pt-4 border-t border-primary/20">
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-muted-foreground">
-                Complete match with winner:{" "}
-                <span className="font-cyber font-bold text-primary">
-                  {getParticipant(selectedWinner)?.user?.display_name ||
-                    getParticipant(selectedWinner)?.user?.username}
-                </span>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setSelectedWinner(null)}
-                  className="px-3 py-1 bg-secondary text-foreground text-xs font-cyber rounded-lg hover:bg-secondary/80 transition-all"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => handleCompleteMatch(match, selectedWinner!)}
-                  disabled={completing}
-                  className="px-4 py-1 bg-gradient-to-r from-green-500 to-green-600 text-white text-xs font-cyber font-bold rounded-lg hover:scale-105 transition-all disabled:opacity-50 disabled:hover:scale-100"
-                >
-                  {completing ? "Completing..." : "Complete Match"}
-                </button>
+          {selectedWinner && (
+            <div className="mt-4 pt-4 border-t border-primary/20">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-muted-foreground">
+                  Complete match with winner:{" "}
+                  <span className="font-cyber font-bold text-primary">
+                    {getParticipant(selectedWinner)?.user?.display_name ||
+                      getParticipant(selectedWinner)?.user?.username}
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setSelectedWinner(null)}
+                    className="px-3 py-1 bg-secondary text-foreground text-xs font-cyber rounded-lg hover:bg-secondary/80 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => handleCompleteMatch(match, selectedWinner!)}
+                    disabled={completing}
+                    className="px-4 py-1 bg-gradient-to-r from-green-500 to-green-600 text-white text-xs font-cyber font-bold rounded-lg hover:scale-105 transition-all disabled:opacity-50 disabled:hover:scale-100"
+                  >
+                    {completing ? "Completing..." : "Complete Match"}
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
-      </div>
-    );
+          )}
+        </div>
+      );
+    }
   };
 
   return (
@@ -692,21 +685,24 @@ export const RoundRobin: React.FC<RoundRobinProps> = ({
 
       {/* Tournament Progress */}
       {renderProgress()}
-
-      {/* Standings Table */}
-      {hasTournamentMatches && renderStandings()}
-
-      {/* Match Fixtures */}
-      {hasTournamentMatches && renderMatchFixtures()}
-
-      {/* Tournament Bracket Display (keep for compatibility) */}
       {hasTournamentMatches && (
-        <TournamentBracketDisplay
-          tournament={tournament}
-          participants={participants}
-          currentUserId={user?.id}
-          room={room}
-        />
+        <Tabs defaultValue="brackets" className="w-full">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="brackets">Brackets</TabsTrigger>
+            <TabsTrigger value="fixtures">Fixtures</TabsTrigger>
+            <TabsTrigger value="standings">Standings</TabsTrigger>
+          </TabsList>
+          <TabsContent value="standings">{renderStandings()}</TabsContent>
+          <TabsContent value="fixtures">{renderMatchFixtures()}</TabsContent>
+          <TabsContent value="brackets">
+            <TournamentBracketDisplay
+              tournament={tournament}
+              participants={participants}
+              currentUserId={user?.id}
+              room={room}
+            />
+          </TabsContent>
+        </Tabs>
       )}
 
       {/* Match Completion Interface */}

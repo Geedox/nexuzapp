@@ -46,7 +46,7 @@ export const TournamentDisplay: React.FC<TournamentDisplayProps> = ({
   useEffect(() => {
     if (room.id) {
       logger.info("Fetching tournament data for room:", room.id);
-      fetchTournamentData(room.id);
+      fetchTournamentData(room.id, true);
 
       // Subscribe to tournament updates for realtime changes
       logger.info("Subscribing to tournament updates for room:", room.id);

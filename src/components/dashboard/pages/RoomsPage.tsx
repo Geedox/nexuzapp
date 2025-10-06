@@ -487,6 +487,16 @@ const RoomsPage = () => {
     { value: "top_10", label: "Top 10" },
   ];
 
+  // Filter winner rules based on room mode
+  const getAvailableWinnerRules = () => {
+    if (formData.mode === "tournament") {
+      return winnerRules.filter(
+        (rule) => rule.value === "winner_takes_all" || rule.value === "top_2"
+      );
+    }
+    return winnerRules;
+  };
+
   // Function to close celebration modal
   const closeCelebration = useCallback(() => {
     setShowCelebration(false);
@@ -1565,21 +1575,40 @@ const RoomsPage = () => {
                       </label>
                       <select
                         value={formData.mode}
-                        onChange={(e) =>
-                          setFormData({
+                        onChange={(e) => {
+                          const newMode = e.target.value as
+                            | "regular"
+                            | "tournament";
+                          const updatedFormData = {
                             ...formData,
-                            mode: e.target.value as
-                              | "regular"
-                              | "tournament"
-                              | "league",
+                            mode: newMode,
                             // Ensure even number of players for tournaments
                             maxPlayers:
-                              e.target.value === "tournament" &&
+                              newMode === "tournament" &&
                               formData.maxPlayers % 2 !== 0
                                 ? formData.maxPlayers + 1
                                 : formData.maxPlayers,
-                          })
-                        }
+                          };
+
+                          // If switching to tournament mode, ensure winner split rule is valid
+                          if (newMode === "tournament") {
+                            const availableRules = winnerRules.filter(
+                              (rule) =>
+                                rule.value === "winner_takes_all" ||
+                                rule.value === "top_2"
+                            );
+                            const currentRuleValid = availableRules.some(
+                              (rule) => rule.value === formData.winnerSplitRule
+                            );
+
+                            if (!currentRuleValid) {
+                              updatedFormData.winnerSplitRule =
+                                "winner_takes_all";
+                            }
+                          }
+
+                          setFormData(updatedFormData);
+                        }}
                         className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
                       >
                         <option value="regular">Regular Room</option>
@@ -1644,7 +1673,7 @@ const RoomsPage = () => {
                         }
                         className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
                       >
-                        {winnerRules.map((rule) => (
+                        {getAvailableWinnerRules().map((rule) => (
                           <option key={rule.value} value={rule.value}>
                             {rule.label}
                           </option>
@@ -1718,9 +1747,7 @@ const RoomsPage = () => {
                             className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
                           >
                             <option value="single">Single Elimination</option>
-                            <option value="round_robin">
-                              Round Robin
-                            </option>
+                            <option value="round_robin">Round Robin</option>
                           </select>
                           <p className="text-xs font-cyber text-muted-foreground mt-1">
                             {formData.eliminationType === "single"

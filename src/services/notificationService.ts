@@ -199,6 +199,29 @@ class NotificationService {
                 emailSubject: `🎮 Game Invitation: ${data.sender_name} wants to play!`,
                 priority: 'high',
                 requiresEmail: true
+            },
+
+            // Tournament Score Approval Notifications
+            match_scores_submitted: {
+                title: "📊 Match Scores Submitted",
+                message: `Admin has submitted scores for your tournament match in ${data.room_name}. Please review and approve.`,
+                emailSubject: `📊 Match Scores Submitted - ${data.room_name}`,
+                priority: 'high',
+                requiresEmail: true
+            },
+            match_score_rejected: {
+                title: "❌ Match Scores Rejected",
+                message: `A participant has rejected the scores for match in ${data.room_name}. Please review and resubmit.`,
+                emailSubject: `❌ Match Scores Rejected - ${data.room_name}`,
+                priority: 'high',
+                requiresEmail: true
+            },
+            match_fully_approved: {
+                title: "✅ Match Fully Approved",
+                message: `All participants have approved the scores for your tournament match in ${data.room_name}. Match will be completed automatically.`,
+                emailSubject: `✅ Match Approved - ${data.room_name}`,
+                priority: 'medium',
+                requiresEmail: false
             }
         };
 
@@ -247,7 +270,10 @@ class NotificationService {
                 prize_distributed: true,
                 room_reminder: true,
                 friend_request_accepted: true,
-                friend_request_declined: false
+                friend_request_declined: false,
+                match_scores_submitted: true,
+                match_score_rejected: true,
+                match_fully_approved: false
             },
             in_app: {
                 room_created: true,
@@ -264,7 +290,10 @@ class NotificationService {
                 room_reminder: true,
                 friend_request: true,
                 friend_request_accepted: true,
-                friend_request_declined: true
+                friend_request_declined: true,
+                match_scores_submitted: true,
+                match_score_rejected: true,
+                match_fully_approved: true
             }
         };
     }
