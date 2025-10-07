@@ -138,6 +138,18 @@ const GamesPage = () => {
     setIsLoadingGame(false);
   };
 
+  /**
+   * if game image is a url, use img tag to display the image
+   * @param gameImage url or character
+   * @returns
+   */
+  const renderGameImage = (gameImage: string) => {
+    if (gameImage.startsWith("http")) {
+      return <img src={gameImage} alt={gameImage} className="h-15 w-15" />;
+    }
+    return <span>{gameImage}</span>;
+  };
+
   // Handle showing game details
   const handleShowDetails = async (game: GameWithPlayerCount) => {
     setIsLoadingDetails(true);
@@ -299,8 +311,8 @@ const GamesPage = () => {
               className="bg-gradient-to-br from-card to-secondary/20 border border-primary/20 rounded-xl p-6 hover:border-primary/40 transition-all duration-300 hover:scale-105 group"
             >
               {/* Game Icon */}
-              <div className="text-6xl mb-4 text-center group-hover:scale-110 transition-transform">
-                {game.image_url}
+              <div className="text-6xl mb-4 text-center group-hover:scale-110 transition-transform flex justify-center">
+                {renderGameImage(game.image_url)}
               </div>
 
               {/* Game Name */}

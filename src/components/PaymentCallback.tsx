@@ -5,11 +5,11 @@ import { Button } from '@/components/ui/button';
 import { Loader2, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import { useWallet } from '@/contexts/WalletContext';
 import { useTransaction } from '@/contexts/TransactionContext';
+import { logger } from '@/utils';
 
 const PaymentCallback = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { refreshWallets } = useWallet();
   const { refreshTransactions } = useTransaction();
   const [status, setStatus] = useState<'verifying' | 'success' | 'failed' | 'pending'>('verifying');
   const [message, setMessage] = useState('');
@@ -103,11 +103,9 @@ const PaymentCallback = () => {
             setMessage('Payment is being processed. Please check back in a few moments.');
           }
 
-          // Refresh data only after processing
-          await refreshWallets();
           await refreshTransactions();
         } catch (error) {
-          console.error('Verification error:', error);
+          logger.error('Verification error:', error);
           setStatus('failed');
           setMessage('An error occurred while verifying your payment. Please contact support if money was debited.');
         }
@@ -127,7 +125,7 @@ const PaymentCallback = () => {
     };
 
     verifyPayment();
-  }, [searchParams, refreshWallets, refreshTransactions]);
+  }, [searchParams, refreshTransactions]);
 
   const getStatusIcon = () => {
     switch (status) {

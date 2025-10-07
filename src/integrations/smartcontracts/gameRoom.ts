@@ -5,7 +5,7 @@ import { Ed25519Keypair } from "@mysten/sui.js/keypairs/ed25519";
 import { decodeSuiPrivateKey } from "@mysten/sui.js/cryptography";
 import { logger } from "@/utils";
 
-type Currency = "USDC" | "USDT";
+export type Currency = "USDC" | "USDT";
 
 export class GameRoom {
     private client: SuiClient;
@@ -625,6 +625,7 @@ export class GameRoom {
             digest: result.digest,
             effects,
             events,
+            changes: result.objectChanges,
             gameCompletedEvent
         };
     }

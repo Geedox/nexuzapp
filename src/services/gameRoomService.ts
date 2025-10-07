@@ -1,442 +1,870 @@
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/utils/logger";
-import type { Database, TablesInsert, Tables } from "@/integrations/supabase/types";
-
-export interface GameRoomFilters {
-    status?: Database["public"]["Enums"]["room_status"][];
-    currency?: Database["public"]["Enums"]["currency_type"][];
-    isPrivate?: boolean;
-    isSponsored?: boolean;
-    minEntryFee?: number;
-    maxEntryFee?: number;
-    minPlayers?: number;
-    maxPlayers?: number;
-    gameId?: string;
-    creatorId?: string;
-    mode?: Database["public"]["Enums"]["room_mode"][];
-    sortBy?: string;
-    sortOrder?: "asc" | "desc";
-    searchQuery?: string;
-}
-
-export interface PaginationOptions {
-    page: number;
-    limit: number;
-}
-
-export interface GameRoomWithRelations {
-    id: string;
-    name: string;
-    game_id: string | null;
-    game_instance_id: string | null;
-    creator_id: string | null;
-    entry_fee: number;
-    currency: Database["public"]["Enums"]["currency_type"];
-    max_players: number;
-    current_players: number | null;
-    min_players_to_start: number | null;
-    is_private: boolean | null;
-    room_code: string | null;
-    is_sponsored: boolean | null;
-    is_special: boolean | null;
-    sponsor_amount: number | null;
-    winner_split_rule: Database["public"]["Enums"]["winner_split_rule"];
-    status: Database["public"]["Enums"]["room_status"] | null;
-    start_time: string;
-    end_time: string;
-    actual_start_time: string | null;
-    actual_end_time: string | null;
-    timezone: string | null;
-    total_prize_pool: number | null;
-    platform_fee_collected: number | null;
-    on_chain_create_digest: string | null;
-    on_chain_room_id: string | null;
-    created_at: string | null;
-    updated_at: string | null;
-    game_name: string | null;
-    required_approvals: number | null;
-    admin_has_approved: boolean | null;
-    mode: Database["public"]["Enums"]["room_mode"] | null;
-
-    // Tournament-specific fields
-    tournament_rounds: number | null;
-    current_round: number | null;
-    tournament_ready: boolean | null;
-    tournament_started_at: string | null;
-    elimination_type: string | null;
-    max_rounds: number | null;
-    players_per_match: number | null;
-    round_duration_minutes: number | null;
-    bracket_data: {
-        elimination_type?: string;
-        total_rounds?: number;
-        participants?: Array<{
-            id: string;
-            seed?: number | null;
-            is_eliminated?: boolean;
-        }>;
-    } | null;
-    active_matches: Record<string, unknown> | null;
-    completed_matches: Record<string, unknown> | null;
-
-    // Relations
-    game?: {
-        id: string;
-        name: string;
-        game_url?: string;
-        description?: string;
-        image_url?: string;
-    };
-    creator?: {
-        id: string;
-        username?: string;
-        display_name?: string;
-        avatar_url?: string;
-    };
-    participants?: Array<{
-        id: string;
-        user_id: string;
-        room_id: string;
-        score?: number;
-        is_active: boolean;
-        joined_at: string;
-        user?: {
-            id: string;
-            username?: string;
-            display_name?: string;
-            avatar_url?: string;
-        };
-    }>;
-}
+import type { Database } from "@/integrations/supabase/types";
+import { GameRoom, GameRoomParticipant, OnChainGameRoomResult, Wallet } from "@/types/gameroom";
+import { Profile } from "@/contexts/ProfileContext";
+import { NETWORK } from "@/constants";
+import { getFullnodeUrl, SuiClient } from "@mysten/sui.js/client";
+import { GameRoom as OnChainGameRoom } from "@/integrations/smartcontracts/gameRoom";
+import { verifyCoinForRoomCreation } from "@/lib/utils";
+import { notificationService } from "./notificationService";
 
 class GameRoomService {
-    // Get game rooms with filters and pagination
-    async getGameRooms(
-        filters: GameRoomFilters = {},
-        pagination: PaginationOptions = { page: 1, limit: 12 }
-    ): Promise<{
-        data: GameRoomWithRelations[];
-        count: number;
-        totalPages: number;
-    }> {
-        try {
-            const start = (pagination.page - 1) * pagination.limit;
+  private onChainGameRoom: OnChainGameRoom;
+  constructor() {
+    const suiClient = new SuiClient({ url: getFullnodeUrl(NETWORK) });
+    this.onChainGameRoom = new OnChainGameRoom(suiClient);
+  }
+  // Function to automatically complete a single game
+  autoCompleteGame = async (
+    room: GameRoom
+  ) => {
+    // Call smart contract first to complete the game on-chain
+    let onChainResult: OnChainGameRoomResult | null = null;
+    try {
+      // Get all active participants with their scores for on-chain completion
+      const { data: participants } = await supabase
+        .from("game_room_participants")
+        .select("*, user:profiles(*)")
+        .eq("room_id", room.id)
+        .eq("is_active", true)
+        .order("score", { ascending: false });
+      if (
+        verifyCoinForRoomCreation(room.currency) &&
+        this.onChainGameRoom &&
+        room.on_chain_room_id
+      ) {
+        logger.info(`Completing game on-chain for room ${room.id}`);
 
-            let query = supabase
-                .from("game_rooms")
-                .select(`
-          *,
-          game:games(*),
-          creator:profiles(*),
-          participants:game_room_participants(*)
-        `, { count: "exact" });
+        if (participants && participants.length > 0) {
+          // Determine winners for on-chain completion
+          const winners = this.determineWinners(
+            participants,
+            room.winner_split_rule
+          );
+          const winnerAddresses: string[] = [];
+          const scores: number[] = [];
 
-            // Apply filters
-            if (filters.status && filters.status.length > 0) {
-                query = query.in("status", filters.status);
+          for (const winner of winners) {
+            const participant = participants.find(
+              (p) => p.user_id === winner.userId
+            );
+            const addr = (
+              participant?.user?.sui_wallet_data as Profile["sui_wallet_data"]
+            )?.address;
+            if (addr) {
+              winnerAddresses.push(addr);
+              scores.push(Number(participant?.score || 0));
             }
+          }
 
-            if (filters.currency && filters.currency.length > 0) {
-                query = query.in("currency", filters.currency);
+          if (winnerAddresses.length > 0) {
+            onChainResult = await this.onChainGameRoom.completeGame({
+              roomId: room.on_chain_room_id,
+              winnerAddresses,
+              scores,
+              currency: room.currency as "USDC" | "USDT",
+            });
+            if (!onChainResult?.digest) {
+              throw new Error(
+                `Failed to complete game on-chain for room ${room.id}: Missing transaction digest`
+              );
             }
-
-            if (filters.mode && filters.mode.length > 0) {
-                query = query.in("mode", filters.mode);
-            }
-
-            if (filters.isPrivate !== undefined) {
-                query = query.eq("is_private", filters.isPrivate);
-            }
-
-            if (filters.isSponsored !== undefined) {
-                query = query.eq("is_sponsored", filters.isSponsored);
-            }
-
-            if (filters.minEntryFee !== undefined) {
-                query = query.gte("entry_fee", filters.minEntryFee);
-            }
-
-            if (filters.maxEntryFee !== undefined) {
-                query = query.lte("entry_fee", filters.maxEntryFee);
-            }
-
-            if (filters.minPlayers !== undefined) {
-                query = query.gte("current_players", filters.minPlayers);
-            }
-
-            if (filters.maxPlayers !== undefined) {
-                query = query.lte("max_players", filters.maxPlayers);
-            }
-
-            if (filters.gameId) {
-                query = query.eq("game_id", filters.gameId);
-            }
-
-            if (filters.creatorId) {
-                query = query.eq("creator_id", filters.creatorId);
-            }
-
-            if (filters.searchQuery) {
-                query = query.or(`name.ilike.%${filters.searchQuery}%,game_name.ilike.%${filters.searchQuery}%`);
-            }
-
-            // Apply sorting
-            const sortBy = filters.sortBy || "created_at";
-            const sortOrder = filters.sortOrder || "desc";
-            query = query.order(sortBy, { ascending: sortOrder === "asc" });
-
-            // Apply pagination
-            query = query.range(start, start + pagination.limit - 1);
-
-            const { data, error, count } = await query;
-
-            if (error) throw error;
-
-            return {
-                data: (data as GameRoomWithRelations[]) || [],
-                count: count || 0,
-                totalPages: Math.ceil((count || 0) / pagination.limit),
-            };
-        } catch (error) {
-            logger.error("Error fetching game rooms:", error);
-            throw error;
+            await this.distributePrizes(
+              room as Database["public"]["Tables"]["game_rooms"]["Row"],
+              participants,
+              winners,
+              onChainResult
+            );
+            logger.success(
+              `Successfully completed game on-chain for room ${room.id} with digest: ${onChainResult.digest}`
+            );
+          } else {
+            onChainResult = await this.onChainGameRoom.completeGame({
+              roomId: room.on_chain_room_id,
+              winnerAddresses: [],
+              scores: [],
+              currency: room.currency as "USDC" | "USDT",
+            });
+            // Still call distributePrizes even with no winners to update participant records
+            await this.distributePrizes(
+              room as Database["public"]["Tables"]["game_rooms"]["Row"],
+              participants,
+              [],
+              onChainResult
+            );
+            logger.success(
+              `Successfully completed game on-chain for room ${room.id} with digest: ${onChainResult.digest}`
+            );
+          }
+          // Notify the room participants about completion
+          const participantUserIds = participants.map((participant) => participant.user_id);
+          await notificationService.createBulkNotifications(participantUserIds, "room_completed", { room_id: room.id, room_name: room.name }, { sendEmail: true, priority: "high" });
         }
+        if (!participants || participants.length === 0) {
+          // No participants - just mark as completed
+          await supabase
+            .from("game_rooms")
+            .update({
+              status: "completed",
+              actual_end_time: new Date().toISOString(),
+              platform_fee_collected: 0,
+              complete_digest: onChainResult?.digest,
+            })
+            .eq("id", room.id);
+
+          logger.info(`Room ${room.id} completed with no participants`);
+          return;
+        }
+      }
+    } catch (error) {
+      logger.error(`Failed to complete game for room ${room.id}:`, error);
+      throw error;
+    }
+  };
+
+  // Function to automatically complete expired games
+  autoCompleteExpiredGames = async () => {
+    try {
+      const now = new Date().toISOString();
+
+      // Get rooms that have ended but are still marked as ongoing or waiting
+      // Exclude special rooms as they require manual completion
+      const { data: expiredRooms } = await supabase
+        .from("game_rooms")
+        .select(
+          `
+          *
+        `
+        )
+        .in("status", ["waiting", "ongoing"])
+        .lt("end_time", now)
+        .eq("is_special", false);
+
+      if (!expiredRooms || expiredRooms.length === 0) return;
+
+      logger.info(
+        `Found ${expiredRooms.length} expired rooms to auto-complete (excluding special rooms)`
+      );
+
+      for (const room of expiredRooms) {
+        await this.autoCompleteGame(
+          room as GameRoom
+        );
+      }
+    } catch (error) {
+      logger.error("Error auto-completing expired games:", error);
+    }
+  };
+
+  // Update room statuses based on time with auto-completion
+  updateRoomStatuses = async () => {
+    try {
+      const now = new Date().toISOString();
+
+      // Get rooms that need status updates
+      const { data: roomsToUpdate } = await supabase
+        .from("game_rooms")
+        .select(
+          "*, participants:game_room_participants(*)"
+        )
+        .in("status", ["waiting", "ongoing"]);
+
+      if (!roomsToUpdate) return;
+
+      for (const room of roomsToUpdate) {
+        let newStatus = room.status;
+        let updates: Partial<
+          Database["public"]["Tables"]["game_rooms"]["Update"]
+        > = {};
+
+        const startTime = new Date(room.start_time);
+        const endTime = new Date(room.end_time);
+        const currentTime = new Date();
+
+        // Check if room should be ongoing (only if enough players)
+        if (
+          room.status === "waiting" &&
+          currentTime >= startTime &&
+          room.current_players >= room.min_players_to_start
+        ) {
+          newStatus = "ongoing";
+          updates = {
+            status: "ongoing",
+            actual_start_time: now,
+          };
+
+          // For tournament rooms, create tournament matches if not already created
+          if (room.mode === "tournament" && room.current_players >= room.max_players) {
+            try {
+              // Check if tournament matches already exist
+              const { data: existingMatches } = await supabase
+                .from("tournament_matches")
+                .select("id")
+                .eq("room_id", room.id)
+                .limit(1);
+
+              if (!existingMatches || existingMatches.length === 0) {
+                logger.info(`Creating tournament matches for room ${room.id}`);
+
+                // Import tournament service dynamically to avoid circular imports
+                const { tournamentService } = await import(
+                  "@/services/tournamentService"
+                );
+
+                await tournamentService.createTournamentMatches({
+                  roomId: room.id,
+                  eliminationType: room.elimination_type,
+                  maxRounds: room.max_rounds,
+                  playersPerMatch: room.players_per_match,
+                  roundDurationMinutes: room.round_duration_minutes,
+                  timeLimitMinutes: room.time_limit_minutes,
+                });
+
+                logger.success(
+                  `Tournament matches created for room ${room.id}`
+                );
+              }
+            } catch (error) {
+              logger.error(
+                `Error creating tournament matches for room ${room.id}:`,
+                error
+              );
+              // Don't fail the entire status update for tournament creation errors
+            }
+          }
+        }
+
+        // Check if room should be completed - AUTO COMPLETE WITH PRIZE DISTRIBUTION
+        // Skip auto-completion for special rooms - they require manual completion
+        if (
+          (room.status === "ongoing" || room.status === "waiting") &&
+          currentTime >= endTime &&
+          !room.is_special
+        ) {
+          // Auto-complete the game instead of just updating status
+          await this.autoCompleteGame(
+            room as unknown as GameRoom
+          );
+          continue; // Skip the manual status update since autoCompleteGame handles it
+        }
+
+        // Update if status changed (for non-completion updates)
+        if (newStatus !== room.status) {
+          await supabase.from("game_rooms").update(updates).eq("id", room.id);
+          if (newStatus === "ongoing") {
+            const participantUserIds = room.participants?.map((participant) => participant.user_id);
+            try {
+              await notificationService.createBulkNotifications(participantUserIds, "room_start", { room_id: room.id, room_name: room.name }, { sendEmail: true, priority: "high" });
+            } catch (error) {
+              logger.error(
+                `Error notifying ${participantUserIds} about room start:`,
+                error
+              );
+            }
+          }
+        }
+      }
+    } catch (error) {
+      logger.error("Error updating room statuses:", error);
+    }
+  };
+
+  // Function to get prize split percentages based on winner split rule
+  getPrizeSplitPercentages = (splitRule: string) => {
+    const splits = {
+      winner_takes_all: [{ position: 1, percentage: 100 }],
+      top_2: [
+        { position: 1, percentage: 60 },
+        { position: 2, percentage: 40 },
+      ],
+      top_3: [
+        { position: 1, percentage: 50 },
+        { position: 2, percentage: 30 },
+        { position: 3, percentage: 20 },
+      ],
+      top_4: [
+        { position: 1, percentage: 40 },
+        { position: 2, percentage: 30 },
+        { position: 3, percentage: 20 },
+        { position: 4, percentage: 10 },
+      ],
+      top_5: [
+        { position: 1, percentage: 30 },
+        { position: 2, percentage: 25 },
+        { position: 3, percentage: 20 },
+        { position: 4, percentage: 15 },
+        { position: 5, percentage: 10 },
+      ],
+      top_10: [
+        { position: 1, percentage: 20 },
+        { position: 2, percentage: 15 },
+        { position: 3, percentage: 12 },
+        { position: 4, percentage: 10 },
+        { position: 5, percentage: 8 },
+        { position: 6, percentage: 8 },
+        { position: 7, percentage: 7 },
+        { position: 8, percentage: 7 },
+        { position: 9, percentage: 7 },
+        { position: 10, percentage: 6 },
+      ],
+    };
+
+    return splits[splitRule];
+  };
+
+  // Function to determine winners based on scores and split rule
+  determineWinners = (
+    participants: Database["public"]["Tables"]["game_room_participants"]["Row"][],
+    splitRule: string
+  ) => {
+    // check if all participants have 0 score or do not have a score
+    if (participants.every((p) => p.score === 0 || p.score === null)) {
+      return [];
     }
 
-    // Get single game room with details
-    async getGameRoom(roomId: string): Promise<GameRoomWithRelations | null> {
-        try {
-            const { data, error } = await supabase
-                .from("game_rooms")
-                .select(`
-          *,
-          game:games(*),
-          creator:profiles(*),
-          participants:game_room_participants(
-            *,
-            user:profiles(*)
-          )
-        `)
-                .eq("id", roomId)
-                .single();
+    // Sort participants by score in descending order
+    const sortedParticipants = [...participants].sort(
+      (a, b) => (b.score || 0) - (a.score || 0)
+    );
 
-            if (error) throw error;
-            return data as GameRoomWithRelations;
-        } catch (error) {
-            logger.error("Error fetching game room:", error);
-            return null;
-        }
+    const winnerCounts = {
+      winner_takes_all: 1,
+      top_2: 2,
+      top_3: 3,
+      top_4: 4,
+      top_5: 5,
+      top_10: 10,
+    };
+
+    const maxWinners = winnerCounts[splitRule];
+    const actualWinners = Math.min(maxWinners, sortedParticipants.length);
+
+    return sortedParticipants
+      .slice(0, actualWinners)
+      .map((participant, index) => ({
+        userId: participant.user_id,
+        position: index + 1,
+        participantId: participant.id,
+      }));
+  };
+
+  // Function to map on-chain transaction effects to winners
+  mapOnChainTransactionToWinners = (
+    onChainResult: {
+      digest: string;
+      effects?: unknown;
+      events?: Array<{
+        type: string;
+        parsedJson?: { amount?: number; recipient?: string; to?: string };
+        data?: { amount?: number };
+        recipient?: string;
+      }>;
+      gameCompletedEvent?: unknown;
+    },
+    winners: Array<{ userId: string; position: number; participantId: string }>,
+    room: GameRoom
+  ) => {
+    if (!onChainResult?.effects || !onChainResult?.events) {
+      return null;
     }
 
-    // Get game room participants
-    async getGameRoomParticipants(roomId: string): Promise<any[]> {
-        try {
-            const { data, error } = await supabase
-                .from("game_room_participants")
-                .select(`
-          *,
-          user:profiles(*)
-        `)
-                .eq("room_id", roomId)
-                .eq("is_active", true)
-                .order("score", { ascending: false });
+    const transactionMapping: {
+      digest: string;
+      roomId: string;
+      effects: unknown;
+      events: unknown;
+      gameCompletedEvent: unknown;
+      winnerTransactions: Array<{
+        userId: string;
+        position: number;
+        address: string;
+        transferEvent: unknown;
+        amount: number;
+      }>;
+    } = {
+      digest: onChainResult.digest,
+      roomId: room.on_chain_room_id,
+      effects: onChainResult.effects,
+      events: onChainResult.events,
+      gameCompletedEvent: onChainResult.gameCompletedEvent,
+      winnerTransactions: [],
+    };
 
-            if (error) throw error;
-            return data || [];
-        } catch (error) {
-            logger.error("Error fetching participants:", error);
-            return [];
+    // Extract transfer events for winners
+    const transferEvents = onChainResult.events.filter(
+      (ev: any) =>
+        ev.type === "0x2::coin::TransferEvent" ||
+        ev.type.includes("TransferEvent")
+    );
+
+    // Map transfers to winners based on addresses
+    for (const winner of winners) {
+      const participant = room.participants?.find(
+        (p: any) => p.user_id === winner.userId
+      );
+      const wallet = participant?.user?.sui_wallet_data as Wallet;
+      if (wallet) {
+        const winnerAddress = wallet.address;
+
+        // Find transfer event for this winner
+        const transferEvent = transferEvents.find((ev: any) => {
+          const eventData = ev.parsedJson || ev.data;
+          return (
+            eventData?.recipient === winnerAddress ||
+            eventData?.to === winnerAddress ||
+            ev.recipient === winnerAddress
+          );
+        });
+
+        if (transferEvent) {
+          transactionMapping.winnerTransactions.push({
+            userId: winner.userId,
+            position: winner.position,
+            address: winnerAddress,
+            transferEvent: transferEvent,
+            amount:
+              transferEvent.parsedJson?.amount ||
+              transferEvent.data?.amount ||
+              0,
+          });
         }
+      }
     }
 
-    // Update game room
-    async updateGameRoom(
-        roomId: string,
-        updates: Partial<Database["public"]["Tables"]["game_rooms"]["Update"]>
-    ): Promise<GameRoomWithRelations | null> {
-        try {
-            const { data, error } = await supabase
-                .from("game_rooms")
-                .update({
-                    ...updates,
-                    updated_at: new Date().toISOString(),
-                })
-                .eq("id", roomId)
-                .select(`
-          *,
-          game:games(*),
-          creator:profiles(*),
-          participants:game_room_participants(*)
-        `)
-                .single();
+    return transactionMapping;
+  };
 
-            if (error) throw error;
-            return data as GameRoomWithRelations;
-        } catch (error) {
-            logger.error("Error updating game room:", error);
-            throw error;
+  // Updated distributePrizes function with profile updates and on-chain transaction mapping
+  distributePrizes = async (
+    room: Database["public"]["Tables"]["game_rooms"]["Row"],
+    participants: Database["public"]["Tables"]["game_room_participants"]["Row"][],
+    winners: {
+      userId: string | null;
+      position: number;
+      participantId: string;
+    }[],
+    onChainResult: OnChainGameRoomResult
+  ) => {
+    try {
+      logger.info(`Starting prize distribution for room ${room.id}`);
+
+      // Calculate platform fee (10%)
+      const platformFee = (room.total_prize_pool ?? 0) * 0.07;
+      const distributablePrize = (room.total_prize_pool ?? 0) - platformFee;
+
+      // Get prize split percentages
+      const prizeSplits = this.getPrizeSplitPercentages(room.winner_split_rule);
+
+      logger.info(`Prize distribution details:`, {
+        totalPrizePool: room.total_prize_pool,
+        platformFee,
+        distributablePrize,
+        winnersCount: winners.length,
+      });
+
+      // Track users who need profile updates
+      const usersToUpdateProfile = new Set<string>();
+
+      // Handle case where there are no winners - set all participants as non-winners
+      if (winners.length === 0) {
+        logger.info(
+          `No winners found for room ${room.id}, marking all participants as non-winners`
+        );
+        for (const participant of participants) {
+          // Set final_position to 0 to indicate participation without winning
+          await supabase
+            .from("game_room_participants")
+            .update({
+              final_position: 0,
+              earnings: 0,
+            })
+            .eq("room_id", room.id)
+            .eq("user_id", participant.user_id);
         }
-    }
+      }
 
-    // Update room status
-    async updateRoomStatus(
-        roomId: string,
-        status: Database["public"]["Enums"]["room_status"],
-        additionalUpdates: Partial<Database["public"]["Tables"]["game_rooms"]["Update"]> = {}
-    ): Promise<void> {
+      // Update participant positions and distribute prizes
+      for (const winner of winners) {
+        const split = prizeSplits.find((s) => s.position === winner.position);
+        if (!split) continue;
+
+        const earnings = distributablePrize * (split.percentage / 100);
+
+        // Find participant data
+        const participant = participants.find(
+          (p) => p.user_id === winner.userId
+        );
+        if (!participant) continue;
+
+        logger.info(
+          `Processing winner - Position ${winner.position}: ${earnings} ${room.currency}`
+        );
+        const { data: participantProfile } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", winner.userId)
+          .single();
+        if (!participantProfile) continue;
+        const createdObjects = onChainResult.changes.filter(
+          (c) => c.type === "created"
+        );
+        const participantPayout = createdObjects.find(
+          (c) =>
+            c.owner ===
+            (participantProfile.sui_wallet_data as Profile["sui_wallet_data"])
+              ?.address
+        );
+        const participantPayoutId = participantPayout ? participantPayout.digest : null
+
+        // Update participant with final position and earnings
+        const { error: participantError } = await supabase
+          .from("game_room_participants")
+          .update({
+            final_position: winner.position,
+            earnings: earnings,
+            payout_transaction_id: null,
+            payout_digest: participantPayoutId,
+          })
+          .eq("room_id", room.id)
+          .eq("user_id", winner.userId);
+
+        if (participantError) {
+          logger.error("Error updating participant:", participantError);
+          continue;
+        }
+
+        // Record in winners table
         try {
-            const updates: Partial<Database["public"]["Tables"]["game_rooms"]["Update"]> = {
-                status,
+          await supabase.from("game_room_winners").insert({
+            room_id: room.id,
+            participant_id: participant.id,
+            position: winner.position,
+            prize_percentage: split.percentage,
+            prize_amount: earnings,
+          });
+        } catch (winnersTableError) {
+          logger.error("Error inserting winner record:", winnersTableError);
+        }
+
+        // Update game-specific leaderboard
+        const isFirstPlace = winner.position === 1;
+        const currentScore = participant.score || 0;
+
+        try {
+          // Update or create game-specific leaderboard entry
+          const { data: existingGameEntry } = await supabase
+            .from("leaderboards")
+            .select("*")
+            .eq("user_id", winner.userId)
+            .eq("game_id", room.game_id)
+            .eq("period", "all-time")
+            .single();
+
+          if (existingGameEntry) {
+            await supabase
+              .from("leaderboards")
+              .update({
+                total_score: Math.max(
+                  existingGameEntry.total_score || 0,
+                  currentScore
+                ),
+                games_played: (existingGameEntry.games_played || 0) + 1,
+                wins: (existingGameEntry.wins || 0) + (isFirstPlace ? 1 : 0),
+                total_earnings:
+                  (existingGameEntry.total_earnings || 0) + earnings,
                 updated_at: new Date().toISOString(),
-                ...additionalUpdates,
-            };
+              })
+              .eq("id", existingGameEntry.id);
+          } else {
+            await supabase.from("leaderboards").insert({
+              user_id: winner.userId,
+              game_id: room.game_id,
+              period: "all-time",
+              total_score: currentScore,
+              games_played: 1,
+              wins: isFirstPlace ? 1 : 0,
+              total_earnings: earnings,
+            });
+          }
 
-            // Add status-specific fields
-            if (status === "ongoing" && !additionalUpdates.actual_start_time) {
-                updates.actual_start_time = new Date().toISOString();
-            }
+          // Update or create global leaderboard entry (game_id = NULL)
+          const { data: existingGlobal } = await supabase
+            .from("leaderboards")
+            .select("*")
+            .eq("user_id", winner.userId)
+            .is("game_id", null)
+            .eq("period", "all-time")
+            .single();
 
-            if (status === "completed" && !additionalUpdates.actual_end_time) {
-                updates.actual_end_time = new Date().toISOString();
-            }
+          if (existingGlobal) {
+            await supabase
+              .from("leaderboards")
+              .update({
+                games_played: (existingGlobal.games_played || 0) + 1,
+                wins: (existingGlobal.wins || 0) + (isFirstPlace ? 1 : 0),
+                total_earnings: (existingGlobal.total_earnings || 0) + earnings,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", existingGlobal.id);
+          } else {
+            await supabase.from("leaderboards").insert({
+              user_id: winner.userId,
+              game_id: null,
+              period: "all-time",
+              total_score: 0,
+              games_played: 1,
+              wins: isFirstPlace ? 1 : 0,
+              total_earnings: earnings,
+            });
+          }
 
-            const { error } = await supabase
-                .from("game_rooms")
-                .update(updates)
-                .eq("id", roomId);
-
-            if (error) throw error;
-        } catch (error) {
-            logger.error("Error updating room status:", error);
-            throw error;
+          logger.success(
+            `Updated leaderboards for user ${winner.userId}: position=${winner.position}, earnings=${earnings}`
+          );
+        } catch (leaderboardError) {
+          logger.error("Leaderboard update failed:", leaderboardError);
         }
-    }
 
-    // Get room statistics
-    async getRoomStatistics(): Promise<{
-        totalRooms: number;
-        activeRooms: number;
-        completedRooms: number;
-        totalPrizePool: number;
-        totalPlayers: number;
-        tournamentRooms: number;
-        regularRooms: number;
-    }> {
+        // Mark user for profile update
+        usersToUpdateProfile.add(winner.userId);
         try {
-            const { data: rooms, error } = await supabase
-                .from("game_rooms")
-                .select("status, total_prize_pool, current_players, mode");
-
-            if (error) throw error;
-
-            const stats = {
-                totalRooms: rooms?.length || 0,
-                activeRooms: rooms?.filter(r => r.status === "waiting" || r.status === "ongoing").length || 0,
-                completedRooms: rooms?.filter(r => r.status === "completed").length || 0,
-                totalPrizePool: rooms?.reduce((sum, r) => sum + (r.total_prize_pool || 0), 0) || 0,
-                totalPlayers: rooms?.reduce((sum, r) => sum + (r.current_players || 0), 0) || 0,
-                tournamentRooms: rooms?.filter(r => r.mode === "tournament").length || 0,
-                regularRooms: rooms?.filter(r => r.mode === "regular").length || 0,
-            };
-
-            return stats;
+          await notificationService.createNotification(winner.userId, "prize_distributed", { prize_amount: earnings.toString(), room_name: room.name }, { sendEmail: true, priority: "high" })
+          logger.success(`Notified ${winner.userId} about prize distribution`);
         } catch (error) {
-            logger.error("Error fetching room statistics:", error);
-            throw error;
+          logger.error(
+            `Error notifying ${winner.userId} about prize distribution:`,
+            error
+          );
         }
-    }
+      }
 
-    // Check if room can start
-    async canRoomStart(roomId: string): Promise<boolean> {
+      // Update leaderboard for non-winners (they played a game but didn't win)
+      for (const participant of participants) {
+        const isWinner = winners.some((w) => w.userId === participant.user_id);
+        if (isWinner) continue; // Already handled above
+
         try {
-            const { data, error } = await supabase
-                .rpc("can_room_start", { room_id: roomId });
+          const currentScore = participant.score || 0;
 
-            if (error) throw error;
-            return data || false;
+          // Update game-specific leaderboard for non-winner
+          const { data: existingEntry } = await supabase
+            .from("leaderboards")
+            .select("*")
+            .eq("user_id", participant.user_id)
+            .eq("game_id", room.game_id)
+            .eq("period", "all-time")
+            .single();
+
+          if (existingEntry) {
+            await supabase
+              .from("leaderboards")
+              .update({
+                total_score: Math.max(
+                  existingEntry.total_score || 0,
+                  currentScore
+                ),
+                games_played: (existingEntry.games_played || 0) + 1,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", existingEntry.id);
+          } else {
+            await supabase.from("leaderboards").insert({
+              user_id: participant.user_id,
+              game_id: room.game_id,
+              period: "all-time",
+              total_score: currentScore,
+              games_played: 1,
+              wins: 0,
+              total_earnings: 0,
+            });
+          }
+
+          // Update global leaderboard for non-winner
+          const { data: existingGlobal } = await supabase
+            .from("leaderboards")
+            .select("*")
+            .eq("user_id", participant.user_id)
+            .is("game_id", null)
+            .eq("period", "all-time")
+            .single();
+
+          if (existingGlobal) {
+            await supabase
+              .from("leaderboards")
+              .update({
+                games_played: (existingGlobal.games_played || 0) + 1,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", existingGlobal.id);
+          } else {
+            await supabase.from("leaderboards").insert({
+              user_id: participant.user_id,
+              game_id: null,
+              period: "all-time",
+              total_score: 0,
+              games_played: 1,
+              wins: 0,
+              total_earnings: 0,
+            });
+          }
+
+          // Mark user for profile update
+          usersToUpdateProfile.add(participant.user_id);
         } catch (error) {
-            logger.error("Error checking if room can start:", error);
-            return false;
+          logger.error(
+            `Error updating leaderboard for non-winner ${participant.user_id}:`,
+            error
+          );
         }
-    }
+      }
 
-    // Auto-complete expired rooms
-    async autoCompleteExpiredRooms(): Promise<void> {
+      // Update profile stats for all affected users using the SQL function
+      logger.info(
+        `Updating profile stats for ${usersToUpdateProfile.size} users`
+      );
+      for (const userId of usersToUpdateProfile) {
         try {
-            const { error } = await supabase.rpc("auto_complete_expired_rooms");
-            if (error) throw error;
-        } catch (error) {
-            logger.error("Error auto-completing expired rooms:", error);
-            throw error;
-        }
-    }
+          await supabase.rpc("update_user_profile_stats", {
+            p_user_id: userId,
+          });
+          logger.success(`Profile stats updated for user ${userId}`);
+        } catch (profileError) {
+          logger.error(
+            `Error updating profile stats for user ${userId}:`,
+            profileError
+          );
 
-    // Update room statuses
-    async updateRoomStatuses(): Promise<void> {
-        try {
-            const { error } = await supabase.rpc("update_room_statuses");
-            if (error) throw error;
-        } catch (error) {
-            logger.error("Error updating room statuses:", error);
-            throw error;
-        }
-    }
+          // Fallback: manual profile update
+          try {
+            // Get aggregated stats from transactions
+            const { data: userTransactions } = await supabase
+              .from("transactions")
+              .select("type, amount")
+              .eq("user_id", userId)
+              .eq("status", "completed");
 
-    // Get user's rooms
-    async getUserRooms(userId: string, includeCompleted: boolean = false): Promise<GameRoomWithRelations[]> {
-        try {
-            let query = supabase
+            if (userTransactions) {
+              const totalEarnings = userTransactions
+                .filter((t) => t.type === "win")
+                .reduce((sum, t) => sum + Number(t.amount), 0);
+
+              const totalWins = userTransactions.filter(
+                (t) => t.type === "win"
+              ).length;
+
+              const { data: gameRooms } = await supabase
                 .from("game_room_participants")
-                .select(`
-          room_id,
-          game_rooms!inner (
-            *,
-            game:games(*),
-            creator:profiles(*),
-            participants:game_room_participants(*)
-          )
-        `)
+                .select("room_id")
                 .eq("user_id", userId)
                 .eq("is_active", true);
 
-            if (!includeCompleted) {
-                query = query.in("game_rooms.status", ["waiting", "ongoing"]);
+              const totalGames = gameRooms ? gameRooms.length : 0;
+              const experiencePoints = totalGames * 100 + totalWins * 500;
+
+              await supabase
+                .from("profiles")
+                .update({
+                  total_earnings: totalEarnings,
+                  total_wins: totalWins,
+                  total_games_played: totalGames,
+                  experience_points: experiencePoints,
+                  level: Math.max(1, Math.floor(experiencePoints / 1000)),
+                  updated_at: new Date().toISOString(),
+                })
+                .eq("id", userId);
+
+              logger.success(
+                `Manual profile update completed for user ${userId}`
+              );
             }
-
-            const { data, error } = await query;
-
-            if (error) throw error;
-
-            // Extract game rooms from the joined result
-            const rooms = data?.map(item => item.game_rooms).filter(Boolean) || [];
-            return rooms as GameRoomWithRelations[];
-        } catch (error) {
-            logger.error("Error fetching user rooms:", error);
-            return [];
+          } catch (fallbackError) {
+            logger.debug(
+              `Fallback profile update also failed for user ${userId}:`,
+              fallbackError
+            );
+          }
         }
-    }
+      }
 
-    // Validate room join
-    async validateRoomJoin(
-        roomId: string,
-        userId: string,
-        roomCode?: string
-    ): Promise<{ success: boolean; message: string }> {
+      // Update room status to completed
+      await supabase
+        .from("game_rooms")
+        .update({
+          status: "completed",
+          actual_end_time: new Date().toISOString(),
+          platform_fee_collected: platformFee,
+        })
+        .eq("id", room.id);
+
+      // Store complete transaction mapping in database for verification
+      if (onChainResult?.digest) {
         try {
-            const { data, error } = await supabase
-                .rpc("validate_room_join", {
-                    p_room_id: roomId,
-                    p_user_id: userId,
-                    p_room_code: roomCode,
-                });
+          const transactionMapping = this.mapOnChainTransactionToWinners(
+            onChainResult,
+            winners,
+            room
+          );
+          if (transactionMapping) {
+            // Store the mapping in a dedicated table or as JSON in the room
+            await supabase
+              .from("game_rooms")
+              .update({
+                on_chain_completion_digest: onChainResult.digest,
+                on_chain_completion_events: JSON.stringify(
+                  onChainResult.events
+                ),
+                on_chain_completion_effects: JSON.stringify(
+                  onChainResult.effects
+                ),
+                on_chain_completion_mapping: JSON.stringify(transactionMapping),
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", room.id);
 
-            if (error) throw error;
-            return data[0] || { success: false, message: "Unknown error" };
-        } catch (error) {
-            logger.error("Error validating room join:", error);
-            return { success: false, message: "Validation failed" };
+            logger.success(
+              `Stored on-chain transaction mapping for room ${room.id}`
+            );
+          }
+        } catch (mappingError) {
+          logger.error("Error storing transaction mapping:", mappingError);
+          // Don't fail the entire operation for mapping storage errors
         }
+      }
+
+      logger.success(
+        `Successfully completed game room ${room.id} and updated ${usersToUpdateProfile.size} user profiles`
+      );
+    } catch (error) {
+      logger.error("Error distributing prizes:", error);
+      throw error;
     }
+  };
+
+  // Get room participants
+  getRoomParticipants = async (
+    roomId: string
+  ): Promise<GameRoomParticipant[]> => {
+    try {
+      const { data, error } = await supabase
+        .from("game_room_participants")
+        .select(
+          `
+          *,
+          user:profiles(*)
+        `
+        )
+        .eq("room_id", roomId)
+        .eq("is_active", true)
+        .order("score", { ascending: false });
+
+      if (error) throw error;
+      return (data as unknown as GameRoomParticipant[]) || [];
+    } catch (error) {
+      logger.error("Error fetching participants:", error);
+      return [];
+    }
+  };
 }
 
 export const gameRoomService = new GameRoomService();

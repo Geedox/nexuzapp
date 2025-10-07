@@ -1,8 +1,22 @@
 import { Database } from "@/integrations/supabase/types";
 import { Profile } from "@/contexts/ProfileContext";
+import {
+    TransactionEffects,
+    SuiEvent,
+    SuiObjectChange,
+} from "@mysten/sui.js/client";
+
 
 export type Wallet = Profile["sui_wallet_data"];
 
+export interface OnChainGameRoomResult {
+    success: boolean;
+    digest: string;
+    effects: TransactionEffects;
+    events: SuiEvent[];
+    changes: SuiObjectChange[];
+    gameCompletedEvent: any;
+}
 export interface GameRoom {
     id: string;
     name: string;
@@ -53,6 +67,13 @@ export interface GameRoom {
     participant_has_approved: boolean | null;
     mode: "regular" | "tournament" | "league";
     play_mode: "single" | "multiplayer" | string; // New field for single vs multiplayer
+    // Tournament-specific fields
+    tournament_rounds?: number | null;
+    round_duration_minutes?: number | null;
+    elimination_type?: string | null;
+    max_rounds?: number | null;
+    players_per_match?: number | null;
+    time_limit_minutes?: number | null;
 }
 
 
@@ -110,16 +131,13 @@ export interface CreateRoomData {
     gameName?: string;
     mode: "regular" | "tournament" | "league";
     playMode: "single" | "multiplayer"; // New field for single vs multiplayer
-    // Tournament-specific fields
-    tournamentRounds?: number;
-    roundDurationMinutes?: number;
-    eliminationType?: "single" | "double" | "swiss";
-    maxRounds?: number;
+    // Tournament-specific fields (rounds calculated automatically based on player count)
+    eliminationType?: "single" | "round_robin";
     playersPerMatch?: number;
-    timeLimitMinutes?: number;
     autoStart?: boolean;
     seedingEnabled?: boolean;
     spectatorMode?: boolean;
+    maxRounds?: number; // Number of rounds for round robin tournaments
 }
 
 export interface GameRoomFilters {
@@ -170,7 +188,6 @@ export interface GameRoomContextType {
     leaveRoom: (roomId: string) => Promise<void>;
     cancelRoom: (roomId: string) => Promise<void>;
     getRoomDetails: (roomId: string) => Promise<GameRoom | null>;
-    getRoomParticipants: (roomId: string) => Promise<GameRoomParticipant[]>;
     updateGameScore: (
         roomId: string,
         score: number,

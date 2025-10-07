@@ -1,29 +1,34 @@
 import { config } from 'dotenv';
 config()
 import { createClient } from '@supabase/supabase-js';
+import { Database } from '../src/integrations/supabase/types';
 
 const SUPABASE_URL = process.env.VITE_PUBLIC_SUPABASE_URL!;
 const SUPABASE_PUBLISHABLE_KEY = process.env.VITE_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
 const insertIntoParticipants = async () => {
-  const record = {
-    "room_id": "6d02607e-50d9-40d4-a3b3-bed5443f4dd8",
-    "user_id": "740031ef-528e-461b-9f7d-9bf58a8b5eca",
-    "wallet_id": null,
-    "join_digest": "D3hUzDDYfggDzoPMyDZuexU9zK8aVbFy27jE5xcG5wxm",
-    "payout_digest": null,
-    "payment_currency": "USDC",
-    "payment_amount": 0.001
+
+  // check if the match is already exists
+  const { data: matchData, error: matchDataError } = await supabase.from("tournament_matches").delete().eq("room_id", "4239ca1f-c59e-4c88-b415-4a5a1c56cd28");
+  if (matchDataError) console.error(matchDataError);
+  if (matchData) {
+    console.log("Match deleted", matchData);
   }
-  const { data, error } = await supabase
-    .from('game_room_participants')
-    .insert(record)
-    .select()
-    .single()
-  if (error) throw error;
-  console.log(JSON.stringify(data, null, 2));
+
+  // const { data, error } = await supabase.from("tournament_matches").update({
+  //   match_data: {
+  //     ...currentMatchData.match_data,
+  //     scores: {
+  //       ...currentMatchData.match_data.scores,
+  //       "e80a79ce-ef57-454f-9c3e-30ea3e836d84": 210
+  //     }
+  //   }
+  // }).eq("id", currentMatchData.id).select("*").single();
+  // if (error) console.error(error);
+  console.log(JSON.stringify(matchData, null, 2));
+
 }
 
 insertIntoParticipants();

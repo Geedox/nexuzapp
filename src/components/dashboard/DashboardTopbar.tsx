@@ -27,6 +27,7 @@ import {
 import { NETWORK } from "@/constants";
 
 import { WalletSetupModal } from "./WalletSetupModal";
+import NotificationCenter from "@/components/notifications/NotificationCenter";
 
 const DashboardTopbar = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -213,16 +214,7 @@ const DashboardTopbar = () => {
           </div>
 
           {/* Notifications */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="relative hover:bg-primary/20 w-8 h-8 sm:w-10 sm:h-10"
-          >
-            <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
-            <span className="absolute -top-1 -right-1 bg-accent text-xs rounded-full w-4 h-4 sm:w-5 sm:h-5 flex items-center justify-center font-cyber text-[10px] sm:text-xs">
-              3
-            </span>
-          </Button>
+          <NotificationCenter />
 
           {/* User Dropdown with Avatar */}
           <DropdownMenu>

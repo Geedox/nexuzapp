@@ -1,474 +1,249 @@
-import React, { useState, useEffect } from "react";
-import { useTournament } from "@/contexts/TournamentContext";
-import { TournamentMatch } from "@/services/tournamentService";
-import TournamentBracket from "./TournamentBracket";
-import TournamentManager from "./TournamentManager";
-import TournamentTimer from "./TournamentTimer";
-import MatchCard from "./MatchCard";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import {
-  Trophy,
-  Users,
-  Clock,
-  Target,
-  RotateCcw,
-  TrendingUp,
-  CheckCircle,
-} from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { useTournament } from "@/hooks/tournament";
+import { SingleElimination } from "./SingleElimination";
+import { RoundRobin } from "./RoundRobin";
+import type { GameRoom } from "@/types/gameroom";
+import { logger } from "@/utils/logger";
+import { RealtimeChannel } from "@supabase/supabase-js";
 
 interface TournamentDisplayProps {
-  roomId: string;
-  isCreator: boolean;
-  isMobile?: boolean;
-  onComplete?: (roomId: string) => Promise<void>;
+  room: GameRoom;
 }
 
-const TournamentDisplay: React.FC<TournamentDisplayProps> = ({
-  roomId,
-  isCreator,
-  isMobile = false,
-  onComplete,
+export const TournamentDisplay: React.FC<TournamentDisplayProps> = ({
+  room,
 }) => {
   const {
-    canStartTournament,
-    isTournamentReady,
-    getCurrentRoundMatches,
-    startMatch,
-    completeMatch,
-    timeoutMatch,
-    error,
-    refreshTournament,
-    getMatchTimeRemaining,
-    participants,
-    stats,
+    currentTournament,
+    tournamentParticipants,
+    tournamentStats,
+    activeMatch,
+    loading,
+    starting,
+    completing,
+    fetchTournamentData,
+    subscribeToTournamentUpdates,
+    unsubscribeFromTournamentUpdates,
+    validateTournamentStart,
+    startTournament,
   } = useTournament();
 
-  const [activeMatches, setActiveMatches] = useState<TournamentMatch[]>([]);
-  const [canStart, setCanStart] = useState(false);
-  const [isReady, setIsReady] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [isCompleting, setIsCompleting] = useState(false);
-  const [hasTriggeredCompletion, setHasTriggeredCompletion] = useState(false);
+  const [canStartTournament, setCanStartTournament] = useState(false);
+  const [startValidation, setStartValidation] = useState<{
+    canStart: boolean;
+    reason?: string;
+  } | null>(null);
+  const [subscription, setSubscription] = useState<RealtimeChannel | null>(
+    null
+  );
 
-  // Load tournament status
+  // Determine tournament mode from room data
+  const tournamentMode = room.play_mode || "multiplayer";
+  const isHighscoreTournament = tournamentMode === "single";
+  const eliminationType = room.elimination_type;
+
+  // Fetch tournament data when component mounts and subscribe to realtime updates
   useEffect(() => {
-    const loadStatus = async () => {
-      if (roomId) {
-        const [canStartResult, isReadyResult, currentMatches] =
-          await Promise.all([
-            canStartTournament(roomId),
-            isTournamentReady(roomId),
-            getCurrentRoundMatches(roomId),
-          ]);
+    if (room.id) {
+      logger.info("Fetching tournament data for room:", room.id);
+      fetchTournamentData(room.id, true);
 
-        setCanStart(canStartResult);
-        setIsReady(isReadyResult);
-        setActiveMatches(currentMatches);
-      }
-    };
+      // Subscribe to tournament updates for realtime changes
+      logger.info("Subscribing to tournament updates for room:", room.id);
+      const newSubscription = subscribeToTournamentUpdates(room.id);
+      setSubscription(newSubscription);
 
-    loadStatus();
-
-    // Refresh status every 10 seconds
-    const interval = setInterval(loadStatus, 10000);
-    return () => clearInterval(interval);
-  }, [roomId, canStartTournament, isTournamentReady, getCurrentRoundMatches]);
-
-  // Refresh tournament data
-  useEffect(() => {
-    if (roomId) {
-      refreshTournament(roomId);
+      logger.info("Current Tournament:", currentTournament);
     }
-  }, [roomId, refreshTournament]);
 
-  // Handle tournament completion
+    return () => {
+      logger.info("Unsubscribing from tournament updates");
+      unsubscribeFromTournamentUpdates(subscription);
+      setSubscription(null);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room.id]);
+
+  // Log tournament updates for debugging
   useEffect(() => {
-    const handleTournamentCompletion = async () => {
-      if (
-        stats?.isComplete &&
-        stats.winner &&
-        onComplete &&
-        !hasTriggeredCompletion &&
-        !isCompleting
-      ) {
-        setIsCompleting(true);
-        setHasTriggeredCompletion(true);
+    if (currentTournament) {
+      logger.debug("Tournament updated:", {
+        rounds: currentTournament.rounds.length,
+        currentRound: currentTournament.currentRound,
+        isComplete: currentTournament.isComplete,
+      });
+    }
+  }, [currentTournament]);
 
+  // Validate tournament start capability
+  useEffect(() => {
+    const validateStart = async () => {
+      if (room.id) {
         try {
-          console.log("Tournament completed, triggering room completion...");
-          await onComplete(roomId);
-          console.log("Room completion triggered successfully");
+          const validation = await validateTournamentStart(room.id);
+          setStartValidation(validation);
+          setCanStartTournament(validation.canStart);
         } catch (error) {
-          console.error("Error triggering room completion:", error);
-          // Reset the flag so it can be retried
-          setHasTriggeredCompletion(false);
-        } finally {
-          setIsCompleting(false);
+          logger.error("Error validating tournament start:", error);
+          setCanStartTournament(false);
         }
       }
     };
+    validateStart();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room.id, tournamentParticipants.length]); // Remove validateTournamentStart to prevent infinite loops
 
-    handleTournamentCompletion();
-  }, [
-    stats?.isComplete,
-    stats?.winner,
-    onComplete,
-    roomId,
-    hasTriggeredCompletion,
-    isCompleting,
-  ]);
+  // Handle tournament start
+  const handleStartTournament = async () => {
+    if (!room.id) return;
 
-  const handleRefresh = async () => {
-    setRefreshing(true);
     try {
-      await refreshTournament(roomId);
+      await startTournament(room.id);
     } catch (error) {
-      console.error("Error refreshing tournament:", error);
-    } finally {
-      setRefreshing(false);
+      console.error("Error starting tournament:", error);
     }
   };
 
-  const handleStartMatch = async (matchId: string) => {
-    try {
-      await startMatch(matchId);
-      // Refresh current matches
-      const currentMatches = await getCurrentRoundMatches(roomId);
-      setActiveMatches(currentMatches);
-    } catch (error) {
-      console.error("Error starting match:", error);
-    }
-  };
-
-  const handleCompleteMatch = async (matchId: string, winnerId: string) => {
-    try {
-      await completeMatch(matchId, winnerId);
-      // Refresh current matches
-      const currentMatches = await getCurrentRoundMatches(roomId);
-      setActiveMatches(currentMatches);
-    } catch (error) {
-      console.error("Error completing match:", error);
-    }
-  };
-
-  const handleTimeoutMatch = async (matchId: string) => {
-    try {
-      await timeoutMatch(matchId);
-      // Refresh current matches
-      const currentMatches = await getCurrentRoundMatches(roomId);
-      setActiveMatches(currentMatches);
-    } catch (error) {
-      console.error("Error timing out match:", error);
-    }
-  };
-
-  if (error) {
+  // Show loading state
+  if (loading) {
     return (
-      <Alert variant="destructive">
-        <AlertDescription>Error loading tournament: {error}</AlertDescription>
-      </Alert>
+      <div className="flex items-center justify-center p-8 h-20">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground font-cyber">
+            Loading tournament...
+          </p>
+        </div>
+      </div>
     );
   }
 
-  return (
-    <div className="space-y-6">
-      {/* Tournament Header */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <Trophy className="h-6 w-6" />
-              Tournament
-            </CardTitle>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleRefresh}
-                disabled={refreshing}
-              >
-                <RotateCcw
-                  className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
-                />
-              </Button>
-              {stats && (
-                <Badge variant={stats.isComplete ? "default" : "secondary"}>
-                  {stats.isComplete ? "Complete" : "In Progress"}
-                </Badge>
-              )}
+  // Show tournament not created state
+  if (
+    !currentTournament &&
+    room.mode === "tournament" &&
+    currentTournament &&
+    currentTournament.rounds.length === 0
+  ) {
+    return (
+      <div className="bg-gradient-to-br from-card to-secondary border border-primary/20 rounded-xl p-6">
+        <div className="text-center">
+          <div className="text-4xl mb-4">🏆</div>
+          <h3 className="text-xl font-cyber font-bold text-primary mb-2">
+            Tournament Not Started
+          </h3>
+          {/* <p className="text-muted-foreground mb-4">
+            This room is configured for tournaments but no tournament has been
+            created yet.
+          </p> */}
+
+          {/* {!canStartTournament && startValidation && (
+            <div className="bg-yellow-500/20 border border-yellow-500/30 rounded-lg p-4 mb-4">
+              <p className="text-yellow-400 font-cyber text-sm">
+                ⚠️ {startValidation.reason}
+              </p>
+            </div>
+          )} */}
+
+          <button
+            onClick={handleStartTournament}
+            disabled={starting}
+            className="bg-gradient-to-r from-primary to-accent text-background font-cyber font-bold px-6 py-3 rounded-xl hover:scale-105 transition-all cyber-button shadow-lg hover:shadow-primary/50 disabled:opacity-50 disabled:hover:scale-100"
+          >
+            {starting ? (
+              <span className="flex items-center gap-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-background"></div>
+                Starting Tournament...
+              </span>
+            ) : (
+              "Start Tournament"
+            )}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Show tournament in progress
+  if (currentTournament && tournamentStats) {
+    return (
+      <div className="space-y-6">
+        {/* Tournament Header */}
+        <div className="bg-gradient-to-br from-card to-secondary border border-primary/20 rounded-xl p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="text-3xl">🏆</div>
+              <div>
+                <h2 className="text-xl font-cyber font-bold text-primary">
+                  {isHighscoreTournament
+                    ? "Highscore Tournament"
+                    : "Multiplayer Tournament"}
+                </h2>
+                <p className="text-muted-foreground font-cyber text-sm">
+                  {room.elimination_type
+                    ? `${
+                        room.elimination_type.charAt(0).toUpperCase() +
+                        room.elimination_type.slice(1)
+                      } Elimination`
+                    : "Tournament"}
+                </p>
+              </div>
+            </div>
+
+            <div className="text-right">
+              <div className="text-2xl font-cyber font-bold text-accent">
+                {tournamentStats.currentRound}/{tournamentStats.totalRounds}
+              </div>
+              <div className="text-xs text-muted-foreground">Round</div>
             </div>
           </div>
-        </CardHeader>
 
-        {stats && (
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-primary">
-                  {stats.totalParticipants}
-                </div>
-                <div className="text-sm text-muted-foreground">Players</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-primary">
-                  {stats.currentRound}/{stats.totalRounds}
-                </div>
-                <div className="text-sm text-muted-foreground">Round</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-primary">
-                  {stats.completedMatches}/{stats.totalMatches}
-                </div>
-                <div className="text-sm text-muted-foreground">Matches</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-primary">
-                  {Math.round(
-                    (stats.completedMatches / stats.totalMatches) * 100
-                  )}
-                  %
-                </div>
-                <div className="text-sm text-muted-foreground">Progress</div>
-              </div>
-            </div>
-          </CardContent>
-        )}
-      </Card>
-
-      {/* Tournament Tabs */}
-      <Tabs defaultValue="bracket" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="bracket" className="flex items-center gap-2">
-            <Target className="h-4 w-4" />
-            Bracket
-          </TabsTrigger>
-          <TabsTrigger value="matches" className="flex items-center gap-2">
-            <Clock className="h-4 w-4" />
-            Current Matches
-          </TabsTrigger>
-          <TabsTrigger value="participants" className="flex items-center gap-2">
-            <Users className="h-4 w-4" />
-            Participants
-          </TabsTrigger>
-        </TabsList>
-
-        {/* Tournament Bracket */}
-        <TabsContent value="bracket" className="space-y-4">
-          {isCreator && (
-            <TournamentManager roomId={roomId} isCreator={isCreator} />
-          )}
-          <TournamentBracket roomId={roomId} isMobile={isMobile} />
-        </TabsContent>
-
-        {/* Current Round Matches */}
-        <TabsContent value="matches" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5" />
-                Current Round Matches
-                {stats && (
-                  <Badge variant="outline">Round {stats.currentRound}</Badge>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {activeMatches.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Target className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>No active matches in current round</p>
-                </div>
-              ) : (
-                <div
-                  className={`grid gap-4 ${
-                    isMobile ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2"
-                  }`}
-                >
-                  {activeMatches.map((match) => (
-                    <div key={match.id} className="space-y-4">
-                      <MatchCard
-                        match={match}
-                        participants={participants}
-                        onStartMatch={isCreator ? handleStartMatch : undefined}
-                        onCompleteMatch={
-                          isCreator ? handleCompleteMatch : undefined
-                        }
-                        onTimeoutMatch={
-                          isCreator ? handleTimeoutMatch : undefined
-                        }
-                        timeRemaining={getMatchTimeRemaining(match.id)}
-                        isAdmin={isCreator}
-                      />
-                      {match.status === "active" && (
-                        <TournamentTimer
-                          matchId={match.id}
-                          initialTimeMinutes={match.time_limit_minutes || 30}
-                          status={match.status}
-                          onTimeout={isCreator ? handleTimeoutMatch : undefined}
-                          isAdmin={isCreator}
-                        />
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Participants */}
-        <TabsContent value="participants" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                Tournament Participants ({participants.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {participants.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>No participants in tournament</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {participants
-                    .sort((a, b) => (b.total_score || 0) - (a.total_score || 0))
-                    .map((participant, index) => (
-                      <div
-                        key={participant.id}
-                        className="flex items-center justify-between p-4 rounded-lg bg-muted/50 border"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-sm font-medium">
-                            {index + 1}
-                          </div>
-                          <div>
-                            <div className="font-medium">
-                              {participant.user?.display_name ||
-                                participant.user?.username ||
-                                "Unknown Player"}
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                              Total Score:{" "}
-                              {participant.total_score?.toLocaleString() || 0}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-sm font-medium">
-                            {participant.matches_won || 0}W /{" "}
-                            {participant.matches_played || 0}P
-                          </div>
-                          {participant.is_eliminated && (
-                            <Badge variant="destructive" className="mt-1">
-                              Eliminated
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-
-      {/* Tournament Complete */}
-      {stats?.isComplete && stats.winner && (
-        <Card className="border-green-500 bg-green-50">
-          <CardContent className="pt-6">
+          {/* Tournament Stats */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="text-center">
-              <Trophy className="h-16 w-16 text-yellow-500 mx-auto mb-4" />
-              <h2 className="text-2xl font-bold text-green-800 mb-2">
-                Tournament Complete!
-              </h2>
-              <p className="text-green-700 text-lg">
-                🏆 Winner:{" "}
-                {participants.find((p) => p.user_id === stats.winner)?.user
-                  ?.display_name || "Unknown"}
-              </p>
-              <div className="mt-4 flex items-center justify-center gap-4 text-sm text-green-600">
-                <div className="flex items-center gap-1">
-                  <Users className="h-4 w-4" />
-                  {stats.totalParticipants} players
-                </div>
-                <div className="flex items-center gap-1">
-                  <Target className="h-4 w-4" />
-                  {stats.totalMatches} matches
-                </div>
-                <div className="flex items-center gap-1">
-                  <TrendingUp className="h-4 w-4" />
-                  {stats.totalRounds} rounds
-                </div>
+              <div className="text-lg font-cyber font-bold text-primary">
+                {tournamentStats.totalParticipants}
               </div>
-
-              {/* Completion Status and Actions */}
-              <div className="mt-6 space-y-3">
-                {isCompleting && (
-                  <div className="flex items-center justify-center gap-2 text-blue-600">
-                    <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-blue-600"></div>
-                    <span className="text-sm">
-                      Completing room and distributing prizes...
-                    </span>
-                  </div>
-                )}
-
-                {hasTriggeredCompletion && !isCompleting && (
-                  <div className="flex items-center justify-center gap-2 text-green-600">
-                    <CheckCircle className="h-4 w-4" />
-                    <span className="text-sm">
-                      Room completion triggered successfully!
-                    </span>
-                  </div>
-                )}
-
-                {onComplete &&
-                  isCreator &&
-                  !hasTriggeredCompletion &&
-                  !isCompleting && (
-                    <Button
-                      onClick={async () => {
-                        setIsCompleting(true);
-                        setHasTriggeredCompletion(true);
-                        try {
-                          await onComplete(roomId);
-                        } catch (error) {
-                          console.error(
-                            "Error triggering room completion:",
-                            error
-                          );
-                          setHasTriggeredCompletion(false);
-                        } finally {
-                          setIsCompleting(false);
-                        }
-                      }}
-                      disabled={isCompleting}
-                      className="bg-green-600 hover:bg-green-700 text-white"
-                    >
-                      {isCompleting ? (
-                        <span className="flex items-center gap-2">
-                          <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
-                          Completing...
-                        </span>
-                      ) : (
-                        "Complete Room & Distribute Prizes"
-                      )}
-                    </Button>
-                  )}
-              </div>
+              <div className="text-xs text-muted-foreground">Participants</div>
             </div>
-          </CardContent>
-        </Card>
-      )}
-    </div>
-  );
-};
+            <div className="text-center">
+              <div className="text-lg font-cyber font-bold text-accent">
+                {tournamentStats.completedMatches}
+              </div>
+              <div className="text-xs text-muted-foreground">Matches Done</div>
+            </div>
+            <div className="text-center">
+              <div className="text-lg font-cyber font-bold text-green-400">
+                {tournamentStats.totalMatches}
+              </div>
+              <div className="text-xs text-muted-foreground">Total Matches</div>
+            </div>
+            <div className="text-center">
+              <div className="text-lg font-cyber font-bold text-yellow-400">
+                {tournamentStats.isComplete ? "Complete" : "Active"}
+              </div>
+              <div className="text-xs text-muted-foreground">Status</div>
+            </div>
+          </div>
+        </div>
 
-export default TournamentDisplay;
+        {/* Tournament Content */}
+        {eliminationType === "single" ? (
+          <SingleElimination
+            room={room}
+            tournament={currentTournament}
+            participants={tournamentParticipants}
+            stats={tournamentStats}
+          />
+        ) : (
+          <RoundRobin
+            room={room}
+            tournament={currentTournament}
+            participants={tournamentParticipants}
+            stats={tournamentStats}
+          />
+        )}
+      </div>
+    );
+  }
+};

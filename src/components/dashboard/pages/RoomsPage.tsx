@@ -437,7 +437,6 @@ const RoomsPage = () => {
   const [selectedRoomId, setSelectedRoomId] = useState(null);
   const [roomCode, setRoomCode] = useState("");
   const [games, setGames] = useState([]);
-  const [loadingStats, setLoadingStats] = useState(true);
   const [userWins, setUserWins] = useState({}); // Track user wins per room
 
   // Winner celebration state
@@ -471,15 +470,12 @@ const RoomsPage = () => {
     mode: "regular",
     playMode: "single",
     // Tournament-specific fields
-    tournamentRounds: 3,
-    roundDurationMinutes: 60,
     eliminationType: "single",
-    maxRounds: 5,
     playersPerMatch: 2,
-    timeLimitMinutes: 30,
     autoStart: true,
     seedingEnabled: false,
     spectatorMode: false,
+    maxRounds: 2, // Default rounds for round robin
   });
 
   const winnerRules = [
@@ -491,6 +487,16 @@ const RoomsPage = () => {
     { value: "top_10", label: "Top 10" },
   ];
 
+  // Filter winner rules based on room mode
+  const getAvailableWinnerRules = () => {
+    if (formData.mode === "tournament") {
+      return winnerRules.filter(
+        (rule) => rule.value === "winner_takes_all" || rule.value === "top_2"
+      );
+    }
+    return winnerRules;
+  };
+
   // Function to close celebration modal
   const closeCelebration = useCallback(() => {
     setShowCelebration(false);
@@ -499,7 +505,7 @@ const RoomsPage = () => {
 
   // Handle URL search params for direct room access
   useEffect(() => {
-    const roomId = searchParams.get("roomid");
+    const roomId = searchParams.get("roomId");
     if (roomId && !selectedRoomId) {
       logger.info("Opening room from URL:", roomId);
       setSelectedRoomId(roomId);
@@ -552,7 +558,7 @@ const RoomsPage = () => {
     if (rooms && rooms.length > 0) {
       fetchUserWins();
     }
-  }, [rooms, user]);
+  }, [rooms, user, user.id]); // Only depend on user ID to prevent frequent re-renders
 
   // Calculate room statistics - Fixed to handle undefined rooms
   useEffect(() => {
@@ -576,8 +582,7 @@ const RoomsPage = () => {
       );
       setRoomStats(stats);
     }
-    setLoadingStats(false);
-  }, [rooms]);
+  }, [rooms]); // Only depend on rooms length to prevent frequent re-renders
 
   // Function to show win celebration for a specific room
   const showWinCelebration = (room) => {
@@ -730,6 +735,10 @@ const RoomsPage = () => {
         gameName: "",
         playMode: "single",
         mode: "regular",
+        eliminationType: "single",
+        playersPerMatch: 2,
+        autoStart: true,
+        maxRounds: 2,
       });
 
       // Show room code if private
@@ -898,7 +907,11 @@ const RoomsPage = () => {
     return `${year}-${month}-${day}T${hours}:${minutes}`;
   };
 
-  // Helper function to create a new Date from datetime-local input (handles timezone correctly)
+  /**
+   *  Helper function to create a new Date from datetime-local input (handles timezone correctly)
+   * @param inputValue - The input value from the datetime-local input
+   * @returns A new Date object in the local timezone
+   */
   const createDateFromInput = (inputValue: string) => {
     // datetime-local input gives us YYYY-MM-DDTHH:MM in local time
     // We need to create a Date object that represents the local time correctly
@@ -931,7 +944,7 @@ const RoomsPage = () => {
           setSelectedRoomId(null);
           // Remove roomid from URL when going back
           const newSearchParams = new URLSearchParams(searchParams);
-          newSearchParams.delete("roomid");
+          newSearchParams.delete("roomId");
           setSearchParams(newSearchParams);
           refreshRooms();
         }}
@@ -947,7 +960,7 @@ const RoomsPage = () => {
       <div className="space-y-8 animate-fade-in">
         <Banner pathname="rooms" />
         {/* Room Statistics */}
-        {!loadingStats && safeRooms.length > 0 && (
+        {safeRooms.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30 rounded-xl p-4">
               <p className="text-sm font-cyber text-purple-400 mb-1">
@@ -1562,21 +1575,40 @@ const RoomsPage = () => {
                       </label>
                       <select
                         value={formData.mode}
-                        onChange={(e) =>
-                          setFormData({
+                        onChange={(e) => {
+                          const newMode = e.target.value as
+                            | "regular"
+                            | "tournament";
+                          const updatedFormData = {
                             ...formData,
-                            mode: e.target.value as
-                              | "regular"
-                              | "tournament"
-                              | "league",
+                            mode: newMode,
                             // Ensure even number of players for tournaments
                             maxPlayers:
-                              e.target.value === "tournament" &&
+                              newMode === "tournament" &&
                               formData.maxPlayers % 2 !== 0
                                 ? formData.maxPlayers + 1
                                 : formData.maxPlayers,
-                          })
-                        }
+                          };
+
+                          // If switching to tournament mode, ensure winner split rule is valid
+                          if (newMode === "tournament") {
+                            const availableRules = winnerRules.filter(
+                              (rule) =>
+                                rule.value === "winner_takes_all" ||
+                                rule.value === "top_2"
+                            );
+                            const currentRuleValid = availableRules.some(
+                              (rule) => rule.value === formData.winnerSplitRule
+                            );
+
+                            if (!currentRuleValid) {
+                              updatedFormData.winnerSplitRule =
+                                "winner_takes_all";
+                            }
+                          }
+
+                          setFormData(updatedFormData);
+                        }}
                         className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
                       >
                         <option value="regular">Regular Room</option>
@@ -1641,7 +1673,7 @@ const RoomsPage = () => {
                         }
                         className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
                       >
-                        {winnerRules.map((rule) => (
+                        {getAvailableWinnerRules().map((rule) => (
                           <option key={rule.value} value={rule.value}>
                             {rule.label}
                           </option>
@@ -1709,56 +1741,93 @@ const RoomsPage = () => {
                                 ...formData,
                                 eliminationType: e.target.value as
                                   | "single"
-                                  | "double"
-                                  | "swiss",
+                                  | "round_robin",
                               })
                             }
                             className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
                           >
                             <option value="single">Single Elimination</option>
-                            <option value="double">Double Elimination</option>
-                            <option value="swiss">Swiss System</option>
+                            <option value="round_robin">Round Robin</option>
                           </select>
+                          <p className="text-xs font-cyber text-muted-foreground mt-1">
+                            {formData.eliminationType === "single"
+                              ? "Players compete in elimination brackets - losers are out"
+                              : "Players compete in multiple rounds with performance-based pairing"}
+                          </p>
                         </div>
 
                         <div>
                           <label className="text-sm font-cyber text-primary mb-1 block">
-                            Match Time Limit (minutes)
+                            Tournament Mode
                           </label>
-                          <input
-                            type="number"
-                            value={formData.timeLimitMinutes}
+                          <select
+                            value={formData.playMode}
                             onChange={(e) =>
                               setFormData({
                                 ...formData,
-                                timeLimitMinutes:
-                                  parseInt(e.target.value) || 30,
+                                playMode: e.target.value as
+                                  | "single"
+                                  | "multiplayer",
                               })
                             }
                             className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
-                            min="5"
-                            max="120"
-                          />
+                          >
+                            <option value="multiplayer">Multiplayer</option>
+                            <option value="single">Single Player</option>
+                          </select>
+                          <p className="text-xs font-cyber text-muted-foreground mt-1">
+                            {formData.playMode === "multiplayer"
+                              ? "Players compete in direct matches with elimination brackets"
+                              : "Players compete for highest scores"}
+                          </p>
                         </div>
 
+                        {formData.eliminationType === "round_robin" && (
+                          <div>
+                            <label className="text-sm font-cyber text-primary mb-1 block">
+                              Number of Rounds
+                            </label>
+                            <input
+                              type="number"
+                              value={formData.maxRounds || 3}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  maxRounds: parseInt(e.target.value) || 3,
+                                })
+                              }
+                              className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
+                              min="2"
+                              max="10"
+                            />
+                            <p className="text-xs font-cyber text-muted-foreground mt-1">
+                              Each player will play against every other player
+                              this many times
+                            </p>
+                          </div>
+                        )}
+
                         <div>
-                          <label className="text-sm font-cyber text-primary mb-1 block">
-                            Round Duration (minutes)
+                          <label className="flex items-center gap-3 cursor-pointer group">
+                            <input
+                              type="checkbox"
+                              checked={formData.autoStart}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  autoStart: e.target.checked,
+                                })
+                              }
+                              className="w-5 h-5 rounded border-primary/30 text-primary focus:ring-primary"
+                            />
+                            <span className="text-sm font-cyber text-foreground group-hover:text-primary transition-colors">
+                              🚀 Auto-start when minimum players join
+                            </span>
                           </label>
-                          <input
-                            type="number"
-                            value={formData.roundDurationMinutes}
-                            onChange={(e) =>
-                              setFormData({
-                                ...formData,
-                                roundDurationMinutes:
-                                  parseInt(e.target.value) || 60,
-                              })
-                            }
-                            className="w-full bg-secondary/50 border border-primary/30 rounded-lg px-4 py-2 font-cyber text-foreground focus:border-primary focus:outline-none"
-                            min="10"
-                            max="240"
-                          />
+                          <p className="text-xs font-cyber text-muted-foreground mt-1 ml-8">
+                            Tournament will start automatically when minimum
+                            players are reached
+                          </p>
                         </div>
                       </>
                     )}
