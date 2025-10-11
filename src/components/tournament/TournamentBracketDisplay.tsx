@@ -69,7 +69,8 @@ export const TournamentBracketDisplay: React.FC<
 
   // Check if a match is ready to start
   const isMatchReady = (match: TournamentMatch): boolean => {
-    if (match.status === "pending") return false;
+    if (match.status === "pending" || match.status === "completed")
+      return false;
 
     const playersPerMatch = match.match_data?.players_per_match || 2;
     const currentPlayerCount = [

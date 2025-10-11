@@ -620,12 +620,14 @@ export class GameRoom {
                 break;
             }
         }
+
         return {
             success: true,
             digest: result.digest,
             effects,
             events,
             changes: result.objectChanges,
+            balanceChanges: result.balanceChanges,
             gameCompletedEvent
         };
     }

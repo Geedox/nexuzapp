@@ -577,6 +577,9 @@ export type Database = {
           bracket_data: Json | null
           complete_digest: string | null
           completed_matches: Json | null
+          completion_in_progress: boolean | null
+          completion_started_at: string | null
+          completion_started_by: string | null
           created_at: string | null
           creator_id: string | null
           currency: Database["public"]["Enums"]["currency_type"]
@@ -601,6 +604,10 @@ export type Database = {
           min_players_to_start: number | null
           mode: Database["public"]["Enums"]["room_mode"] | null
           name: string
+          on_chain_completion_digest: string | null
+          on_chain_completion_effects: string | null
+          on_chain_completion_events: string | null
+          on_chain_completion_mapping: string | null
           on_chain_create_digest: string | null
           on_chain_room_id: string | null
           participant_has_approved: boolean | null
@@ -631,6 +638,9 @@ export type Database = {
           bracket_data?: Json | null
           complete_digest?: string | null
           completed_matches?: Json | null
+          completion_in_progress?: boolean | null
+          completion_started_at?: string | null
+          completion_started_by?: string | null
           created_at?: string | null
           creator_id?: string | null
           currency: Database["public"]["Enums"]["currency_type"]
@@ -655,6 +665,10 @@ export type Database = {
           min_players_to_start?: number | null
           mode?: Database["public"]["Enums"]["room_mode"] | null
           name: string
+          on_chain_completion_digest?: string | null
+          on_chain_completion_effects?: string | null
+          on_chain_completion_events?: string | null
+          on_chain_completion_mapping?: string | null
           on_chain_create_digest?: string | null
           on_chain_room_id?: string | null
           participant_has_approved?: boolean | null
@@ -685,6 +699,9 @@ export type Database = {
           bracket_data?: Json | null
           complete_digest?: string | null
           completed_matches?: Json | null
+          completion_in_progress?: boolean | null
+          completion_started_at?: string | null
+          completion_started_by?: string | null
           created_at?: string | null
           creator_id?: string | null
           currency?: Database["public"]["Enums"]["currency_type"]
@@ -709,6 +726,10 @@ export type Database = {
           min_players_to_start?: number | null
           mode?: Database["public"]["Enums"]["room_mode"] | null
           name?: string
+          on_chain_completion_digest?: string | null
+          on_chain_completion_effects?: string | null
+          on_chain_completion_events?: string | null
+          on_chain_completion_mapping?: string | null
           on_chain_create_digest?: string | null
           on_chain_room_id?: string | null
           participant_has_approved?: boolean | null
@@ -1492,6 +1513,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      acquire_room_completion_lock: {
+        Args: { p_instance_id: string; p_room_id: string }
+        Returns: {
+          room_data: Json
+          success: boolean
+        }[]
+      }
       auto_complete_expired_rooms: {
         Args: Record<PropertyKey, never>
         Returns: undefined
@@ -1510,6 +1538,10 @@ export type Database = {
       check_and_start_rooms: {
         Args: Record<PropertyKey, never>
         Returns: undefined
+      }
+      cleanup_stale_completion_locks: {
+        Args: Record<PropertyKey, never>
+        Returns: number
       }
       cleanup_stale_sessions: {
         Args: Record<PropertyKey, never>
@@ -1595,6 +1627,10 @@ export type Database = {
       process_room_lifecycle: {
         Args: Record<PropertyKey, never>
         Returns: undefined
+      }
+      release_room_completion_lock: {
+        Args: { p_room_id: string }
+        Returns: boolean
       }
       sync_leaderboard_earnings: {
         Args: Record<PropertyKey, never>
@@ -1855,6 +1891,7 @@ export const Constants = {
     },
   },
 } as const
+
 
 // Gaming avatars for chat rooms
 export const GAMING_AVATARS = [

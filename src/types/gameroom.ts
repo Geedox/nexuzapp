@@ -1,9 +1,11 @@
+import React from "react";
 import { Database } from "@/integrations/supabase/types";
 import { Profile } from "@/contexts/ProfileContext";
 import {
     TransactionEffects,
     SuiEvent,
     SuiObjectChange,
+    BalanceChange,
 } from "@mysten/sui.js/client";
 
 
@@ -15,6 +17,7 @@ export interface OnChainGameRoomResult {
     effects: TransactionEffects;
     events: SuiEvent[];
     changes: SuiObjectChange[];
+    balanceChanges: BalanceChange[];
     gameCompletedEvent: any;
 }
 export interface GameRoom {
@@ -44,6 +47,10 @@ export interface GameRoom {
     platform_fee_collected: number;
     on_chain_create_digest: string | null;
     on_chain_room_id: string | null;
+    on_chain_completion_digest: string | null;
+    on_chain_completion_events: string | null;
+    on_chain_completion_effects: string | null;
+    on_chain_completion_mapping: string | null;
     created_at: string;
     updated_at: string;
     game_name: string | null;
@@ -74,6 +81,10 @@ export interface GameRoom {
     max_rounds?: number | null;
     players_per_match?: number | null;
     time_limit_minutes?: number | null;
+    // Completion locking fields
+    completion_in_progress?: boolean;
+    completion_started_at?: string | null;
+    completion_started_by?: string | null;
 }
 
 
@@ -225,4 +236,5 @@ export interface GameRoomContextType {
             created_at: string;
         }[];
     }>;
+    refreshRoom: React.MutableRefObject<any>;
 }
