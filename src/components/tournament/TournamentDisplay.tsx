@@ -5,6 +5,7 @@ import { RoundRobin } from "./RoundRobin";
 import type { GameRoom } from "@/types/gameroom";
 import { logger } from "@/utils/logger";
 import { RealtimeChannel } from "@supabase/supabase-js";
+import { useGameRoom } from "@/hooks/gameroom";
 
 interface TournamentDisplayProps {
   room: GameRoom;
@@ -27,6 +28,7 @@ export const TournamentDisplay: React.FC<TournamentDisplayProps> = ({
     validateTournamentStart,
     startTournament,
   } = useTournament();
+  const { refreshRoom } = useGameRoom();
 
   const [canStartTournament, setCanStartTournament] = useState(false);
   const [startValidation, setStartValidation] = useState<{
@@ -63,6 +65,15 @@ export const TournamentDisplay: React.FC<TournamentDisplayProps> = ({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room.id]);
+
+  useEffect(() => {
+    if (refreshRoom.current) {
+      fetchTournamentData(room.id, true);
+    }
+    return () => {
+      refreshRoom.current = null;
+    };
+  }, [refreshRoom, fetchTournamentData, room.id]);
 
   // Log tournament updates for debugging
   useEffect(() => {

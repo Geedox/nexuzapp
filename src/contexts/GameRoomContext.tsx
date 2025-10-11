@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -39,6 +39,7 @@ export const GameRoomProvider = ({
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalRooms, setTotalRooms] = useState(0);
+  const refreshRoom = useRef(null);
   const [roomsPerPage] = useState(12); // Show 12 rooms per page (3x4 grid)
   // Filter state
   const [filters, setFiltersState] = useState<GameRoomFilters>({
@@ -305,6 +306,7 @@ export const GameRoomProvider = ({
 
         // Refresh room data
         await refreshRooms();
+        refreshRoom.current = { refresh: true };
 
         logger.info("Score submission result:", {
           roomId,
@@ -1567,6 +1569,14 @@ export const GameRoomProvider = ({
       if (roomData.creator_id !== user.id) {
         throw new Error("Only room creator can complete special rooms");
       }
+
+      // Check if completion is already in progress
+      if (roomData.completion_in_progress) {
+        throw new Error(
+          "Room completion is already in progress. Please wait or refresh to see the latest status."
+        );
+      }
+
       await gameRoomService.autoCompleteGame(roomData);
       logger.success(`Successfully completed room ${roomId}`);
     } catch (error) {
@@ -1752,10 +1762,10 @@ export const GameRoomProvider = ({
   useEffect(() => {
     if (!user) return;
 
-    // Check for expired games every 30 seconds
+    // Check for expired games every 60 seconds (reduced from 30s to minimize redundant checks)
     const expiredGamesInterval = setInterval(() => {
       gameRoomService.autoCompleteExpiredGames();
-    }, 30000);
+    }, 60000);
 
     // Also check immediately
     gameRoomService.autoCompleteExpiredGames();
@@ -1851,6 +1861,7 @@ export const GameRoomProvider = ({
     // Special room signature functions
     approveGameRoomCompletion,
     getSignaturesAndStatus,
+    refreshRoom,
   };
 
   return (

@@ -3,22 +3,71 @@ import { logger } from "@/utils/logger";
 import type { Database } from "@/integrations/supabase/types";
 import { GameRoom, GameRoomParticipant, OnChainGameRoomResult, Wallet } from "@/types/gameroom";
 import { Profile } from "@/contexts/ProfileContext";
-import { NETWORK } from "@/constants";
-import { getFullnodeUrl, SuiClient } from "@mysten/sui.js/client";
+import { COIN_TYPES, COIN_TYPES_REVERSE, NETWORK } from "@/constants";
+import { getFullnodeUrl, SuiClient, SuiEvent, TransactionEffects } from "@mysten/sui.js/client";
 import { GameRoom as OnChainGameRoom } from "@/integrations/smartcontracts/gameRoom";
 import { verifyCoinForRoomCreation } from "@/lib/utils";
 import { notificationService } from "./notificationService";
 
+type SuiOwner = {
+  AddressOwner: string;
+}
+
 class GameRoomService {
   private onChainGameRoom: OnChainGameRoom;
+  private instanceId: string;
+
   constructor() {
     const suiClient = new SuiClient({ url: getFullnodeUrl(NETWORK) });
     this.onChainGameRoom = new OnChainGameRoom(suiClient);
+    // Generate unique instance ID for this service instance
+    this.instanceId = crypto.randomUUID();
+    logger.debug(`GameRoomService initialized with instance ID: ${this.instanceId}`);
   }
   // Function to automatically complete a single game
   autoCompleteGame = async (
     room: GameRoom
   ) => {
+    // Try to acquire the completion lock atomically
+    try {
+      const { data: lockResult, error: lockError } = await supabase.rpc(
+        'acquire_room_completion_lock',
+        {
+          p_room_id: room.id,
+          p_instance_id: this.instanceId
+        }
+      );
+
+      if (lockError) {
+        logger.error(`Error acquiring lock for room ${room.id}:`, lockError);
+        return;
+      }
+
+      if (!lockResult || lockResult.length === 0 || !lockResult[0]?.success) {
+        logger.debug(
+          `Room ${room.id} completion is already in progress by another instance. Skipping.`
+        );
+        return;
+      }
+
+      logger.info(
+        `Successfully acquired completion lock for room ${room.id} (instance: ${this.instanceId})`
+      );
+    } catch (lockAcquisitionError) {
+      logger.error(
+        `Failed to acquire lock for room ${room.id}:`,
+        lockAcquisitionError
+      );
+      return;
+    }
+    if (room.status === "completed" || room.status === "cancelled") {
+      logger.debug(`Room ${room.id} is already completed or cancelled. Skipping.`);
+      return;
+    }
+    if (room.on_chain_completion_digest) {
+      logger.debug(`Room ${room.id} is already completed on-chain. Skipping.`);
+      return;
+    }
     // Call smart contract first to complete the game on-chain
     let onChainResult: OnChainGameRoomResult | null = null;
     try {
@@ -102,7 +151,7 @@ class GameRoomService {
           await notificationService.createBulkNotifications(participantUserIds, "room_completed", { room_id: room.id, room_name: room.name }, { sendEmail: true, priority: "high" });
         }
         if (!participants || participants.length === 0) {
-          // No participants - just mark as completed
+          // No participants - just mark as completed and clear the lock
           await supabase
             .from("game_rooms")
             .update({
@@ -110,6 +159,9 @@ class GameRoomService {
               actual_end_time: new Date().toISOString(),
               platform_fee_collected: 0,
               complete_digest: onChainResult?.digest,
+              completion_in_progress: false,
+              completion_started_at: null,
+              completion_started_by: null,
             })
             .eq("id", room.id);
 
@@ -119,6 +171,20 @@ class GameRoomService {
       }
     } catch (error) {
       logger.error(`Failed to complete game for room ${room.id}:`, error);
+
+      // Release the lock on failure
+      try {
+        await supabase.rpc('release_room_completion_lock', {
+          p_room_id: room.id
+        });
+        logger.info(`Released completion lock for room ${room.id} after error`);
+      } catch (unlockError) {
+        logger.error(
+          `Failed to release lock for room ${room.id} after error:`,
+          unlockError
+        );
+      }
+
       throw error;
     }
   };
@@ -126,10 +192,22 @@ class GameRoomService {
   // Function to automatically complete expired games
   autoCompleteExpiredGames = async () => {
     try {
+      // First, cleanup stale locks (older than 5 minutes)
+      const { data: cleanedCount, error: cleanupError } = await supabase.rpc(
+        'cleanup_stale_completion_locks'
+      );
+
+      if (cleanupError) {
+        logger.error("Error cleaning up stale locks:", cleanupError);
+      } else if (cleanedCount && cleanedCount > 0) {
+        logger.info(`Cleaned up ${cleanedCount} stale completion locks`);
+      }
+
       const now = new Date().toISOString();
 
       // Get rooms that have ended but are still marked as ongoing or waiting
       // Exclude special rooms as they require manual completion
+      // Exclude rooms that already have completion in progress
       const { data: expiredRooms } = await supabase
         .from("game_rooms")
         .select(
@@ -139,12 +217,13 @@ class GameRoomService {
         )
         .in("status", ["waiting", "ongoing"])
         .lt("end_time", now)
-        .eq("is_special", false);
+        .eq("is_special", false)
+        .eq("completion_in_progress", false);
 
       if (!expiredRooms || expiredRooms.length === 0) return;
 
       logger.info(
-        `Found ${expiredRooms.length} expired rooms to auto-complete (excluding special rooms)`
+        `Found ${expiredRooms.length} expired rooms to auto-complete (excluding special rooms and locked rooms)`
       );
 
       for (const room of expiredRooms) {
@@ -237,10 +316,12 @@ class GameRoomService {
 
         // Check if room should be completed - AUTO COMPLETE WITH PRIZE DISTRIBUTION
         // Skip auto-completion for special rooms - they require manual completion
+        // Skip if completion is already in progress
         if (
           (room.status === "ongoing" || room.status === "waiting") &&
           currentTime >= endTime &&
-          !room.is_special
+          !room.is_special &&
+          !room.completion_in_progress
         ) {
           // Auto-complete the game instead of just updating status
           await this.autoCompleteGame(
@@ -349,92 +430,6 @@ class GameRoomService {
       }));
   };
 
-  // Function to map on-chain transaction effects to winners
-  mapOnChainTransactionToWinners = (
-    onChainResult: {
-      digest: string;
-      effects?: unknown;
-      events?: Array<{
-        type: string;
-        parsedJson?: { amount?: number; recipient?: string; to?: string };
-        data?: { amount?: number };
-        recipient?: string;
-      }>;
-      gameCompletedEvent?: unknown;
-    },
-    winners: Array<{ userId: string; position: number; participantId: string }>,
-    room: GameRoom
-  ) => {
-    if (!onChainResult?.effects || !onChainResult?.events) {
-      return null;
-    }
-
-    const transactionMapping: {
-      digest: string;
-      roomId: string;
-      effects: unknown;
-      events: unknown;
-      gameCompletedEvent: unknown;
-      winnerTransactions: Array<{
-        userId: string;
-        position: number;
-        address: string;
-        transferEvent: unknown;
-        amount: number;
-      }>;
-    } = {
-      digest: onChainResult.digest,
-      roomId: room.on_chain_room_id,
-      effects: onChainResult.effects,
-      events: onChainResult.events,
-      gameCompletedEvent: onChainResult.gameCompletedEvent,
-      winnerTransactions: [],
-    };
-
-    // Extract transfer events for winners
-    const transferEvents = onChainResult.events.filter(
-      (ev: any) =>
-        ev.type === "0x2::coin::TransferEvent" ||
-        ev.type.includes("TransferEvent")
-    );
-
-    // Map transfers to winners based on addresses
-    for (const winner of winners) {
-      const participant = room.participants?.find(
-        (p: any) => p.user_id === winner.userId
-      );
-      const wallet = participant?.user?.sui_wallet_data as Wallet;
-      if (wallet) {
-        const winnerAddress = wallet.address;
-
-        // Find transfer event for this winner
-        const transferEvent = transferEvents.find((ev: any) => {
-          const eventData = ev.parsedJson || ev.data;
-          return (
-            eventData?.recipient === winnerAddress ||
-            eventData?.to === winnerAddress ||
-            ev.recipient === winnerAddress
-          );
-        });
-
-        if (transferEvent) {
-          transactionMapping.winnerTransactions.push({
-            userId: winner.userId,
-            position: winner.position,
-            address: winnerAddress,
-            transferEvent: transferEvent,
-            amount:
-              transferEvent.parsedJson?.amount ||
-              transferEvent.data?.amount ||
-              0,
-          });
-        }
-      }
-    }
-
-    return transactionMapping;
-  };
-
   // Updated distributePrizes function with profile updates and on-chain transaction mapping
   distributePrizes = async (
     room: Database["public"]["Tables"]["game_rooms"]["Row"],
@@ -515,14 +510,22 @@ class GameRoomService {
             (participantProfile.sui_wallet_data as Profile["sui_wallet_data"])
               ?.address
         );
+        const participantBalanceChanges = onChainResult.balanceChanges.filter(
+          (c) => (c.owner as SuiOwner).AddressOwner ===
+            (participantProfile.sui_wallet_data as Profile["sui_wallet_data"])
+              ?.address
+        );
         const participantPayoutId = participantPayout ? participantPayout.digest : null
-
+        const participantChange = participantBalanceChanges.find(
+          (c) => COIN_TYPES_REVERSE[c.coinType] === room.currency
+        );
+        const participantEarning = participantChange ? Number(participantChange.amount) / 1000000 : earnings;
         // Update participant with final position and earnings
         const { error: participantError } = await supabase
           .from("game_room_participants")
           .update({
             final_position: winner.position,
-            earnings: earnings,
+            earnings: participantEarning,
             payout_transaction_id: null,
             payout_digest: participantPayoutId,
           })
@@ -787,45 +790,41 @@ class GameRoomService {
         }
       }
 
-      // Update room status to completed
+      // Update room status to completed and clear the lock
       await supabase
         .from("game_rooms")
         .update({
           status: "completed",
           actual_end_time: new Date().toISOString(),
           platform_fee_collected: platformFee,
+          completion_in_progress: false,
+          completion_started_at: null,
+          completion_started_by: null,
         })
         .eq("id", room.id);
 
       // Store complete transaction mapping in database for verification
       if (onChainResult?.digest) {
         try {
-          const transactionMapping = this.mapOnChainTransactionToWinners(
-            onChainResult,
-            winners,
-            room
-          );
-          if (transactionMapping) {
-            // Store the mapping in a dedicated table or as JSON in the room
-            await supabase
-              .from("game_rooms")
-              .update({
-                on_chain_completion_digest: onChainResult.digest,
-                on_chain_completion_events: JSON.stringify(
-                  onChainResult.events
-                ),
-                on_chain_completion_effects: JSON.stringify(
-                  onChainResult.effects
-                ),
-                on_chain_completion_mapping: JSON.stringify(transactionMapping),
-                updated_at: new Date().toISOString(),
-              })
-              .eq("id", room.id);
+          // Store the mapping in a dedicated table or as JSON in the room
+          await supabase
+            .from("game_rooms")
+            .update({
+              on_chain_completion_digest: onChainResult.digest,
+              on_chain_completion_events: JSON.stringify(
+                onChainResult.events
+              ),
+              on_chain_completion_effects: JSON.stringify(
+                onChainResult.effects
+              ),
+              on_chain_completion_mapping: JSON.stringify(onChainResult.balanceChanges),
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", room.id);
 
-            logger.success(
-              `Stored on-chain transaction mapping for room ${room.id}`
-            );
-          }
+          logger.success(
+            `Stored on-chain transaction mapping for room ${room.id}`
+          );
         } catch (mappingError) {
           logger.error("Error storing transaction mapping:", mappingError);
           // Don't fail the entire operation for mapping storage errors
