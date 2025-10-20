@@ -103,7 +103,7 @@ const Index = () => {
               Documentation
             </a>
             <a
-              href="https://developersnexuz.xyz"
+              href="https://developers.nexuz.xyz"
               className="hover:text-primary transition-colors"
             >
               Developers
