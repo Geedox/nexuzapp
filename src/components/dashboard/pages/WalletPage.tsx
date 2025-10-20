@@ -19,10 +19,13 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { CetusSwapModal } from "@/components/SwapModal";
 import { NETWORK } from "@/constants";
+import { TransferModal } from "@/components/TransferModal";
+import { logger } from "@/utils";
 
 const WalletPage = () => {
   const [showDepositModal, setShowDepositModal] = useState(false);
   const [showSwapModal, setShowSwapModal] = useState(false);
+  const [showTransferModal, setShowTransferModal] = useState(false);
   const [blockchainTransactions, setBlockchainTransactions] = useState<any[]>(
     []
   );
@@ -330,6 +333,20 @@ const WalletPage = () => {
       description: `${swapData.fromAmount} ${swapData.fromCurrency} → ${swapData.toAmount} ${swapData.toCurrency}`,
     });
   };
+  const handleTransferSuccess = async (transferData: {
+    amount: string;
+    currency: string;
+    transactionHash: string;
+  }) => {
+    logger.info("Transfer completed:", transferData);
+
+    // Refresh data and reset pagination
+    refreshBalances();
+    refreshTransactions();
+    setCurrentPage(1);
+    setHasMoreTransactions(true);
+    fetchTransactionHistory();
+  };
 
   // Handle refresh
   const handleRefresh = async () => {
@@ -563,10 +580,13 @@ const WalletPage = () => {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <button className="bg-gradient-to-r from-primary to-accent text-background font-cyber font-bold py-4 px-6 rounded-xl hover:scale-105 transition-all duration-300 flex items-center justify-center gap-2">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <button
+          className="bg-gradient-to-r from-primary to-accent text-background font-cyber font-bold py-4 px-6 rounded-xl hover:scale-105 transition-all duration-300 flex items-center justify-center gap-2"
+          onClick={() => setShowTransferModal(true)}
+        >
           <Send className="w-5 h-5" />
-          <span>Send Tokens</span>
+          <span>Transfer</span>
         </button>
         <button
           onClick={() => setShowDepositModal(true)}
@@ -740,6 +760,13 @@ const WalletPage = () => {
         }}
         onSwapSuccess={handleSwapSuccess}
         suiClient={suiClient}
+      />
+
+      {/* Transfer Modal */}
+      <TransferModal
+        open={showTransferModal}
+        onClose={() => setShowTransferModal(false)}
+        onTransferSuccess={handleTransferSuccess}
       />
     </div>
   );
