@@ -10,20 +10,26 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { logger } from "@/utils";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
+import { Google } from "@/components/Google";
 
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  type: "login" | "signup";
+  type: "login" | "signup" | "logout";
   onSwitchType: (type: "login" | "signup") => void;
 }
 
 const AuthModal = ({ isOpen, onClose, type, onSwitchType }: AuthModalProps) => {
+  const { user, signInWithGoogle, signUpWithEmail, signInWithEmail } =
+    useAuth();
+  const { toast } = useToast();
+  const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
     password: "",
     confirmPassword: "",
-    username: "",
   });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -33,10 +39,29 @@ const AuthModal = ({ isOpen, onClose, type, onSwitchType }: AuthModalProps) => {
     });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     logger.info("Auth form submitted:", { type, formData });
-    // Authentication logic will be implemented here
+
+    try {
+      setSubmitting(true);
+      if (type === "login") {
+        await signInWithEmail(formData.email, formData.password);
+        onClose();
+      } else if (type === "signup") {
+        await signUpWithEmail(formData);
+        onClose();
+      }
+    } catch (err: any) {
+      logger.error("Auth error", err);
+      toast({
+        title: "Unexpected error",
+        description: err?.message ?? "Please try again",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -53,25 +78,23 @@ const AuthModal = ({ isOpen, onClose, type, onSwitchType }: AuthModalProps) => {
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {type === "signup" && (
-            <div className="space-y-2">
-              <Label htmlFor="username" className="text-foreground">
-                Username
-              </Label>
-              <Input
-                id="username"
-                name="username"
-                type="text"
-                value={formData.username}
-                onChange={handleInputChange}
-                placeholder="Enter your gamer tag"
-                className="bg-background border-primary/30 focus:border-primary"
-                required
-              />
-            </div>
-          )}
+        <div className="space-y-3">
+          <Button
+            type="button"
+            onClick={signInWithGoogle}
+            className="w-full bg-background text-foreground hover:bg-primary/10 font-cyber border border-primary/30 flex items-center gap-2"
+          >
+            <Google className="w-4 h-4" />
+            Continue with Google
+          </Button>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <div className="h-px flex-1 bg-primary/20" />
+            <span>or continue with email</span>
+            <div className="h-px flex-1 bg-primary/20" />
+          </div>
+        </div>
 
+        <form onSubmit={handleSubmit} className="space-y-4 mt-2">
           <div className="space-y-2">
             <Label htmlFor="email" className="text-foreground">
               Email
@@ -124,9 +147,16 @@ const AuthModal = ({ isOpen, onClose, type, onSwitchType }: AuthModalProps) => {
 
           <Button
             type="submit"
+            disabled={submitting}
             className="w-full bg-primary hover:bg-primary/80 text-primary-foreground font-gaming neon-border"
           >
-            {type === "login" ? "LOGIN" : "CREATE ACCOUNT"}
+            {submitting
+              ? type === "login"
+                ? "Signing in..."
+                : "Creating account..."
+              : type === "login"
+              ? "LOGIN"
+              : "CREATE ACCOUNT"}
           </Button>
         </form>
 

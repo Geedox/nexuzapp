@@ -11,7 +11,7 @@ import { logger } from "@/utils";
 import { gameRoomService } from "@/services/gameRoomService";
 import { useTournament } from "@/hooks/tournament";
 
-const GameRoomDetails = ({ roomId, onBack }) => {
+const GameRoomDetails = ({ roomId, onBack, onJoinRoom }) => {
   const {
     getRoomDetails,
     leaveRoom,
@@ -855,6 +855,16 @@ const GameRoomDetails = ({ roomId, onBack }) => {
           <div className="flex-1 bg-gray-600/30 text-gray-500 font-cyber font-bold py-3 rounded-xl text-center cursor-not-allowed">
             Cannot Cancel - Game Time Reached
           </div>
+        )}
+
+        {/* If user is not a participant and the room is not full, show the join room button */}
+        {!isParticipant && room.current_players < room.max_players && (
+          <button
+            onClick={() => onJoinRoom(room)}
+            className="flex-1 bg-green-500 text-white font-cyber font-bold py-3 rounded-xl hover:scale-105 transition-all shadow-lg hover:shadow-green-500/50"
+          >
+            Join Room
+          </button>
         )}
       </div>
 

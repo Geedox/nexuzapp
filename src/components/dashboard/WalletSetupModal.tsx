@@ -1,19 +1,31 @@
-import { useState } from 'react';
-import { useProfile } from '@/contexts/ProfileContext';
+import { useState } from "react";
+import { useProfile } from "@/contexts/ProfileContext";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Wallet, Plus, Download, Shield, Copy, Eye, EyeOff, CheckCircle, AlertTriangle } from 'lucide-react';
-import { Ed25519Keypair } from '@mysten/sui.js/keypairs/ed25519';
-import { useToast } from '@/hooks/use-toast';
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Loader2,
+  Wallet,
+  Plus,
+  Download,
+  Shield,
+  Copy,
+  Eye,
+  EyeOff,
+  CheckCircle,
+  AlertTriangle,
+} from "lucide-react";
+import { Ed25519Keypair } from "@mysten/sui.js/keypairs/ed25519";
+import { useToast } from "@/hooks/use-toast";
+import { decodeSuiPrivateKey } from "@mysten/sui.js/cryptography";
 
 interface WalletSetupModalProps {
   open: boolean;
@@ -21,60 +33,58 @@ interface WalletSetupModalProps {
 }
 
 export const WalletSetupModal = ({ open, onClose }: WalletSetupModalProps) => {
-  const [currentStep, setCurrentStep] = useState<'main' | 'create' | 'backup' | 'import'>('main');
+  const [currentStep, setCurrentStep] = useState<
+    "main" | "create" | "backup" | "import"
+  >("main");
   const [isCreatingWallet, setIsCreatingWallet] = useState(false);
   const [newWalletData, setNewWalletData] = useState<any>(null);
   const [showPrivateKey, setShowPrivateKey] = useState(false);
-  const [importPrivateKey, setImportPrivateKey] = useState('');
+  const [importPrivateKey, setImportPrivateKey] = useState("");
   const [hasBackedUp, setHasBackedUp] = useState(false);
   const { updateProfile } = useProfile();
   const { toast } = useToast();
 
   // Standardized function to convert any private key format to hex
-  const standardizePrivateKey = (privateKeyInput: string | Uint8Array): string => {
-    console.log('🔧 Standardizing private key format...');
-    console.log('Input type:', typeof privateKeyInput);
-    console.log('Input length:', privateKeyInput.length);
+  const standardizePrivateKey = (
+    privateKeyInput: string | Uint8Array
+  ): string => {
+    console.log("🔧 Standardizing private key format...");
+    console.log("Input type:", typeof privateKeyInput);
+    console.log("Input length:", privateKeyInput.length);
 
     try {
       let privateKeyBytes: Uint8Array;
 
       if (privateKeyInput instanceof Uint8Array) {
-        console.log('📋 Processing Uint8Array input...');
+        console.log("📋 Processing Uint8Array input...");
         // Already in bytes format - validate length
         if (privateKeyInput.length === 32) {
           privateKeyBytes = privateKeyInput;
-          console.log('✅ Valid 32-byte Uint8Array');
+          console.log("✅ Valid 32-byte Uint8Array");
         } else if (privateKeyInput.length === 64) {
           // Sometimes the export gives us 64 bytes (32 private + 32 public), take first 32
           privateKeyBytes = privateKeyInput.slice(0, 32);
-          console.log('✅ Extracted first 32 bytes from 64-byte array');
+          console.log("✅ Extracted first 32 bytes from 64-byte array");
         } else {
-          throw new Error(`Invalid Uint8Array length: ${privateKeyInput.length}, expected 32 or 64`);
+          throw new Error(
+            `Invalid Uint8Array length: ${privateKeyInput.length}, expected 32 or 64`
+          );
         }
-      } else if (typeof privateKeyInput === 'string') {
-        console.log('📋 Processing string input...');
+      } else if (typeof privateKeyInput === "string") {
+        console.log("📋 Processing string input...");
 
-        if (privateKeyInput.startsWith('suiprivkey')) {
-          console.log('📋 Converting from suiprivkey format...');
+        if (privateKeyInput.startsWith("suiprivkey")) {
+          console.log("📋 Converting from suiprivkey format...");
           // Create a keypair from suiprivkey to get the raw bytes
-          const tempKeypair = Ed25519Keypair.fromSecretKey(privateKeyInput);
-          const exported = tempKeypair.export();
-
-          // Handle the exported private key (could be Uint8Array of different lengths)
-          if (exported.privateKey instanceof Uint8Array) {
-            if (exported.privateKey.length === 32) {
-              privateKeyBytes = exported.privateKey;
-            } else if (exported.privateKey.length === 64) {
-              privateKeyBytes = exported.privateKey.slice(0, 32);
-            } else {
-              throw new Error(`Unexpected exported key length: ${exported.privateKey.length}`);
-            }
-          } else {
-            throw new Error('Exported private key is not a Uint8Array');
+          const { secretKey } = decodeSuiPrivateKey(privateKeyInput);
+          if (secretKey.length !== 32) {
+            throw new Error(
+              `Expected 32 byte secret key, got ${secretKey.length}`
+            );
           }
-        } else if (privateKeyInput.startsWith('0x')) {
-          console.log('📋 Converting from hex with 0x prefix...');
+          privateKeyBytes = secretKey;
+        } else if (privateKeyInput.startsWith("0x")) {
+          console.log("📋 Converting from hex with 0x prefix...");
           // Convert from hex with 0x prefix
           const hex = privateKeyInput.slice(2);
           if (hex.length !== 64) {
@@ -85,14 +95,16 @@ export const WalletSetupModal = ({ open, onClose }: WalletSetupModalProps) => {
             privateKeyBytes[i] = parseInt(hex.substr(i * 2, 2), 16);
           }
         } else if (/^[0-9a-fA-F]{64}$/.test(privateKeyInput)) {
-          console.log('📋 Converting from hex without prefix...');
+          console.log("📋 Converting from hex without prefix...");
           // Convert from hex without 0x prefix
           privateKeyBytes = new Uint8Array(32);
           for (let i = 0; i < 32; i++) {
             privateKeyBytes[i] = parseInt(privateKeyInput.substr(i * 2, 2), 16);
           }
         } else {
-          throw new Error(`Unsupported string format: ${privateKeyInput.substring(0, 20)}...`);
+          throw new Error(
+            `Unsupported string format: ${privateKeyInput.substring(0, 20)}...`
+          );
         }
       } else {
         throw new Error(`Invalid private key type: ${typeof privateKeyInput}`);
@@ -100,19 +112,23 @@ export const WalletSetupModal = ({ open, onClose }: WalletSetupModalProps) => {
 
       // Validate final result
       if (!privateKeyBytes || privateKeyBytes.length !== 32) {
-        throw new Error(`Final validation failed: length ${privateKeyBytes?.length || 'undefined'}`);
+        throw new Error(
+          `Final validation failed: length ${
+            privateKeyBytes?.length || "undefined"
+          }`
+        );
       }
 
       // Convert to standardized hex format (without 0x prefix)
       const hexString = Array.from(privateKeyBytes)
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join('');
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
 
-      console.log('✅ Private key standardized to hex format');
-      console.log('Final hex length:', hexString.length);
+      console.log("✅ Private key standardized to hex format");
+      console.log("Final hex length:", hexString.length);
       return hexString;
     } catch (error) {
-      console.error('❌ Private key standardization failed:', error);
+      console.error("❌ Private key standardization failed:", error);
       throw new Error(`Failed to standardize private key: ${error.message}`);
     }
   };
@@ -120,25 +136,25 @@ export const WalletSetupModal = ({ open, onClose }: WalletSetupModalProps) => {
   const createNewWallet = async () => {
     setIsCreatingWallet(true);
     try {
-      console.log('🔨 Creating new wallet...');
+      console.log("🔨 Creating new wallet...");
 
       // Generate new keypair
       let keypair = new Ed25519Keypair();
       let address = keypair.getPublicKey().toSuiAddress();
 
       // Get the private key directly as bytes (avoid the export which gives suiprivkey string)
-      console.log('🔧 Getting private key as raw bytes...');
+      console.log("🔧 Getting private key as raw bytes...");
 
       // Method 1: Try to get raw bytes directly
       let privateKeyBytes: Uint8Array;
 
       try {
-        // Access the internal private key directly 
+        // Access the internal private key directly
         // @ts-expect-error - accessing private property for raw bytes
         privateKeyBytes = keypair.keypair.secretKey.slice(0, 32);
-        console.log('✅ Got raw private key bytes directly');
+        console.log("✅ Got raw private key bytes directly");
       } catch (error) {
-        console.log('❌ Direct access failed, using alternative method...');
+        console.log("❌ Direct access failed, using alternative method...");
 
         // Method 2: Create a known test signature to derive the private key
         // This is a bit hacky but works reliably
@@ -146,7 +162,7 @@ export const WalletSetupModal = ({ open, onClose }: WalletSetupModalProps) => {
         const signature = keypair.signPersonalMessage(testMessage);
 
         // We'll use a different approach - generate a completely new keypair with known format
-        console.log('🔄 Generating new keypair with explicit byte handling...');
+        console.log("🔄 Generating new keypair with explicit byte handling...");
 
         // Generate random 32 bytes
         const randomBytes = new Uint8Array(32);
@@ -161,17 +177,17 @@ export const WalletSetupModal = ({ open, onClose }: WalletSetupModalProps) => {
         keypair = newKeypair; // Replace the original keypair
         address = newAddress; // Update the address
 
-        console.log('✅ Generated new keypair with explicit bytes');
+        console.log("✅ Generated new keypair with explicit bytes");
       }
 
       // Convert to standardized hex format
       const hexPrivateKey = Array.from(privateKeyBytes)
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join('');
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
 
-      console.log('✅ New wallet created successfully');
-      console.log('Address:', address);
-      console.log('Private key length (hex):', hexPrivateKey.length);
+      console.log("✅ New wallet created successfully");
+      console.log("Address:", address);
+      console.log("Private key length (hex):", hexPrivateKey.length);
 
       // Create wallet object with standardized format
       const walletData = {
@@ -179,14 +195,13 @@ export const WalletSetupModal = ({ open, onClose }: WalletSetupModalProps) => {
         publicKey: keypair.getPublicKey().toBase64(),
         privateKey: hexPrivateKey, // Always 64-character hex string
         createdAt: new Date().toISOString(),
-        balance: 0
+        balance: 0,
       };
 
       setNewWalletData(walletData);
-      setCurrentStep('backup');
-
+      setCurrentStep("backup");
     } catch (error) {
-      console.error('❌ Error creating wallet:', error);
+      console.error("❌ Error creating wallet:", error);
       toast({
         title: "Error",
         description: "Failed to create wallet. Please try again.",
@@ -202,12 +217,12 @@ export const WalletSetupModal = ({ open, onClose }: WalletSetupModalProps) => {
 
     setIsCreatingWallet(true);
     try {
-      console.log('💾 Saving wallet to profile...');
+      console.log("💾 Saving wallet to profile...");
 
       // Save to database via profile update
       await updateProfile({ sui_wallet_data: newWalletData });
 
-      console.log('✅ Wallet saved successfully');
+      console.log("✅ Wallet saved successfully");
 
       toast({
         title: "Wallet Created Successfully! 🎉",
@@ -217,11 +232,10 @@ export const WalletSetupModal = ({ open, onClose }: WalletSetupModalProps) => {
       // Reset state and close
       setNewWalletData(null);
       setHasBackedUp(false);
-      setCurrentStep('main');
+      setCurrentStep("main");
       onClose();
-
     } catch (error) {
-      console.error('❌ Error saving wallet:', error);
+      console.error("❌ Error saving wallet:", error);
       toast({
         title: "Error",
         description: "Failed to save wallet. Please try again.",
@@ -244,22 +258,27 @@ export const WalletSetupModal = ({ open, onClose }: WalletSetupModalProps) => {
 
     setIsCreatingWallet(true);
     try {
-      console.log('📥 Importing existing wallet...');
+      console.log("📥 Importing existing wallet...");
 
       // First, standardize the imported private key
-      const standardizedPrivateKey = standardizePrivateKey(importPrivateKey.trim());
+      const standardizedPrivateKey = standardizePrivateKey(
+        importPrivateKey.trim()
+      );
 
       // Create keypair from standardized hex format
       const privateKeyBytes = new Uint8Array(32);
       for (let i = 0; i < 32; i++) {
-        privateKeyBytes[i] = parseInt(standardizedPrivateKey.substr(i * 2, 2), 16);
+        privateKeyBytes[i] = parseInt(
+          standardizedPrivateKey.substr(i * 2, 2),
+          16
+        );
       }
 
       const keypair = Ed25519Keypair.fromSecretKey(privateKeyBytes);
       const address = keypair.getPublicKey().toSuiAddress();
 
-      console.log('✅ Wallet imported successfully');
-      console.log('Address:', address);
+      console.log("✅ Wallet imported successfully");
+      console.log("Address:", address);
 
       // Create wallet object with standardized format
       const walletData = {
@@ -267,7 +286,7 @@ export const WalletSetupModal = ({ open, onClose }: WalletSetupModalProps) => {
         publicKey: keypair.getPublicKey().toBase64(),
         privateKey: standardizedPrivateKey, // Always 64-character hex string
         createdAt: new Date().toISOString(),
-        balance: 0
+        balance: 0,
       };
 
       // Save to database via profile update
@@ -279,12 +298,11 @@ export const WalletSetupModal = ({ open, onClose }: WalletSetupModalProps) => {
       });
 
       // Reset state and close
-      setImportPrivateKey('');
-      setCurrentStep('main');
+      setImportPrivateKey("");
+      setCurrentStep("main");
       onClose();
-
     } catch (error) {
-      console.error('❌ Error importing wallet:', error);
+      console.error("❌ Error importing wallet:", error);
       toast({
         title: "Error",
         description: "Invalid private key format. Please check and try again.",
@@ -319,9 +337,9 @@ Public Key: ${newWalletData.publicKey}
 Never share your private key with anyone!
     `.trim();
 
-    const blob = new Blob([walletInfo], { type: 'text/plain' });
+    const blob = new Blob([walletInfo], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
     a.download = `sui-wallet-backup-${Date.now()}.txt`;
     document.body.appendChild(a);
@@ -344,9 +362,9 @@ Never share your private key with anyone!
   };
 
   // Main wallet setup screen
-  if (currentStep === 'main') {
+  if (currentStep === "main") {
     return (
-      <Dialog open={open} onOpenChange={() => { }}>
+      <Dialog open={open} onOpenChange={() => {}}>
         <DialogContent
           className="sm:max-w-[500px] bg-gradient-to-br from-background via-card to-secondary/20 border-primary/30"
           onPointerDownOutside={(e) => e.preventDefault()}
@@ -364,7 +382,9 @@ Never share your private key with anyone!
           <div className="space-y-6 mt-6">
             {/* Benefits Section */}
             <div className="bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20 rounded-lg p-4">
-              <h4 className="font-cyber text-accent mb-3">🎮 Wallet Benefits:</h4>
+              <h4 className="font-cyber text-accent mb-3">
+                🎮 Wallet Benefits:
+              </h4>
               <ul className="text-sm text-muted-foreground space-y-1 font-cyber">
                 <li>• Join paid game rooms and tournaments</li>
                 <li>• Earn USDC, USDT, and SUI rewards</li>
@@ -396,7 +416,7 @@ Never share your private key with anyone!
 
               {/* Import Existing Wallet */}
               <Button
-                onClick={() => setCurrentStep('import')}
+                onClick={() => setCurrentStep("import")}
                 disabled={isCreatingWallet}
                 variant="outline"
                 className="w-full border-primary/50 text-primary hover:bg-primary/10 font-gaming font-bold text-lg py-6 hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:hover:scale-100"
@@ -425,7 +445,8 @@ Never share your private key with anyone!
                     SECURITY NOTICE
                   </p>
                   <p className="text-xs text-yellow-400/80 font-cyber">
-                    Your wallet is encrypted and stored securely. Never share your private key with anyone!
+                    Your wallet is encrypted and stored securely. Never share
+                    your private key with anyone!
                   </p>
                 </div>
               </div>
@@ -440,7 +461,8 @@ Never share your private key with anyone!
                     STANDARDIZED FORMAT
                   </p>
                   <p className="text-xs text-blue-400/80 font-cyber">
-                    All private keys are converted to a standard hex format for maximum compatibility.
+                    All private keys are converted to a standard hex format for
+                    maximum compatibility.
                   </p>
                 </div>
               </div>
@@ -452,9 +474,9 @@ Never share your private key with anyone!
   }
 
   // Wallet backup screen
-  if (currentStep === 'backup' && newWalletData) {
+  if (currentStep === "backup" && newWalletData) {
     return (
-      <Dialog open={open} onOpenChange={() => { }}>
+      <Dialog open={open} onOpenChange={() => {}}>
         <DialogContent
           className="sm:max-w-[600px] bg-gradient-to-br from-background via-card to-secondary/20 border-primary/30"
           onPointerDownOutside={(e) => e.preventDefault()}
@@ -465,7 +487,8 @@ Never share your private key with anyone!
               Backup Your Wallet
             </DialogTitle>
             <DialogDescription className="text-muted-foreground font-cyber">
-              Save your private key securely - you'll need it to recover your wallet
+              Save your private key securely - you'll need it to recover your
+              wallet
             </DialogDescription>
           </DialogHeader>
 
@@ -498,7 +521,9 @@ Never share your private key with anyone!
                   className="font-mono text-sm bg-black/40 border-primary/30"
                 />
                 <Button
-                  onClick={() => copyToClipboard(newWalletData.address, 'Address')}
+                  onClick={() =>
+                    copyToClipboard(newWalletData.address, "Address")
+                  }
                   variant="outline"
                   size="icon"
                   className="border-primary/50 hover:bg-primary/20"
@@ -510,7 +535,9 @@ Never share your private key with anyone!
 
             {/* Private Key */}
             <div className="space-y-2">
-              <Label className="font-cyber text-accent">Private Key (Hex Format)</Label>
+              <Label className="font-cyber text-accent">
+                Private Key (Hex Format)
+              </Label>
               <div className="flex gap-2">
                 <div className="relative flex-1">
                   <Textarea
@@ -518,7 +545,6 @@ Never share your private key with anyone!
                     readOnly
                     className="font-mono text-sm bg-black/40 border-primary/30 pr-12 resize-none"
                     rows={3}
-                    type={showPrivateKey ? 'text' : 'password'}
                   />
                   <Button
                     onClick={() => setShowPrivateKey(!showPrivateKey)}
@@ -526,12 +552,18 @@ Never share your private key with anyone!
                     size="icon"
                     className="absolute right-2 top-2 h-8 w-8"
                   >
-                    {showPrivateKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    {showPrivateKey ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
                   </Button>
                 </div>
                 <div className="flex flex-col gap-2">
                   <Button
-                    onClick={() => copyToClipboard(newWalletData.privateKey, 'Private Key')}
+                    onClick={() =>
+                      copyToClipboard(newWalletData.privateKey, "Private Key")
+                    }
                     variant="outline"
                     size="icon"
                     className="border-primary/50 hover:bg-primary/20"
@@ -571,7 +603,7 @@ Never share your private key with anyone!
               <div className="flex gap-3">
                 <Button
                   onClick={() => {
-                    setCurrentStep('main');
+                    setCurrentStep("main");
                     setNewWalletData(null);
                   }}
                   variant="outline"
@@ -605,9 +637,9 @@ Never share your private key with anyone!
   }
 
   // Import wallet screen
-  if (currentStep === 'import') {
+  if (currentStep === "import") {
     return (
-      <Dialog open={open} onOpenChange={() => { }}>
+      <Dialog open={open} onOpenChange={() => {}}>
         <DialogContent
           className="sm:max-w-[500px] bg-gradient-to-br from-background via-card to-secondary/20 border-primary/30"
           onPointerDownOutside={(e) => e.preventDefault()}
@@ -635,7 +667,8 @@ Never share your private key with anyone!
                   rows={4}
                 />
                 <p className="text-xs text-muted-foreground font-cyber">
-                  Supports suiprivkey, hex (with/without 0x prefix) formats - will be standardized automatically
+                  Supports suiprivkey, hex (with/without 0x prefix) formats -
+                  will be standardized automatically
                 </p>
               </div>
             </div>
@@ -649,7 +682,8 @@ Never share your private key with anyone!
                     SECURITY & STANDARDIZATION
                   </p>
                   <p className="text-xs text-blue-400/80 font-cyber">
-                    Your private key will be converted to a standard hex format and encrypted before storage.
+                    Your private key will be converted to a standard hex format
+                    and encrypted before storage.
                   </p>
                 </div>
               </div>
@@ -659,8 +693,8 @@ Never share your private key with anyone!
             <div className="flex gap-3">
               <Button
                 onClick={() => {
-                  setCurrentStep('main');
-                  setImportPrivateKey('');
+                  setCurrentStep("main");
+                  setImportPrivateKey("");
                 }}
                 variant="outline"
                 className="flex-1 border-primary/50 text-primary hover:bg-primary/10 font-cyber"

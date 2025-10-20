@@ -109,7 +109,10 @@ export const GameProvider: React.FC<GameProviderProps> = ({ children }) => {
   );
 
   const fetchGames = useCallback(async () => {
-    const { data, error } = await supabase.from("games").select("*");
+    const { data, error } = await supabase
+      .from("games")
+      .select("*")
+      .eq("is_active", true);
 
     if (error) throw error;
 

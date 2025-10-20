@@ -443,7 +443,7 @@ class GameRoomService {
   ) => {
     try {
       logger.info(`Starting prize distribution for room ${room.id}`);
-
+      logger.debug(`On-chain result:`, JSON.stringify(onChainResult, null, 2));
       // Calculate platform fee (10%)
       const platformFee = (room.total_prize_pool ?? 0) * 0.07;
       const distributablePrize = (room.total_prize_pool ?? 0) - platformFee;
@@ -501,31 +501,33 @@ class GameRoomService {
           .eq("id", winner.userId)
           .single();
         if (!participantProfile) continue;
-        const createdObjects = onChainResult.changes.filter(
-          (c) => c.type === "created"
-        );
+        const createdObjects = onChainResult.effects.created;
         const participantPayout = createdObjects.find(
           (c) =>
-            c.owner ===
+            (c.owner as SuiOwner).AddressOwner ===
             (participantProfile.sui_wallet_data as Profile["sui_wallet_data"])
               ?.address
         );
-        const participantBalanceChanges = onChainResult.balanceChanges.filter(
-          (c) => (c.owner as SuiOwner).AddressOwner ===
-            (participantProfile.sui_wallet_data as Profile["sui_wallet_data"])
-              ?.address
-        );
-        const participantPayoutId = participantPayout ? participantPayout.digest : null
-        const participantChange = participantBalanceChanges.find(
-          (c) => COIN_TYPES_REVERSE[c.coinType] === room.currency
-        );
-        const participantEarning = participantChange ? Number(participantChange.amount) / 1000000 : earnings;
+        const participantPayoutId = participantPayout ? participantPayout.reference.digest : null
+        let payment = earnings;
+        const balChange = onChainResult.balanceChanges;
+        if (balChange) {
+          const participantBalanceChanges = balChange.filter(
+            (c) => (c.owner as SuiOwner).AddressOwner ===
+              (participantProfile.sui_wallet_data as Profile["sui_wallet_data"])
+                ?.address
+          );
+          const participantChange = participantBalanceChanges.find(
+            (c) => COIN_TYPES_REVERSE[c.coinType] === room.currency
+          );
+          payment = participantChange ? Number(participantChange.amount) / 1000000 : earnings;
+        }
         // Update participant with final position and earnings
         const { error: participantError } = await supabase
           .from("game_room_participants")
           .update({
             final_position: winner.position,
-            earnings: participantEarning,
+            earnings: payment,
             payout_transaction_id: null,
             payout_digest: participantPayoutId,
           })

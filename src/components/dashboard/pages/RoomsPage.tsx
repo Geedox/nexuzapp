@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useGameRoom } from "@/hooks/gameroom";
-import { CreateRoomData } from "@/types/gameroom";
+import { CreateRoomData, GameRoom } from "@/types/gameroom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProfile } from "@/contexts/ProfileContext";
 import { useToast } from "@/hooks/use-toast";
@@ -671,17 +671,17 @@ const RoomsPage = () => {
 
       // Check minimum duration (10 minutes)
       const minDuration = 10 * 60 * 1000; // 10 minutes in milliseconds
-      if (
-        formData.endTime.getTime() - formData.startTime.getTime() <
-        minDuration
-      ) {
-        toast({
-          title: "Invalid Duration",
-          description: "Game must last at least 10 minutes",
-          variant: "destructive",
-        });
-        return;
-      }
+      // if (
+      //   formData.endTime.getTime() - formData.startTime.getTime() <
+      //   minDuration
+      // ) {
+      //   toast({
+      //     title: "Invalid Duration",
+      //     description: "Game must last at least 10 minutes",
+      //     variant: "destructive",
+      //   });
+      //   return;
+      // }
     }
     const balance =
       formData.currency === "USDC"
@@ -947,6 +947,10 @@ const RoomsPage = () => {
           newSearchParams.delete("roomId");
           setSearchParams(newSearchParams);
           refreshRooms();
+        }}
+        onJoinRoom={(room: GameRoom) => {
+          setShowJoinModal(true);
+          setSelectedRoom(room);
         }}
       />
     );

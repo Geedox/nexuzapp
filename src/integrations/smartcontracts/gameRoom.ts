@@ -621,6 +621,8 @@ export class GameRoom {
             }
         }
 
+        logger.debug(`Game completed event:`, JSON.stringify(result, null, 2));
+
         return {
             success: true,
             digest: result.digest,

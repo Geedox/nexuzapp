@@ -423,9 +423,24 @@ class NotificationService {
 
             // Send appropriate email based on type
             switch (type) {
+                case 'room_created':
+                    if (data.room_name && data.sender_name && data.room_id) {
+                        await this.emailService.sendRoomCreatedEmail(data.room_id, userEmail, data.room_name, data.sender_name);
+                    }
+                    break;
+                case 'room_completed':
+                    if (data.room_name && data.room_id) {
+                        await this.emailService.sendRoomCompletedEmail(data.room_id, userEmail, data.room_name);
+                    }
+                    break;
                 case 'friend_request':
                     if (data.sender_name) {
                         await this.emailService.sendFriendRequestEmail(userEmail, data.sender_name);
+                    }
+                    break;
+                case 'game_invite':
+                    if (data.sender_name && data.game_name) {
+                        await this.emailService.sendGameInviteEmail(userEmail, data.sender_name, data.game_name);
                     }
                     break;
                 case 'friend_request_accepted':
@@ -446,6 +461,19 @@ class NotificationService {
                 case 'game_won':
                     if (data.game_name) {
                         await this.emailService.sendGameWonEmail(userEmail, data.game_name, data.prize_amount);
+                    }
+                    break;
+                case 'payment':
+                    if (data.prize_amount) {
+                        await this.emailService.sendPaymentEmail(userEmail, data.prize_amount, data.currency);
+                    }
+                    break;
+                case 'wallet_connect':
+                    await this.emailService.sendWalletConnectEmail(userEmail);
+                    break;
+                case 'achievement':
+                    if (data.game_name) {
+                        await this.emailService.sendAchievementEmail(userEmail, data.game_name);
                     }
                     break;
                 case 'tournament_advance':

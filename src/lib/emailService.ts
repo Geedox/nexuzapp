@@ -35,6 +35,15 @@ export class EmailService {
     }
   }
 
+  async sendRoomCompletedEmail(roomId: string, recipientEmail: string, roomName: string) {
+    try {
+      return await this.emailClient.sendRoomCompletedEmail(recipientEmail, roomName, roomId);
+    } catch (error) {
+      console.error('Failed to send room completed email:', error);
+      throw error;
+    }
+  }
+
   async sendRoomReminderEmail(roomId: string, recipientEmail: string, roomName: string, startTime: string) {
     try {
       return await this.emailClient.sendRoomReminderEmail(recipientEmail, roomName, startTime, roomId);
@@ -104,6 +113,51 @@ export class EmailService {
       return await this.emailClient.sendFriendRequestAcceptedEmail(recipientEmail, friendName);
     } catch (error) {
       console.error('Failed to send friend request accepted email:', error);
+      throw error;
+    }
+  }
+
+  async sendRoomCreatedEmail(roomId: string, recipientEmail: string, roomName: string, creatorName: string) {
+    try {
+      return await this.emailClient.sendRoomCreatedEmail(recipientEmail, roomName, creatorName, roomId);
+    } catch (error) {
+      console.error('Failed to send room created email:', error);
+      throw error;
+    }
+  }
+
+  async sendGameInviteEmail(recipientEmail: string, senderName: string, gameName: string) {
+    try {
+      return await this.emailClient.sendGameInviteEmail(recipientEmail, senderName, gameName);
+    } catch (error) {
+      console.error('Failed to send game invite email:', error);
+      throw error;
+    }
+  }
+
+  async sendPaymentEmail(recipientEmail: string, amount: string, currency?: string) {
+    try {
+      return await this.emailClient.sendPaymentEmail(recipientEmail, amount, currency);
+    } catch (error) {
+      console.error('Failed to send payment email:', error);
+      throw error;
+    }
+  }
+
+  async sendWalletConnectEmail(recipientEmail: string) {
+    try {
+      return await this.emailClient.sendWalletConnectEmail(recipientEmail);
+    } catch (error) {
+      console.error('Failed to send wallet connect email:', error);
+      throw error;
+    }
+  }
+
+  async sendAchievementEmail(recipientEmail: string, achievementName: string) {
+    try {
+      return await this.emailClient.sendAchievementEmail(recipientEmail, achievementName);
+    } catch (error) {
+      console.error('Failed to send achievement email:', error);
       throw error;
     }
   }

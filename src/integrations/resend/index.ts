@@ -147,4 +147,64 @@ export class EmailWithResend {
       html: template,
     });
   }
+
+  // Room Created Email
+  async sendRoomCreatedEmail(recipientEmail: string, roomName: string, creatorName: string, roomId: string) {
+    const template = TEMPLATES.roomCreated(roomName, creatorName, roomId);
+    return this.sendEmail({
+      to: recipientEmail,
+      subject: `🎮 New Room Created: ${roomName} by ${creatorName}`,
+      html: template,
+    });
+  }
+
+  // Room Completed Email
+  async sendRoomCompletedEmail(recipientEmail: string, roomName: string, roomId: string) {
+    const template = TEMPLATES.roomCompleted(roomName, roomId);
+    return this.sendEmail({
+      to: recipientEmail,
+      subject: `🏁 Room Completed: ${roomName} - See Results`,
+      html: template,
+    });
+  }
+
+  // Game Invite Email
+  async sendGameInviteEmail(recipientEmail: string, senderName: string, gameName: string) {
+    const template = TEMPLATES.gameInvite(senderName, gameName);
+    return this.sendEmail({
+      to: recipientEmail,
+      subject: `🎮 Game Invitation: ${senderName} wants to play ${gameName}`,
+      html: template,
+    });
+  }
+
+  // Payment Email
+  async sendPaymentEmail(recipientEmail: string, amount: string, currency?: string) {
+    const template = TEMPLATES.payment(amount, currency);
+    return this.sendEmail({
+      to: recipientEmail,
+      subject: `💳 Payment Processed: ${amount}${currency ? ' ' + currency : ''}`,
+      html: template,
+    });
+  }
+
+  // Wallet Connect Email
+  async sendWalletConnectEmail(recipientEmail: string) {
+    const template = TEMPLATES.walletConnect();
+    return this.sendEmail({
+      to: recipientEmail,
+      subject: `🔗 Wallet Connected Successfully`,
+      html: template,
+    });
+  }
+
+  // Achievement Email
+  async sendAchievementEmail(recipientEmail: string, achievementName: string) {
+    const template = TEMPLATES.achievement(achievementName);
+    return this.sendEmail({
+      to: recipientEmail,
+      subject: `🎖️ Achievement Unlocked: ${achievementName}`,
+      html: template,
+    });
+  }
 }

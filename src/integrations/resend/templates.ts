@@ -465,4 +465,72 @@ export const TEMPLATES = {
     ctaUrl: `${APP_URL}/friends`,
     footerText: "Friendship in the arena is the foundation of legendary teams!"
   })
+  ,
+
+  // Room Created Email Template
+  roomCreated: (roomName: string, creatorName: string, roomId: string) => BaseEmailTemplate({
+    title: "🎮 NEW ROOM CREATED",
+    content: `
+      <strong>${creatorName}</strong> just created a new room: <strong>${roomName}</strong>! 🚀<br><br>
+      Jump in early to secure your spot and get an edge on the competition.
+    `,
+    ctaText: "VIEW ROOM",
+    ctaUrl: `${APP_URL}/dashboard/rooms/${roomId}`,
+    footerText: "Be first, be fast, be victorious. See you in the arena!"
+  }),
+
+  // Room Completed Email Template
+  roomCompleted: (roomName: string, roomId: string) => BaseEmailTemplate({
+    title: "🏁 ROOM COMPLETED",
+    content: `
+      The room <strong>${roomName}</strong> has finished. Results are in—check the leaderboard and recap the action.
+    `,
+    ctaText: "VIEW RESULTS",
+    ctaUrl: `${APP_URL}/dashboard/rooms/${roomId}`,
+    footerText: "Analyze, improve, and return stronger for the next battle."
+  }),
+
+  // Game Invite Email Template
+  gameInvite: (senderName: string, gameName: string) => BaseEmailTemplate({
+    title: "🎮 GAME INVITATION",
+    content: `
+      <strong>${senderName}</strong> invited you to play <strong>${gameName}</strong>! Are you in?
+    `,
+    ctaText: "VIEW INVITES",
+    ctaUrl: `${APP_URL}/dashboard`,
+    footerText: "Accept the challenge and make your mark in the arena."
+  }),
+
+  // Payment Email Template
+  payment: (amount: string, currency?: string) => BaseEmailTemplate({
+    title: "💳 PAYMENT UPDATE",
+    content: `
+      Your payment of <strong>${amount}${currency ? ' ' + currency : ''}</strong> has been processed successfully.
+    `,
+    ctaText: "VIEW TRANSACTIONS",
+    ctaUrl: `${APP_URL}/wallet`,
+    footerText: "Your finances are secured. Keep competing and winning!"
+  }),
+
+  // Wallet Connect Email Template
+  walletConnect: () => BaseEmailTemplate({
+    title: "🔗 WALLET CONNECTED",
+    content: `
+      Your wallet has been successfully connected to Nexuz Arena. You're ready to transact seamlessly.
+    `,
+    ctaText: "VIEW WALLET",
+    ctaUrl: `${APP_URL}/wallet`,
+    footerText: "Power up your gaming economy with secure wallet connectivity."
+  }),
+
+  // Achievement Email Template
+  achievement: (achievementName: string) => BaseEmailTemplate({
+    title: "🎖️ ACHIEVEMENT UNLOCKED",
+    content: `
+      You unlocked a new achievement: <strong>${achievementName}</strong>! Keep pushing your limits.
+    `,
+    ctaText: "VIEW ACHIEVEMENTS",
+    ctaUrl: `${APP_URL}/dashboard`,
+    footerText: "Achievements are milestones on the road to mastery."
+  })
 };

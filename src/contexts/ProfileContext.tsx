@@ -208,7 +208,7 @@ export const ProfileProvider = ({
         .single();
 
       if (error) throw error;
-      setProfile(data as Profile);
+      setProfile(data as unknown as Profile);
 
       // Fetch room and game stats
       const [roomStatsData, gameStatsData] = await Promise.all([
@@ -269,7 +269,7 @@ export const ProfileProvider = ({
         .single();
 
       if (error) throw error;
-      setProfile(data as Profile);
+      setProfile(data as unknown as Profile);
 
       toast({
         title: "Success",
@@ -302,7 +302,7 @@ export const ProfileProvider = ({
 
       if (error) throw error;
 
-      setProfile(data as Profile);
+      setProfile(data as unknown as Profile);
       toast({
         title: "Success",
         description: "Profile updated successfully",
@@ -423,6 +423,7 @@ export const ProfileProvider = ({
       setGameStats([]);
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   // Set up real-time subscription for profile updates

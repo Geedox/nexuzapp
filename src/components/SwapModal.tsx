@@ -29,7 +29,6 @@ import { useToast } from "@/hooks/use-toast";
 import { Ed25519Keypair } from "@mysten/sui.js/keypairs/ed25519";
 import { fromHEX } from "@mysten/sui.js/utils";
 import { SuiClient } from "@mysten/sui.js/client";
-import { Transactions } from "@mysten/sui.js/transactions";
 
 import BN from "bn.js";
 import { COIN_TYPES, NETWORK, POOL_IDS } from "../constants";
