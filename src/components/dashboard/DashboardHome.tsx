@@ -1,0 +1,457 @@
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Play,
+  Users,
+  Clock,
+  Trophy,
+  Plus,
+  User,
+} from "lucide-react";
+import { useProfile } from "@/hooks/profile";
+import { useGameRoom } from "@/hooks/gameroom";
+import { UsernameModal } from "./UsernameModal";
+import { useNavigate } from "react-router-dom";
+import { WalletSetupModal } from "./WalletSetupModal";
+import { useGame } from "@/contexts/GameContext";
+
+const gameColors = [
+  "from-purple-500 to-pink-500",
+  "from-blue-500 to-cyan-500",
+  "from-red-500 to-orange-500",
+  "from-green-500 to-emerald-500",
+  "from-yellow-500 to-amber-500",
+];
+
+const DashboardHome = () => {
+  const navigate = useNavigate();
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const [showUsernameModal, setShowUsernameModal] = useState(false);
+  const [showWalletSetup, setShowWalletSetup] = useState(false);
+  const { profile, loading } = useProfile();
+  const { rooms, loading: roomsLoading } = useGameRoom();
+  const { games } = useGame();
+  const gameSlides = games.map((game) => ({
+    id: game.id,
+    title: game.name,
+    description: game.description,
+    image: game.image_url,
+    gradient: gameColors[Math.floor(Math.random() * gameColors.length)],
+    players: game.player_count,
+    prize: `$${game.entry_fee_max.toString()}`,
+    status: game.is_active ? "LIVE" : "UPCOMING",
+  }));
+  // Filter active rooms (not completed)
+  const activeRooms = rooms
+    .filter(
+      (room) =>
+        room.status === "waiting" ||
+        room.status === "ongoing" ||
+        room.status === "starting"
+    )
+    .slice(0, 6); // Show max 6 rooms
+
+  // Check if username is needed
+  useEffect(() => {
+    if (!loading && profile && (!profile.username || profile.username === "")) {
+      setShowUsernameModal(true);
+    }
+  }, [profile, loading]);
+
+  // Check if wallet setup is needed after username is set
+  useEffect(() => {
+    if (!loading && profile && profile.username && !profile.sui_wallet_data) {
+      setShowWalletSetup(true);
+    }
+  }, [profile, loading]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentSlide((prev) => (prev + 1) % gameSlides.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const nextSlide = () => {
+    setCurrentSlide((prev) => (prev + 1) % gameSlides.length);
+  };
+
+  const prevSlide = () => {
+    setCurrentSlide(
+      (prev) => (prev - 1 + gameSlides.length) % gameSlides.length
+    );
+  };
+
+  // Get room status display
+  const getRoomStatus = (room: any) => {
+    switch (room.status) {
+      case "waiting":
+        return { text: "Joining", color: "bg-blue-500/20 text-blue-400" };
+      case "ongoing":
+        return { text: "Live", color: "bg-green-500/20 text-green-400" };
+      case "starting":
+        return { text: "Starting", color: "bg-yellow-500/20 text-yellow-400" };
+      default:
+        return { text: "Unknown", color: "bg-gray-500/20 text-gray-400" };
+    }
+  };
+
+  // Handle room action
+  const handleRoomAction = (room: any) => {
+    if (room.status === "ongoing") {
+      // Navigate to spectate or view room details
+      navigate(`/dashboard/rooms?roomId=${room.id}`);
+    } else {
+      // Navigate to join room
+      navigate(`/dashboard/rooms?roomId=${room.id}`);
+    }
+  };
+
+  // Display username or fallback
+  const displayName = profile?.username || profile?.display_name || "Gamer";
+
+  // Handle username modal completion
+  const handleUsernameComplete = () => {
+    setShowUsernameModal(false);
+    // Wallet setup will be triggered by the useEffect above
+  };
+
+  return (
+    <>
+      <div className="space-y-8 animate-fade-in">
+        {/* Welcome Section */}
+        <div className="bg-gradient-to-r from-primary/20 to-accent/20 border border-primary/30 rounded-2xl p-6">
+          <div className="flex items-center gap-4">
+            {/* Avatar Display */}
+            {profile?.avatar_url && (
+              <div className="flex-shrink-0">
+                {(() => {
+                  // Extract avatar ID and emoji from avatar_url
+                  const match = profile.avatar_url.match(/avatar_(\d+)_(.+)/);
+                  if (match) {
+                    const avatarId = parseInt(match[1]);
+                    const emoji = match[2];
+                    const avatar = [
+                      { id: 1, color: "from-purple-500 to-pink-500" },
+                      { id: 2, color: "from-blue-500 to-cyan-500" },
+                      { id: 3, color: "from-red-500 to-orange-500" },
+                      { id: 4, color: "from-green-500 to-emerald-500" },
+                      { id: 5, color: "from-yellow-500 to-amber-500" },
+                      { id: 6, color: "from-indigo-500 to-purple-500" },
+                      { id: 7, color: "from-gray-600 to-gray-800" },
+                      { id: 8, color: "from-orange-500 to-red-500" },
+                      { id: 9, color: "from-cyan-500 to-blue-500" },
+                      { id: 10, color: "from-yellow-400 to-orange-500" },
+                    ].find((a) => a.id === avatarId);
+
+                    return (
+                      <div
+                        className={`w-10 h-10 md:w-16 md:h-16 rounded-xl bg-gradient-to-br ${
+                          avatar?.color || "from-primary to-accent"
+                        } flex items-center justify-center text-3xl md:text-4xl shadow-lg shadow-primary/30`}
+                      >
+                        {decodeURIComponent(emoji)}
+                      </div>
+                    );
+                  } else if (
+                    profile.avatar_url.match(/^https.*\.(png|jpe?g)$/i)
+                  ) {
+                    return (
+                      <div className="w-10 h-10 md:w-16 md:h-16 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center text-3xl md:text-4xl shadow-lg shadow-primary/30">
+                        <img
+                          src={profile.avatar_url}
+                          alt={profile.display_name}
+                        />
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="w-10 h-10 md:w-16 md:h-16 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center text-3xl md:text-4xl shadow-lg shadow-primary/30">
+                      <User className="w-5 h-5" />
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+            <div className="flex-1">
+              <h1 className="font-gaming text-xl md:text-3xl font-bold text-primary mb-2">
+                Welcome back, {displayName}! 🎮
+              </h1>
+              <p className="text-muted-foreground">
+                Ready to dominate the leaderboards today?
+              </p>
+              <div className="flex items-center space-x-4 mt-4">
+                <div className="bg-green-500/20 px-3 py-1 rounded-xl md:rounded-full text-green-400 text-sm text-center md:text-start">
+                  Level {profile?.level || 1}
+                </div>
+                <div className="bg-yellow-500/20 px-3 py-1 rounded-xl md:rounded-full text-yellow-400 text-sm text-center md:text-start">
+                  {profile?.current_rank || "Junior"} Rank
+                </div>
+                <div className="bg-blue-500/20 px-3 py-1 rounded-xl md:rounded-full text-blue-400 text-sm text-center md:text-start">
+                  {profile?.current_win_streak || 0} Win Streak
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Game Slider */}
+        <div className="relative">
+          <h2 className="font-gaming text-2xl font-bold text-accent mb-6">
+            🔥 Featured Games
+          </h2>
+          <div className="relative bg-black/40 backdrop-blur-lg border border-primary/30 rounded-2xl overflow-hidden">
+            <div className="relative h-96">
+              {gameSlides.map((game, index) => (
+                <div
+                  key={game.id}
+                  className={`absolute inset-0 transition-all duration-700 ease-in-out ${
+                    index === currentSlide
+                      ? "opacity-100 scale-100"
+                      : "opacity-0 scale-95"
+                  }`}
+                >
+                  <div
+                    className={`bg-gradient-to-r ${game.gradient} h-full flex items-center justify-between px-12 py-8 md:px-16 md:py-12`}
+                  >
+                    <div className="flex-1">
+                      <div className="text-4xl md:text-6xl lg:text-8xl mb-3 md:mb-6 animate-bounce-slow">
+                        {game.image}
+                      </div>
+                      <h3 className="font-gaming text-2xl md:text-4xl font-bold text-white mb-4">
+                        {game.title}
+                      </h3>
+                      <p className="text-xl text-white/80 mb-6">
+                        {game.description}
+                      </p>
+                      <div className="flex items-center space-x-2  md:space-x-6 mb-6">
+                        <div className="flex items-center text-white">
+                          <Users className="w-5 h-5 mr-2" />
+                          {game.players} players
+                        </div>
+                        <div className="flex items-center text-white">
+                          <Trophy className="w-5 h-5 mr-2" />
+                          {game.prize} prize
+                        </div>
+                        <div
+                          className={`px-3 py-1 rounded-full text-sm font-bold ${
+                            game.status === "LIVE"
+                              ? "bg-green-500/30 text-green-300"
+                              : "bg-yellow-500/30 text-yellow-300"
+                          }`}
+                        >
+                          {game.status}
+                        </div>
+                      </div>
+                      <Button className="bg-white/20 backdrop-blur-lg text-white border border-white/30 hover:bg-white/30 hover:scale-105 transition-all duration-300">
+                        <Play className="w-4 h-4 mr-2" />
+                        {game.status === "LIVE" ? "Join Now" : "Get Ready"}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Navigation Buttons */}
+            <button
+              onClick={prevSlide}
+              className="absolute left-0 md:left-4 top-1/2 -translate-y-1/2 bg-white/20 backdrop-blur-lg p-3 rounded-full hover:bg-white/30 transition-all duration-300"
+            >
+              <ChevronLeft className="w-6 h-6 text-white" />
+            </button>
+            <button
+              onClick={nextSlide}
+              className="absolute right-0 md:right-4 top-1/2 -translate-y-1/2 bg-white/20 backdrop-blur-lg p-3 rounded-full hover:bg-white/30 transition-all duration-300"
+            >
+              <ChevronRight className="w-6 h-6 text-white" />
+            </button>
+
+            {/* Slide Indicators */}
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex space-x-2">
+              {gameSlides.map((_, index) => (
+                <button
+                  key={index}
+                  onClick={() => setCurrentSlide(index)}
+                  className={`w-3 h-3 rounded-full transition-all duration-300 ${
+                    index === currentSlide ? "bg-white" : "bg-white/40"
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Current Game Rooms */}
+        <div>
+          <h2 className="font-gaming text-2xl font-bold text-accent mb-6">
+            🎯 Active Game Rooms
+          </h2>
+
+          {roomsLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="bg-gradient-to-br from-card to-secondary/20 border border-primary/20 rounded-xl p-6 animate-pulse"
+                >
+                  <div className="h-6 bg-primary/20 rounded mb-4"></div>
+                  <div className="h-4 bg-muted/20 rounded mb-2"></div>
+                  <div className="h-4 bg-muted/20 rounded mb-4"></div>
+                  <div className="h-10 bg-gradient-to-r from-primary/20 to-accent/20 rounded"></div>
+                </div>
+              ))}
+            </div>
+          ) : activeRooms.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {activeRooms.map((room) => {
+                const status = getRoomStatus(room);
+                return (
+                  <div
+                    key={room.id}
+                    className="bg-gradient-to-br from-card to-secondary/20 border border-primary/20 rounded-xl p-6 hover:border-primary/40 transition-all duration-300 hover:scale-105 group"
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-gaming text-lg font-bold text-primary truncate">
+                        {room.name}
+                      </h3>
+                      <div
+                        className={`px-2 py-1 rounded-full text-xs font-bold ${status.color}`}
+                      >
+                        {status.text}
+                      </div>
+                    </div>
+                    <div className="space-y-2 text-sm text-muted-foreground">
+                      <div className="flex justify-between">
+                        <span>Players:</span>
+                        <span className="text-foreground font-bold">
+                          {room.current_players}/{room.max_players}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Entry Fee:</span>
+                        <span className="text-accent font-bold">
+                          {room.is_sponsored
+                            ? "FREE"
+                            : `${room.entry_fee} ${room.currency}`}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Prize Pool:</span>
+                        <span className="text-accent font-bold">
+                          {room.total_prize_pool.toFixed(2)} {room.currency}
+                        </span>
+                      </div>
+                      {room.game && (
+                        <div className="flex justify-between">
+                          <span>Game:</span>
+                          <span className="text-foreground font-bold truncate text-xs">
+                            {room.game.name}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <Button
+                      onClick={() => handleRoomAction(room)}
+                      className="w-full mt-4 bg-gradient-to-r from-primary to-accent text-background font-gaming font-bold hover:scale-105 transition-all duration-300"
+                    >
+                      {room.status === "ongoing" ? "View Room" : "Join Room"}
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            // No active rooms - animated empty state
+            <div className="text-center py-16">
+              <div className="relative mb-8">
+                <div className="text-8xl animate-bounce-slow mb-4">🎮</div>
+                <div className="absolute inset-0 bg-gradient-to-r from-primary/20 to-accent/20 rounded-full blur-3xl animate-pulse"></div>
+              </div>
+              <h3 className="font-gaming text-2xl font-bold text-primary mb-4 animate-fade-in">
+                No Open Rooms Right Now
+              </h3>
+              <p
+                className="text-muted-foreground mb-8 animate-fade-in"
+                style={{ animationDelay: "0.2s" }}
+              >
+                Be the first to start a new gaming session!
+              </p>
+              <div
+                className="flex flex-col sm:flex-row gap-4 justify-center animate-fade-in"
+                style={{ animationDelay: "0.4s" }}
+              >
+                <Button
+                  onClick={() => navigate("/rooms/create")}
+                  className="bg-gradient-to-r from-primary to-accent text-background font-gaming font-bold hover:scale-105 transition-all duration-300 px-8 py-3"
+                >
+                  <Plus className="w-5 h-5 mr-2" />
+                  Create New Room
+                </Button>
+                <Button
+                  onClick={() => navigate("/rooms")}
+                  variant="outline"
+                  className="border-primary/50 text-primary hover:bg-primary/10 font-gaming font-bold hover:scale-105 transition-all duration-300 px-8 py-3"
+                >
+                  <Clock className="w-5 h-5 mr-2" />
+                  View All Rooms
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Quick Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="bg-black/40 backdrop-blur-lg border border-primary/30 rounded-xl p-6 text-center">
+            <div className="text-3xl mb-2">🎮</div>
+            <div className="text-2xl font-bold text-primary font-cyber">
+              {profile?.total_games_played || 0}
+            </div>
+            <div className="text-sm text-muted-foreground">Games Played</div>
+          </div>
+          <div className="bg-black/40 backdrop-blur-lg border border-accent/30 rounded-xl p-6 text-center">
+            <div className="text-3xl mb-2">🏆</div>
+            <div className="text-2xl font-bold text-accent font-cyber">
+              {profile?.total_wins || 0}
+            </div>
+            <div className="text-sm text-muted-foreground">Victories</div>
+          </div>
+          <div className="bg-black/40 backdrop-blur-lg border border-green-500/30 rounded-xl p-6 text-center">
+            <div className="text-3xl mb-2">💰</div>
+            <div className="text-2xl font-bold text-green-400 font-cyber">
+              ${profile?.total_earnings?.toFixed(2) || "0.00"}
+            </div>
+            <div className="text-sm text-muted-foreground">Total Earned</div>
+          </div>
+          <div className="bg-black/40 backdrop-blur-lg border border-yellow-500/30 rounded-xl p-6 text-center">
+            <div className="text-3xl mb-2">⚡</div>
+            <div className="text-2xl font-bold text-yellow-400 font-cyber">
+              {profile?.current_win_streak || 0}
+            </div>
+            <div className="text-sm text-muted-foreground">Win Streak</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Username Modal */}
+      <UsernameModal
+        open={showUsernameModal}
+        onClose={handleUsernameComplete}
+        onComplete={handleUsernameComplete}
+      />
+
+      {/* Wallet Setup Modal */}
+      {showWalletSetup && (
+        <WalletSetupModal
+          open={showWalletSetup}
+          onClose={() => setShowWalletSetup(false)}
+        />
+      )}
+    </>
+  );
+};
+
+export default DashboardHome;
