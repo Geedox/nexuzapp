@@ -36,7 +36,6 @@ import { MarketPlaceItem } from "./lib/utils";
 import { useState } from "react";
 import { CartItem } from "./components/dashboard/MarketCartSidebar";
 import { useToast } from "./hooks/use-toast";
-import { WalletKitProvider } from "@mysten/wallet-kit";
 
 const queryClient = new QueryClient();
 
@@ -75,7 +74,6 @@ const App = () => {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <WalletKitProvider>
         <AuthProvider>
           <CommunityChatProvider>
             <ProfileProvider>
@@ -185,7 +183,6 @@ const App = () => {
             </ProfileProvider>
           </CommunityChatProvider>
         </AuthProvider>
-      </WalletKitProvider>
     </QueryClientProvider>
   );
 };
