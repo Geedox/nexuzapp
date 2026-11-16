@@ -32,7 +32,7 @@ const FlappyBirdGame = ({ onScoreUpdate, onGameOver, onClose, onScoreSubmit, pla
   const [isNewHighScore, setIsNewHighScore] = useState(false);
   const [medal, setMedal] = useState(null);
 
-  const animationFrameRef = useRef();
+  const animationFrameRef = useRef<number | undefined>(undefined);
 
   // Game constants
   const PIPE_WIDTH = 80;

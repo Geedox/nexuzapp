@@ -42,7 +42,7 @@ const EndlessRunnerGame = ({ onScoreUpdate, onGameOver, onClose, onScoreSubmit, 
   const [submitStatus, setSubmitStatus] = useState('');
   const [submitButtonDisabled, setSubmitButtonDisabled] = useState(false);
 
-  const animationFrameRef = useRef();
+  const animationFrameRef = useRef<number | undefined>(undefined);
   const jumpPressedRef = useRef(false);
 
   // Obstacle types

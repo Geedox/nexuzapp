@@ -257,7 +257,7 @@ const Sidebar = React.forwardRef<
 )
 Sidebar.displayName = "Sidebar"
 
-interface SidebarTriggerProps extends React.ComponentProps<typeof Button> {
+interface SidebarTriggerProps extends Omit<React.ComponentProps<typeof Button>, "onToggle"> {
   onToggle?: (isOpen: boolean) => void;
 }
 
